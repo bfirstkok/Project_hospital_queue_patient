@@ -18,7 +18,7 @@
         <span class="brand-mark" aria-hidden="true">✚</span>
         <span><strong>OPD Queue</strong><small>ระบบลงทะเบียนผู้ป่วย</small></span>
       </a>
-      <button id="openSavedQueue" class="text-button" type="button" hidden>ดูคิวของฉัน</button>
+      <button id="openSavedQueue" class="text-button" type="button" hidden>บัญชีของฉัน</button>
     </div>
   </header>
 
@@ -28,6 +28,10 @@
         <span class="eyebrow">ลงทะเบียนรับบริการ</span>
         <h1>กรอกข้อมูลผู้ป่วย</h1>
         <p>กรุณาตรวจสอบข้อมูลให้ถูกต้อง หลังลงทะเบียนให้นำหน้าจอนี้ไปแสดงที่จุดวัดสัญญาณชีพ</p>
+        <div class="login-prompt">
+          <span>ลงทะเบียนไว้แล้ว?</span>
+          <button id="loginButton" class="login-button" type="button">เข้าสู่ระบบ</button>
+        </div>
       </div>
 
       <ol class="steps" aria-label="ขั้นตอนรับบริการ">
@@ -98,6 +102,22 @@
       </form>
     </section>
 
+    <section id="loginView" class="page-shell auth-view" hidden>
+      <div class="auth-card">
+        <div class="auth-mark" aria-hidden="true">✚</div>
+        <p class="eyebrow">บัญชีผู้ป่วย</p>
+        <h1>เข้าสู่ระบบ</h1>
+        <p class="auth-description">ใช้เลขบัตรประชาชนที่ลงทะเบียนไว้เพื่อดูข้อมูลส่วนตัว ประวัติการรับบริการ และคิวของคุณ</p>
+        <div id="loginAlert" class="alert" role="alert" hidden></div>
+        <form id="loginForm" autocomplete="on">
+          <label class="field"><span>เลขบัตรประชาชน <b>*</b></span><input name="national_id" maxlength="13" minlength="13" inputmode="numeric" pattern="[0-9]{13}" required autocomplete="username" placeholder="ตัวเลข 13 หลัก"></label>
+          <button id="loginSubmitButton" class="primary-button" type="submit"><span>เข้าสู่ระบบ</span><i aria-hidden="true">→</i></button>
+          <button id="backToRegistration" class="secondary-button" type="button">กลับไปลงทะเบียน</button>
+        </form>
+        <p class="privacy-note">ข้อมูลสุขภาพจะแสดงหลังจากยืนยันข้อมูลสำเร็จเท่านั้น</p>
+      </div>
+    </section>
+
     <section id="statusView" class="page-shell status-view" hidden>
       <div class="status-card">
         <div class="success-mark" aria-hidden="true">✓</div>
@@ -113,9 +133,45 @@
         </div>
         <p id="lastUpdated" class="last-updated">กำลังอัปเดต...</p>
         <button id="refreshStatus" class="primary-button" type="button"><span>อัปเดตสถานะ</span><i aria-hidden="true">↻</i></button>
-        <button id="newRegistration" class="secondary-button" type="button">ลงทะเบียนผู้ป่วยรายใหม่</button>
+        <button id="statusAccountButton" class="secondary-button" type="button">ดูข้อมูลและประวัติของฉัน</button>
       </div>
       <div class="notice-card"><strong>โปรดเก็บหน้านี้ไว้</strong><p>สถานะจะอัปเดตอัตโนมัติทุก 10 วินาที และสามารถกลับมาเปิดจากอุปกรณ์เครื่องเดิมได้</p></div>
+    </section>
+
+    <section id="accountView" class="page-shell account-view" hidden>
+      <div class="account-heading">
+        <div>
+          <p class="eyebrow">บัญชีผู้ป่วย</p>
+          <h1 id="accountName">ข้อมูลของฉัน</h1>
+          <p id="accountHn">HN –</p>
+        </div>
+        <button id="logoutButton" class="secondary-button compact-button" type="button">ออกจากระบบ</button>
+      </div>
+
+      <div id="accountAlert" class="alert" role="alert" hidden></div>
+
+      <section class="account-card queue-summary" aria-labelledby="accountQueueTitle">
+        <div class="card-heading">
+          <div><span class="section-number">คิว</span><h2 id="accountQueueTitle">คิวปัจจุบัน</h2></div>
+          <button id="openQueueStatus" class="text-button" type="button" hidden>ดูสถานะเต็ม</button>
+        </div>
+        <div id="accountQueueContent" class="empty-state">กำลังโหลดข้อมูลคิว...</div>
+      </section>
+
+      <section class="account-card" aria-labelledby="profileTitle">
+        <div class="card-heading"><div><span class="section-number">1</span><h2 id="profileTitle">ข้อมูลส่วนตัว</h2></div></div>
+        <dl id="profileDetails" class="detail-grid"></dl>
+      </section>
+
+      <section class="account-card" aria-labelledby="historyTitle">
+        <div class="card-heading"><div><span class="section-number">2</span><h2 id="historyTitle">ประวัติการรับบริการ</h2></div></div>
+        <div id="visitHistory" class="timeline-list"></div>
+      </section>
+
+      <section class="account-card" aria-labelledby="appointmentTitle">
+        <div class="card-heading"><div><span class="section-number">3</span><h2 id="appointmentTitle">นัดหมาย</h2></div></div>
+        <div id="appointmentHistory" class="timeline-list"></div>
+      </section>
     </section>
   </main>
 

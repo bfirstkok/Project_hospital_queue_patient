@@ -1,6 +1,8 @@
 # Hospital Queue Patient Portal
 
-เว็บสำหรับผู้ป่วยสแกน QR Code เพื่อลงทะเบียนและติดตามสถานะคิว โดยข้อมูลถูกส่งไปยัง Backend ของ `Project_hospital_queue`
+เว็บสำหรับผู้ป่วยสแกน QR Code เพื่อลงทะเบียน เข้าสู่ระบบ ดูข้อมูลส่วนตัว ประวัติการรับบริการ นัดหมาย และติดตามสถานะคิว โดยข้อมูลถูกส่งไปยัง Backend ของ `Project_hospital_queue`
+
+ผู้ป่วยเข้าสู่ระบบด้วยเลขบัตรประชาชน 13 หลักที่ใช้ลงทะเบียน ระบบจะเก็บโทเคนที่ลงลายเซ็นไว้เฉพาะในเบราว์เซอร์ของผู้ป่วย
 
 ## ตั้งค่า
 
@@ -28,6 +30,8 @@ PATIENT_APP_ORIGINS=https://patient.example.com,https://bfirstkok.github.io
 ## API ที่ใช้
 
 - `POST /api/patient/register/` ลงทะเบียนและสร้าง Visit สถานะ `WAITING_VITALS`
-- `GET /api/patient/queue/<tracking_token>/` อ่านสถานะคิวโดยไม่เปิดเผยข้อมูลผู้ป่วย
+- `POST /api/patient/login/` ยืนยันเลขบัตรประชาชน
+- `GET /api/patient/me/` อ่านข้อมูลส่วนตัว ประวัติ และนัดหมายด้วย Bearer token
+- `GET /api/patient/queue/` อ่านสถานะคิวด้วย Bearer token
 
 QR Code ควรชี้มาที่ URL หน้า `index.html` ของเว็บนี้
