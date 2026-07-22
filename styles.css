@@ -160,3 +160,134 @@ footer { padding: 0 16px 30px; color: #84918f; text-align: center; font-size: 11
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; transition: none !important; animation-duration: .01ms !important; }
 }
+
+/* Compact registration layout based on the hospital paper-form reference. */
+body[data-view="registrationView"] {
+  background: #ffffff;
+  color: #18364a;
+}
+body[data-view="registrationView"] .site-header,
+body[data-view="registrationView"] footer,
+#registrationView .intro,
+#registrationView .steps {
+  display: none;
+}
+#registrationView.page-shell {
+  width: min(820px, calc(100% - 12px));
+  margin: 6px auto 12px;
+}
+#registrationView .form-card {
+  padding: 8px 10px 10px;
+  border: 1px solid #8eb2c8;
+  border-radius: 7px;
+  box-shadow: none;
+}
+#registrationView fieldset {
+  padding: 8px 0 5px;
+  border: 0;
+}
+#registrationView legend {
+  margin-bottom: 7px;
+  gap: 0;
+  color: #18364a;
+  font-size: 12px;
+  line-height: 1.25;
+}
+#registrationView legend small,
+#registrationView .section-number,
+#registrationView .info-strip,
+#registrationView .privacy-note {
+  display: none;
+}
+#registrationView .form-grid,
+#registrationView .form-grid.three {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 8px;
+}
+#registrationView .form-grid + .form-grid {
+  margin-top: 7px;
+}
+#registrationView .field {
+  gap: 3px;
+  color: #29495c;
+  font-size: 9px;
+  font-weight: 600;
+}
+#registrationView .field > small {
+  margin-top: -1px;
+  font-size: 7.5px;
+  line-height: 1.25;
+}
+#registrationView input,
+#registrationView select,
+#registrationView textarea {
+  min-height: 31px;
+  padding: 6px 8px;
+  border-color: #9dbccc;
+  border-radius: 4px;
+  color: #18364a;
+  font-size: 10px;
+  box-shadow: none;
+}
+#registrationView textarea {
+  min-height: 48px;
+  line-height: 1.35;
+}
+#registrationView input:disabled {
+  background: #eef3f5;
+  color: #78909c;
+}
+#registrationView .input-suffix em {
+  min-width: 32px;
+  border-color: #9dbccc;
+  border-radius: 0 4px 4px 0;
+  font-size: 9px;
+}
+#registrationView .consent {
+  margin: 8px 0 7px;
+  gap: 6px;
+  color: #405f70;
+  font-size: 8px;
+  line-height: 1.35;
+}
+#registrationView .consent input {
+  width: 13px;
+  height: 13px;
+}
+#registrationView .form-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+#registrationView .primary-button,
+#registrationView .secondary-button {
+  width: auto;
+  min-height: 30px;
+  margin: 0;
+  padding: 6px 11px;
+  border-radius: 4px;
+  font-size: 9px;
+  box-shadow: none;
+}
+#registrationView .primary-button {
+  gap: 5px;
+  background: #008b75;
+}
+#registrationView .primary-button i {
+  order: -1;
+  font-size: 10px;
+}
+#registrationView .secondary-button {
+  color: #355a6d;
+  border-color: #9dbccc;
+}
+
+@media (max-width: 360px) {
+  #registrationView .form-grid,
+  #registrationView .form-grid.three {
+    grid-template-columns: 1fr;
+  }
+  #registrationView .field-wide {
+    grid-column: auto;
+  }
+}

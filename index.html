@@ -64,11 +64,13 @@
             <label class="field"><span>หมู่เลือด</span><select name="blood_type"><option value="UNKNOWN">ไม่ทราบ</option><option value="A">A</option><option value="B">B</option><option value="AB">AB</option><option value="O">O</option></select></label>
             <label class="field"><span>ส่วนสูง</span><div class="input-suffix"><input name="height_cm" type="number" min="30" max="250" step="0.1" inputmode="decimal" placeholder="170"><em>ซม.</em></div></label>
             <label class="field"><span>น้ำหนัก</span><div class="input-suffix"><input name="weight_kg" type="number" min="1" max="400" step="0.1" inputmode="decimal" placeholder="65"><em>กก.</em></div></label>
+            <label class="field"><span>BP ตัวบน</span><input type="number" placeholder="บันทึกโดยเจ้าหน้าที่" disabled></label>
+            <label class="field"><span>BP ตัวล่าง</span><input type="number" placeholder="บันทึกโดยเจ้าหน้าที่" disabled></label>
           </div>
           <div class="form-grid">
             <label class="field field-wide"><span>โรคประจำตัว</span><textarea name="chronic_diseases" maxlength="1000" placeholder="หากไม่มีให้เว้นว่าง"></textarea></label>
-            <label class="field"><span>ประวัติแพ้ยา / อาหาร</span><textarea name="allergies" maxlength="1000" placeholder="หากไม่มีให้เว้นว่าง"></textarea></label>
-            <label class="field"><span>ยาที่ใช้ประจำ</span><textarea name="medications" maxlength="1000" placeholder="ระบุชื่อยา (ถ้าทราบ)"></textarea></label>
+            <label class="field field-wide"><span>ประวัติแพ้ยา / อาหาร</span><textarea name="allergies" maxlength="1000" placeholder="หากไม่มีให้เว้นว่าง"></textarea></label>
+            <label class="field field-wide"><span>ยาที่ใช้ประจำ</span><textarea name="medications" maxlength="1000" placeholder="ระบุชื่อยา (ถ้าทราบ)"></textarea></label>
           </div>
         </fieldset>
 
@@ -97,7 +99,10 @@
         </fieldset>
 
         <label class="consent"><input name="consent" type="checkbox" required><span>ข้าพเจ้ายืนยันว่าข้อมูลถูกต้อง และยินยอมให้ใช้ข้อมูลเพื่อการลงทะเบียน คัดกรอง และจัดคิวรับบริการ <b>*</b></span></label>
-        <button id="submitButton" class="primary-button" type="submit"><span>ยืนยันการลงทะเบียน</span><i aria-hidden="true">→</i></button>
+        <div class="form-actions">
+          <button id="submitButton" class="primary-button" type="submit"><span>บันทึกผู้ป่วย</span><i aria-hidden="true">✓</i></button>
+          <button class="secondary-button" type="reset">ยกเลิก</button>
+        </div>
         <p class="privacy-note">ระบบจะไม่แสดงชื่อ อาการ หรือระดับความเร่งด่วนบนหน้าสถานะคิว</p>
       </form>
     </section>

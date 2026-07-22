@@ -23,6 +23,7 @@
 
   function showView(view) {
     views.forEach((item) => { item.hidden = item !== view; });
+    document.body.dataset.view = view.id;
     if (view !== statusView) clearInterval(refreshTimer);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -99,7 +100,7 @@
     form.querySelectorAll(".invalid").forEach((element) => element.classList.remove("invalid"));
     if (!form.reportValidity()) return;
 
-    setButtonLoading(submitButton, true, "กำลังบันทึกข้อมูล...", "ยืนยันการลงทะเบียน");
+    setButtonLoading(submitButton, true, "กำลังบันทึกข้อมูล...", "บันทึกผู้ป่วย");
     try {
       const result = await apiRequest("/api/patient/register/", {
         method: "POST",
@@ -116,7 +117,7 @@
         ? "เชื่อมต่อเว็บหลักไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตหรือติดต่อเจ้าหน้าที่"
         : message);
     } finally {
-      setButtonLoading(submitButton, false, "กำลังบันทึกข้อมูล...", "ยืนยันการลงทะเบียน");
+      setButtonLoading(submitButton, false, "กำลังบันทึกข้อมูล...", "บันทึกผู้ป่วย");
     }
   }
 
@@ -334,5 +335,6 @@
   document.getElementById("logoutButton").addEventListener("click", logout);
   savedAccountButton.addEventListener("click", loadAccount);
 
+  document.body.dataset.view = registrationView.id;
   savedAccountButton.hidden = !currentToken();
 })();
