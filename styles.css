@@ -83,7 +83,7 @@ input.invalid, select.invalid, textarea.invalid { border-color: var(--danger); b
 .status-card { padding: 38px; text-align: center; }
 .success-mark { width: 52px; height: 52px; margin: 0 auto 15px; display: grid; place-items: center; border-radius: 50%; background: var(--teal-soft); color: var(--teal); font-size: 25px; font-weight: 700; }
 .status-card .eyebrow { margin-bottom: 2px; }
-.queue-number { margin: 22px 0 16px; color: var(--teal-dark); font-size: clamp(44px, 12vw, 68px); font-weight: 700; letter-spacing: -.04em; }
+.queue-number { width: fit-content; min-width: 180px; margin: 22px auto 18px; padding: 9px 28px 11px; border: 1px solid rgba(8, 127, 118, .18); border-radius: 18px; background: var(--teal-soft); color: var(--teal-dark); font-size: clamp(48px, 14vw, 72px); font-weight: 700; line-height: 1; letter-spacing: .02em; white-space: nowrap; }
 .status-pill { width: fit-content; margin: auto; display: flex; align-items: center; gap: 8px; border-radius: 999px; background: var(--teal-soft); color: var(--teal-dark); padding: 8px 13px; font-size: 13px; }
 .status-pill span { width: 8px; height: 8px; border-radius: 50%; background: #16a085; box-shadow: 0 0 0 5px rgba(22, 160, 133, .12); }
 .instruction { min-height: 28px; margin: 18px 0; color: var(--muted); line-height: 1.6; }

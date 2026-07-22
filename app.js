@@ -162,9 +162,9 @@
       document.getElementById("queueNumber").textContent = result.queue_number;
       document.getElementById("statusLabel").textContent = result.status_label;
       document.getElementById("instruction").textContent = result.instruction;
-      document.getElementById("peopleAhead").textContent = ["WAITING_QUEUE", "WAITING"].includes(result.status)
-        ? `${result.people_ahead} คิว`
-        : "–";
+      document.getElementById("queuePosition").textContent = Number.isInteger(result.queue_position)
+        ? `อันดับ ${result.queue_position}`
+        : "รอจัดลำดับ";
       document.getElementById("room").textContent = result.room || "ยังไม่ระบุ";
       document.getElementById("lastUpdated").textContent = `อัปเดตล่าสุด ${new Intl.DateTimeFormat("th-TH", {
         hour: "2-digit", minute: "2-digit", second: "2-digit",
