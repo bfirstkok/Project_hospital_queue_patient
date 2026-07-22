@@ -106,9 +106,12 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(collectPayload()),
       });
-      localStorage.setItem(storageKey, result.tracking_token);
+      if (!result.access_token) {
+        throw new Error("เว็บหลักยังไม่รองรับการเข้าสู่ระบบผู้ป่วย กรุณาอัปเดต Backend");
+      }
+      localStorage.setItem(storageKey, result.access_token);
       savedAccountButton.hidden = false;
-      showStatus(result.tracking_token, result);
+      showStatus(result.access_token, result);
     } catch (error) {
       const message = error.errors ? focusFirstError(error.errors) : error.message;
       setAlert("formAlert", message === "Failed to fetch"
