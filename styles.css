@@ -168,13 +168,35 @@ body[data-view="registrationView"] {
 }
 body[data-view="registrationView"] .site-header,
 body[data-view="registrationView"] footer,
-#registrationView .intro,
 #registrationView .steps {
   display: none;
 }
 #registrationView.page-shell {
+  position: relative;
   width: min(820px, calc(100% - 12px));
   margin: 6px auto 12px;
+}
+#registrationView .intro {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 16px;
+}
+#registrationView .intro > .eyebrow,
+#registrationView .intro > h1,
+#registrationView .intro > p {
+  display: none;
+}
+#registrationView .login-prompt {
+  margin: 0;
+  gap: 4px;
+  font-size: 7px;
+}
+#registrationView .login-button {
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 7px;
 }
 #registrationView .form-card {
   padding: 5px 10px 7px;
