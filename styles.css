@@ -177,17 +177,17 @@ body[data-view="registrationView"] footer,
   margin: 6px auto 12px;
 }
 #registrationView .form-card {
-  padding: 8px 10px 10px;
+  padding: 5px 10px 7px;
   border: 1px solid #8eb2c8;
   border-radius: 7px;
   box-shadow: none;
 }
 #registrationView fieldset {
-  padding: 5px 0 3px;
+  padding: 3px 0 2px;
   border: 0;
 }
 #registrationView legend {
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   gap: 0;
   color: #18364a;
   font-size: 10px;
@@ -202,16 +202,16 @@ body[data-view="registrationView"] footer,
 #registrationView .form-grid,
 #registrationView .form-grid.three {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px 8px;
+  gap: 3px 8px;
 }
 #registrationView .form-grid + .form-grid {
-  margin-top: 5px;
+  margin-top: 3px;
 }
 #registrationView .field-wide {
   grid-column: 1 / -1;
 }
 #registrationView .field {
-  gap: 2px;
+  gap: 1px;
   color: #29495c;
   font-size: 8px;
   font-weight: 600;
@@ -224,8 +224,8 @@ body[data-view="registrationView"] footer,
 #registrationView input,
 #registrationView select,
 #registrationView textarea {
-  min-height: 25px;
-  padding: 4px 6px;
+  min-height: 21px;
+  padding: 3px 6px;
   border-color: #9dbccc;
   border-radius: 4px;
   color: #18364a;
@@ -233,7 +233,7 @@ body[data-view="registrationView"] footer,
   box-shadow: none;
 }
 #registrationView textarea {
-  min-height: 34px;
+  min-height: 27px;
   line-height: 1.35;
 }
 #registrationView input:disabled {
@@ -247,7 +247,7 @@ body[data-view="registrationView"] footer,
   font-size: 8px;
 }
 #registrationView .consent {
-  margin: 5px 0;
+  margin: 3px 0;
   gap: 6px;
   color: #405f70;
   font-size: 7px;
@@ -265,7 +265,7 @@ body[data-view="registrationView"] footer,
 #registrationView .primary-button,
 #registrationView .secondary-button {
   width: auto;
-  min-height: 26px;
+  min-height: 23px;
   margin: 0;
   padding: 4px 9px;
   border-radius: 4px;
