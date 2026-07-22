@@ -4,7 +4,7 @@
   const config = window.PATIENT_APP_CONFIG || {};
   const apiBase = String(config.API_BASE_URL || "").replace(/\/$/, "");
   const refreshMs = Number(config.STATUS_REFRESH_MS) || 10000;
-  const storageKey = "hospital_patient_tracking_token";
+  const storageKey = "hospital_patient_access_token";
   const views = ["registrationView", "loginView", "statusView", "accountView"]
     .map((id) => document.getElementById(id));
   const registrationView = document.getElementById("registrationView");
@@ -106,9 +106,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(collectPayload()),
       });
-      if (!result.access_token) {
-        throw new Error("เว็บหลักยังไม่รองรับการเข้าสู่ระบบผู้ป่วย กรุณาอัปเดต Backend");
-      }
+      if (!result.access_token) throw new Error("เว็บหลักไม่ได้ส่ง access token กลับมา");
       localStorage.setItem(storageKey, result.access_token);
       savedAccountButton.hidden = false;
       showStatus(result.access_token, result);
