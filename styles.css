@@ -183,14 +183,14 @@ body[data-view="registrationView"] footer,
   box-shadow: none;
 }
 #registrationView fieldset {
-  padding: 8px 0 5px;
+  padding: 5px 0 3px;
   border: 0;
 }
 #registrationView legend {
-  margin-bottom: 7px;
+  margin-bottom: 5px;
   gap: 0;
   color: #18364a;
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1.25;
 }
 #registrationView legend small,
@@ -202,35 +202,38 @@ body[data-view="registrationView"] footer,
 #registrationView .form-grid,
 #registrationView .form-grid.three {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px 8px;
+  gap: 5px 8px;
 }
 #registrationView .form-grid + .form-grid {
-  margin-top: 7px;
+  margin-top: 5px;
+}
+#registrationView .field-wide {
+  grid-column: 1 / -1;
 }
 #registrationView .field {
-  gap: 3px;
+  gap: 2px;
   color: #29495c;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 600;
 }
 #registrationView .field > small {
   margin-top: -1px;
-  font-size: 7.5px;
+  font-size: 7px;
   line-height: 1.25;
 }
 #registrationView input,
 #registrationView select,
 #registrationView textarea {
-  min-height: 31px;
-  padding: 6px 8px;
+  min-height: 25px;
+  padding: 4px 6px;
   border-color: #9dbccc;
   border-radius: 4px;
   color: #18364a;
-  font-size: 10px;
+  font-size: 8px;
   box-shadow: none;
 }
 #registrationView textarea {
-  min-height: 48px;
+  min-height: 34px;
   line-height: 1.35;
 }
 #registrationView input:disabled {
@@ -238,16 +241,16 @@ body[data-view="registrationView"] footer,
   color: #78909c;
 }
 #registrationView .input-suffix em {
-  min-width: 32px;
+  min-width: 27px;
   border-color: #9dbccc;
   border-radius: 0 4px 4px 0;
-  font-size: 9px;
+  font-size: 8px;
 }
 #registrationView .consent {
-  margin: 8px 0 7px;
+  margin: 5px 0;
   gap: 6px;
   color: #405f70;
-  font-size: 8px;
+  font-size: 7px;
   line-height: 1.35;
 }
 #registrationView .consent input {
@@ -262,11 +265,11 @@ body[data-view="registrationView"] footer,
 #registrationView .primary-button,
 #registrationView .secondary-button {
   width: auto;
-  min-height: 30px;
+  min-height: 26px;
   margin: 0;
-  padding: 6px 11px;
+  padding: 4px 9px;
   border-radius: 4px;
-  font-size: 9px;
+  font-size: 8px;
   box-shadow: none;
 }
 #registrationView .primary-button {
