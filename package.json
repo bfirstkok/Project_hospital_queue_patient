@@ -2,7 +2,28 @@
   "name": "hospital-queue-patient-portal",
   "private": true,
   "scripts": {
-    "check": "node --check app.js && node --check config.js && node --check scripts/build.mjs",
-    "build": "node scripts/build.mjs"
+    "dev": "next dev",
+    "build": "node scripts/clean-build.mjs && node scripts/write-runtime-config.mjs && next build && node scripts/publish-export.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "22.19.3",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.1",
+    "eslint-config-next": "16.3.0",
+    "jsdom": "26.1.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
   }
 }
