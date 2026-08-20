@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap');
 
 /* ==========================================================================
    Design Tokens & CSS Variables (Accessible & High Contrast for All Ages)
@@ -32,17 +32,26 @@
   --shadow-hover: 0 14px 40px rgba(13, 138, 125, 0.14), 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
+/* Font Size Scaler Modifiers (Universal & Senior Accessibility) */
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+html[data-font-size="large"] {
+  font-size: 18px;
+}
+
+html[data-font-size="xlarge"] {
+  font-size: 20px;
+}
+
 /* ==========================================================================
    Base & Reset
    ========================================================================== */
 *, *::before, *::after {
   box-sizing: border-box;
-}
-
-html {
-  scroll-behavior: smooth;
-  font-size: 16px;
-  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -138,6 +147,68 @@ button {
   font-weight: 500;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Font Scaler Tool */
+.font-scaler {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 6px;
+  gap: 4px;
+}
+
+.font-scaler-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+  padding-left: 6px;
+  display: none;
+}
+
+@media (min-width: 600px) {
+  .font-scaler-label {
+    display: inline-block;
+  }
+}
+
+.font-btn {
+  display: inline-grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--ink-secondary);
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.font-btn.large {
+  font-size: 1.05rem;
+}
+
+.font-btn.xlarge {
+  font-size: 1.2rem;
+}
+
+.font-btn:hover {
+  background: var(--line);
+}
+
+.font-btn.active {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 2px 6px rgba(13, 138, 125, 0.3);
+}
+
 .text-button {
   display: inline-flex;
   align-items: center;
@@ -146,10 +217,10 @@ button {
   background: var(--primary-light);
   color: var(--primary-hover);
   border-radius: 999px;
-  padding: 10px 20px;
+  padding: 8px 18px;
   font-size: 0.95rem;
   font-weight: 700;
-  min-height: 44px;
+  min-height: 40px;
   transition: all 0.2s ease;
 }
 
@@ -158,11 +229,6 @@ button {
   color: white;
   border-color: var(--primary);
   transform: translateY(-1px);
-}
-
-.text-button:focus-visible {
-  outline: 3px solid rgba(13, 138, 125, 0.35);
-  outline-offset: 2px;
 }
 
 /* ==========================================================================
@@ -242,11 +308,6 @@ button {
   color: white;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(13, 138, 125, 0.25);
-}
-
-.login-button:focus-visible {
-  outline: 3px solid rgba(13, 138, 125, 0.35);
-  outline-offset: 2px;
 }
 
 /* ==========================================================================
@@ -355,6 +416,150 @@ button {
 }
 
 /* ==========================================================================
+   Choice Chips & Quick Select Buttons
+   ========================================================================== */
+.choice-chips-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: 10px 0 16px;
+}
+
+.choice-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--surface-alt);
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-secondary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.choice-chip:hover {
+  background: #eef5f4;
+  border-color: #b8ded8;
+  transform: translateY(-1px);
+}
+
+.choice-chip.selected {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary-hover);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(13, 138, 125, 0.2);
+}
+
+.choice-chip.danger.selected {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+  box-shadow: 0 2px 8px rgba(197, 34, 31, 0.18);
+}
+
+.field-group-spacing {
+  margin: 18px 0;
+  display: grid;
+  gap: 8px;
+}
+
+.field-group-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--ink-secondary);
+}
+
+.age-badge-notification {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  background: var(--primary-light);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-sm);
+  color: var(--primary-hover);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+/* Emergency Contacts Container (Max 3) */
+.emergency-contacts-wrapper {
+  display: grid;
+  gap: 16px;
+}
+
+.emergency-entry-card {
+  border: 1.5px solid var(--line);
+  background: var(--surface-alt);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+
+.entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.entry-tag {
+  display: inline-block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--primary-hover);
+  background: var(--primary-light);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--primary-border);
+  margin-bottom: 10px;
+}
+
+.entry-header .entry-tag {
+  margin-bottom: 0;
+}
+
+.remove-entry-btn {
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  transition: all 0.15s;
+}
+
+.remove-entry-btn:hover {
+  background: var(--danger);
+  color: white;
+}
+
+.add-emergency-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: var(--surface-alt);
+  border: 1.5px dashed #a5c7c2;
+  border-radius: var(--radius-md);
+  color: var(--primary-hover);
+  font-size: 0.95rem;
+  font-weight: 700;
+  transition: all 0.2s;
+  width: fit-content;
+}
+
+.add-emergency-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
    Cards & Form Styling
    ========================================================================== */
 .form-card, .status-card, .auth-card, .account-card, .notice-card {
@@ -401,15 +606,15 @@ legend small {
 }
 
 .section-number {
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--primary-light);
   color: var(--primary-hover);
-  font-size: 1.05rem;
+  font-size: 1.25rem;
   font-weight: 700;
   border: 1px solid var(--primary-border);
 }
@@ -551,9 +756,9 @@ input:disabled {
 }
 
 /* ==========================================================================
-   Buttons (Large, Tactile, High-Contrast)
+   Buttons
    ========================================================================== */
-.primary-button, .secondary-button {
+.primary-button, .secondary-button, .action-button-image {
   width: 100%;
   min-height: 52px;
   border-radius: var(--radius-md);
@@ -605,6 +810,24 @@ input:disabled {
   transform: translateY(-1px);
 }
 
+.action-button-image {
+  border: 1.5px solid #c7d2fe;
+  background: #f5f7ff;
+  color: #3730a3;
+}
+
+.action-button-image:hover:not(:disabled) {
+  background: #e0e7ff;
+  border-color: #818cf8;
+  color: #312e81;
+  transform: translateY(-1px);
+}
+
+.action-button-image:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .privacy-note {
   margin: 18px 0 0;
   color: var(--muted);
@@ -619,35 +842,98 @@ input:disabled {
 }
 
 /* ==========================================================================
-   Queue Status View (Ultra Clear for Distance & Senior Vision)
+   Queue Status View (Near Queue Banner, Wait Time, 3-Col Details)
    ========================================================================== */
 .status-view {
   max-width: 640px;
 }
 
+.near-queue-banner {
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  border-radius: var(--radius-md);
+  color: #92400e;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.25);
+  animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.near-queue-banner .banner-icon {
+  font-size: 2rem;
+}
+
+.near-queue-banner strong {
+  display: block;
+  font-size: 1.15rem;
+  color: #78350f;
+}
+
+.near-queue-banner p {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
 .status-card {
-  padding: 40px 32px;
+  padding: 36px 32px;
   text-align: center;
+  position: relative;
+}
+
+.card-top-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.notif-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-alt);
+  transition: all 0.2s ease;
+}
+
+.notif-toggle-btn.active {
+  background: var(--primary-light);
+  border-color: var(--primary-border);
+  color: var(--primary-hover);
 }
 
 .success-mark {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 16px;
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 14px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   background: var(--success-bg);
   border: 2px solid var(--success-border);
   color: var(--success);
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 700;
 }
 
 .queue-number {
   width: fit-content;
   min-width: 220px;
-  margin: 22px auto 18px;
+  margin: 18px auto 14px;
   padding: 14px 36px;
   border: 2px solid var(--primary-border);
   border-radius: var(--radius-lg);
@@ -670,8 +956,8 @@ input:disabled {
   background: var(--primary-light);
   border: 1px solid var(--primary-border);
   color: var(--primary-hover);
-  padding: 10px 20px;
-  font-size: 1.05rem;
+  padding: 8px 18px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -690,17 +976,51 @@ input:disabled {
   100% { box-shadow: 0 0 0 0 rgba(13, 138, 125, 0); }
 }
 
+/* Wait Time Card */
+.wait-time-card {
+  margin: 18px auto;
+  max-width: 480px;
+  padding: 14px 18px;
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+}
+
+.wait-time-card .wait-icon {
+  font-size: 1.8rem;
+  flex: 0 0 auto;
+}
+
+.wait-time-card .wait-title {
+  display: block;
+  font-size: 0.82rem;
+  color: #92400e;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.wait-time-card strong {
+  display: block;
+  font-size: 1.05rem;
+  color: #78350f;
+  font-weight: 700;
+}
+
 .instruction {
-  min-height: 32px;
-  margin: 16px 0 20px;
+  min-height: 28px;
+  margin: 14px 0 18px;
   color: var(--ink-secondary);
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 600;
   line-height: 1.6;
 }
 
 .queue-details {
-  margin: 24px 0 18px;
+  margin: 20px 0 16px;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   border: 1.5px solid var(--line);
@@ -709,8 +1029,12 @@ input:disabled {
   overflow: hidden;
 }
 
+.queue-details.three-col {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .queue-details div {
-  padding: 18px 20px;
+  padding: 14px 12px;
 }
 
 .queue-details div + div {
@@ -719,23 +1043,28 @@ input:disabled {
 
 .queue-details span {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   color: var(--muted);
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   font-weight: 500;
 }
 
 .queue-details strong {
   display: block;
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   color: var(--ink);
   font-weight: 700;
 }
 
 .last-updated {
-  margin: 0 0 22px;
+  margin: 0 0 20px;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+}
+
+.queue-action-buttons {
+  display: grid;
+  gap: 12px;
 }
 
 .notice-card {
@@ -760,14 +1089,14 @@ input:disabled {
 }
 
 /* ==========================================================================
-   Auth / Login View
+   Auth / Login View (ThaID & National ID Tabs)
    ========================================================================== */
 .auth-view {
   max-width: 520px;
 }
 
 .auth-card {
-  padding: 42px 34px;
+  padding: 38px 32px;
   text-align: center;
 }
 
@@ -786,10 +1115,37 @@ input:disabled {
 }
 
 .auth-description {
-  margin: 10px 0 24px;
+  margin: 10px 0 20px;
   color: var(--ink-secondary);
   font-size: 1rem;
   line-height: 1.6;
+}
+
+/* Login Method Tabs */
+.auth-method-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  background: var(--surface-alt);
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  margin-bottom: 22px;
+}
+
+.auth-tab {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.auth-tab.active {
+  background: var(--surface);
+  color: var(--primary-hover);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .auth-card .alert {
@@ -804,6 +1160,48 @@ input:disabled {
 
 .auth-card form .primary-button {
   margin-top: 6px;
+}
+
+/* ThaID Box */
+.thaid-login-box {
+  display: grid;
+  gap: 18px;
+  text-align: center;
+}
+
+.thaid-badge {
+  padding: 20px;
+  background: #f0fdfa;
+  border: 1.5px solid #99f6e4;
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.thaid-logo {
+  font-size: 2.2rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.thaid-badge strong {
+  display: block;
+  color: #0f766e;
+  font-size: 1.1rem;
+}
+
+.thaid-badge p {
+  margin: 6px 0 0;
+  color: #115e59;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.thaid-btn {
+  background: #0284c7;
+}
+
+.thaid-btn:hover {
+  background: #0369a1;
 }
 
 /* ==========================================================================
@@ -889,6 +1287,9 @@ input:disabled {
   color: var(--muted);
   font-size: 0.88rem;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .detail-item dd {
@@ -985,6 +1386,111 @@ input:disabled {
   line-height: 1.6;
 }
 
+.vitals-strip {
+  background: var(--surface);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  font-weight: 600;
+  color: var(--primary-hover) !important;
+}
+
+/* Appointment Native Card Styles */
+.appointment-card-list {
+  display: grid;
+  gap: 16px;
+}
+
+.appointment-native-card {
+  border: 1.5px solid #bfdbfe;
+  background: #f8fafc;
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.06);
+}
+
+.appointment-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.appointment-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.appointment-badge .app-icon {
+  font-size: 2rem;
+}
+
+.appointment-badge strong {
+  display: block;
+  font-size: 1.1rem;
+  color: #1e3a8a;
+}
+
+.app-clinic {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.add-calendar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 0.88rem;
+  font-weight: 700;
+  transition: all 0.2s;
+}
+
+.add-calendar-btn:hover {
+  background: #1d4ed8;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.appointment-time-box {
+  margin: 14px 0 10px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.appointment-prep-note {
+  font-size: 0.92rem;
+  color: #334155;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+}
+
+.appointment-prep-note strong {
+  color: #92400e;
+  margin-right: 6px;
+}
+
+.appointment-prep-note p {
+  display: inline;
+  margin: 0;
+}
+
 .empty-state {
   border: 1.5px dashed #c4d7d3;
   border-radius: var(--radius-md);
@@ -1066,7 +1572,7 @@ footer {
   }
 
   .status-card {
-    padding: 32px 20px;
+    padding: 28px 18px;
   }
 
   .queue-number {
@@ -1075,7 +1581,7 @@ footer {
     font-size: 3.5rem;
   }
 
-  .queue-details {
+  .queue-details, .queue-details.three-col {
     grid-template-columns: 1fr;
   }
 
