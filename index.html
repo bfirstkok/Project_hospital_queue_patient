@@ -52,7 +52,8 @@
             <label class="field"><span>นามสกุล <b>*</b></span><input name="last_name" maxlength="100" required placeholder="เช่น ใจดี" autocomplete="family-name"></label>
             <label class="field field-wide"><span>เลขบัตรประชาชน <b>*</b></span><input name="national_id" maxlength="13" minlength="13" inputmode="numeric" pattern="[0-9]{13}" required placeholder="ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"><small>ใช้ตรวจสอบข้อมูลผู้ป่วยเดิมในระบบ</small></label>
             <label class="field"><span>เพศ</span><select name="gender"><option value="UNKNOWN">ไม่ระบุ</option><option value="M">ชาย</option><option value="F">หญิง</option><option value="O">อื่น ๆ</option></select></label>
-            <label class="field"><span>อายุ</span><div class="input-suffix"><input name="age" type="number" min="0" max="130" inputmode="numeric" placeholder="0"><em>ปี</em></div></label>
+            <label class="field"><span>วันเดือนปีเกิด</span><input name="birth_date" type="date"><small>ใช้คำนวณอายุเป็นปี เดือน และวัน</small></label>
+            <label class="field"><span>อายุโดยประมาณ</span><div class="input-suffix"><input name="age" type="number" min="0" max="130" inputmode="numeric" placeholder="กรอกเมื่อไม่ทราบวันเกิด"><em>ปี</em></div></label>
             <label class="field"><span>เบอร์โทรศัพท์</span><input name="phone" maxlength="20" inputmode="tel" placeholder="08xxxxxxxx" autocomplete="tel"></label>
           </div>
         </fieldset>

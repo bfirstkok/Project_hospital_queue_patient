@@ -196,7 +196,7 @@
       ["HN", profile.hn],
       ["เบอร์โทรศัพท์", profile.phone],
       ["เพศ", profile.gender],
-      ["อายุ", profile.age ? `${profile.age} ปี` : null],
+      ["อายุ", profile.age_display || (profile.age !== null && profile.age !== undefined ? `${profile.age} ปี` : null)],
       ["หมู่เลือด", profile.blood_type],
       ["ส่วนสูง / น้ำหนัก", [profile.height_cm && `${profile.height_cm} ซม.`, profile.weight_kg && `${profile.weight_kg} กก.`].filter(Boolean).join(" / ")],
       ["ที่อยู่", profile.address, true],
