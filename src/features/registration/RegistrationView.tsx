@@ -1,8 +1,12 @@
 import { useRef, useState, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { RegistrationPayload, RegistrationResult } from "@/shared/api/types";
+import { ALL_77_PROVINCES, getDistricts, getPostalCode, getSubdistricts } from "@/shared/data/thai-address";
+import { PdpaConsentGate } from "./PdpaConsentModal";
 
 interface RegistrationViewProps {
+  hasToken?: boolean;
+  initialPdpaAccepted?: boolean;
   onLogin: () => void;
   onSuccess: (token: string, result: RegistrationResult) => void;
 }
@@ -46,14 +50,14 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
 }
 
 const SYMPTOM_OPTIONS = [
-  "🤒 มีไข้ / หนาวสั่น",
-  "🗣️ ไอ / เจ็บคอ / มีน้ำมูก",
-  "😵‍💫 เวียนศีรษะ / หน้ามืด",
-  "🤢 ปวดท้อง / คลื่นไส้",
-  "🫁 แน่นหน้าอก / หายใจเหนื่อย",
-  "🦴 ปวดกล้ามเนื้อ / ปวดข้อ",
-  "🩹 มีแผล / ได้รับบาดเจ็บ",
-  "👁️ ตาแดง / ระคายเคืองตา",
+  "มีไข้ / หนาวสั่น",
+  "ไอ / เจ็บคอ / มีน้ำมูก",
+  "เวียนศีรษะ / หน้ามืด",
+  "ปวดท้อง / คลื่นไส้",
+  "แน่นหน้าอก / หายใจเหนื่อย",
+  "ปวดกล้ามเนื้อ / ปวดข้อ",
+  "มีบาดแผล / อุบัติเหตุ",
+  "ตาแดง / ระคายเคืองตา",
 ];
 
 const CHRONIC_OPTIONS = [
@@ -74,14 +78,52 @@ const ALLERGY_OPTIONS = [
   "แพ้อาหารทะเล",
 ];
 
-export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) {
+export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogin, onSuccess }: RegistrationViewProps) {
   const formRef = useRef<HTMLFormElement>(null);
+  const [isPdpaAccepted, setIsPdpaAccepted] = useState<boolean>(initialPdpaAccepted);
+  const [showPdpaReview, setShowPdpaReview] = useState<boolean>(false);
   const [message, setMessage] = useState("");
   const [invalidField, setInvalidField] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Emergency contact list state (Max 3)
-  const [emergencyCount, setEmergencyCount] = useState<number>(1);
+  // Address Dropdown states (77 provinces cascading)
+  const [province, setProvince] = useState<string>("");
+  const [district, setDistrict] = useState<string>("");
+  const [subdistrict, setSubdistrict] = useState<string>("");
+  const [postalCode, setPostalCode] = useState<string>("");
+
+  // Emergency contact list state (Max 3 items with stable IDs)
+  const [emergencyContacts, setEmergencyContacts] = useState<Array<{ id: string; name: string; relationship: string; phone: string }>>([
+    { id: "em-initial-1", name: "", relationship: "", phone: "" },
+  ]);
+
+  const addEmergencyContact = () => {
+    if (emergencyContacts.length < 3) {
+      setEmergencyContacts((prev) => [
+        ...prev,
+        {
+          id: `em-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          name: "",
+          relationship: "",
+          phone: "",
+        },
+      ]);
+    }
+  };
+
+  const removeEmergencyContact = (idToRemove: string) => {
+    setEmergencyContacts((prev) => prev.filter((item) => item.id !== idToRemove));
+  };
+
+  const updateEmergencyContact = (
+    id: string,
+    field: "name" | "relationship" | "phone",
+    value: string
+  ) => {
+    setEmergencyContacts((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    );
+  };
 
   // Quick choice chip states
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
@@ -129,9 +171,8 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
   }
 
   function toggleSymptom(item: string) {
-    const clean = item.replace(/^[^\s]+\s/, "");
     setSelectedSymptoms((prev) =>
-      prev.includes(clean) ? prev.filter((s) => s !== clean) : [...prev, clean]
+      prev.includes(item) ? prev.filter((s) => s !== item) : [...prev, item]
     );
   }
 
@@ -184,21 +225,94 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
     }
   }
 
+  // Cascading Address Handlers
+  const handleProvinceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setProvince(val);
+    setDistrict("");
+    setSubdistrict("");
+    setPostalCode("");
+  };
+
+  const handleDistrictChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setDistrict(val);
+    setSubdistrict("");
+    setPostalCode("");
+  };
+
+  const handleSubdistrictChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setSubdistrict(val);
+    if (val && province && district) {
+      const code = getPostalCode(province, district, val);
+      if (code) {
+        setPostalCode(code);
+      }
+    }
+  };
+
+  const districtOptions = province ? getDistricts(province) : [];
+  const subdistrictOptions = province && district ? getSubdistricts(province, district) : [];
+
   const normalizeNationalId = (event: FormEvent<HTMLInputElement>) => {
     event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 13);
   };
   const fieldClass = (name: string) => invalidField === name ? "invalid" : "";
 
+  // PDPA Consent Gate Screen before entering registration form
+  if (!isPdpaAccepted) {
+    return (
+      <section id="registrationView" className="page-shell">
+        <div className="intro">
+          <span className="eyebrow">ลงทะเบียนรับบริการ OPD</span>
+          <h1>{hasToken ? "จองคิวรับบริการ OPD วันนี้" : "ข้อตกลงและนโยบายความเป็นส่วนตัว"}</h1>
+          <p>กรุณาอ่านและให้ความยินยอมการเก็บรวบรวมข้อมูลตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
+          {!hasToken && (
+            <div className="login-prompt">
+              <span>มีประวัติหรือลงทะเบียนไว้แล้ว?</span>
+              <button className="login-button" type="button" onClick={onLogin}>เข้าสู่ระบบ</button>
+            </div>
+          )}
+        </div>
+
+        <ol className="steps" aria-label="ขั้นตอนรับบริการ">
+          <li className="active"><span>1</span>ยินยอม PDPA & ลงทะเบียน</li>
+          <li><span>2</span>วัดสัญญาณชีพ</li>
+          <li><span>3</span>รอเรียกคิว</li>
+        </ol>
+
+        <PdpaConsentGate
+          onAccept={() => setIsPdpaAccepted(true)}
+          onDecline={onLogin}
+        />
+      </section>
+    );
+  }
+
   return (
     <section id="registrationView" className="page-shell">
+      {showPdpaReview && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="หน้านโยบาย PDPA">
+          <div className="modal-inner">
+            <PdpaConsentGate
+              onAccept={() => setShowPdpaReview(false)}
+              onDecline={() => setShowPdpaReview(false)}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="intro">
         <span className="eyebrow">ลงทะเบียนรับบริการ OPD</span>
-        <h1>กรอกข้อมูลผู้ป่วย</h1>
+        <h1>{hasToken ? "จองคิวรับบริการ OPD วันนี้" : "กรอกข้อมูลผู้ป่วย"}</h1>
         <p>แตะเลือกตัวเลือกที่ตรงกับอาการของคุณ หรือพิมพ์ระบุเพิ่มเติมได้สะดวก</p>
-        <div className="login-prompt">
-          <span>มีประวัติหรือลงทะเบียนไว้แล้ว?</span>
-          <button className="login-button" type="button" onClick={onLogin}>เข้าสู่ระบบ</button>
-        </div>
+        {!hasToken && (
+          <div className="login-prompt">
+            <span>มีประวัติหรือลงทะเบียนไว้แล้ว?</span>
+            <button className="login-button" type="button" onClick={onLogin}>เข้าสู่ระบบ</button>
+          </div>
+        )}
       </div>
 
       <ol className="steps" aria-label="ขั้นตอนรับบริการ">
@@ -215,7 +329,7 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
         {/* Block 1: ข้อมูลระบุตัวตนผู้ป่วย */}
         <fieldset>
           <legend>
-            <span className="section-number">👤</span>
+            <span className="section-number">1</span>
             <span>ข้อมูลผู้ป่วย<small>ระบุตัวตนและข้อมูลการติดต่อส่วนตัว</small></span>
           </legend>
           <div className="form-grid">
@@ -252,7 +366,7 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
                   setAgeYears(e.target.value);
                   if (e.target.value) {
                     const days = Number(e.target.value) * 365;
-                    setCalculatedAgeText(`อายุประมาณ: ${e.target.value} ปี (ประมาณ ${days.toLocaleString()} วัน)`);
+                    setCalculatedAgeText(`อายุประมาณ ${e.target.value} ปี (ประมาณ ${days.toLocaleString()} วัน)`);
                   } else {
                     setCalculatedAgeText("");
                   }
@@ -262,7 +376,7 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
             <div className="field">
               <span>หรือเลือกวันเกิด (คำนวณอายุอัตโนมัติ)</span>
               <input type="date" value={birthDate} onChange={handleBirthDateChange} aria-label="วันเดือนปีเกิด" max={new Date().toISOString().split("T")[0]} />
-              {calculatedAgeText && <div className="age-badge-notification" role="status">📅 {calculatedAgeText}</div>}
+              {calculatedAgeText && <div className="age-badge-notification" role="status">{calculatedAgeText}</div>}
             </div>
 
             {/* Single Personal Phone Number */}
@@ -275,14 +389,13 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
         {/* Block 2: อาการที่มารับบริการ (มีช้อยส์ติ๊กเลือก + พิมพ์เสริม) */}
         <fieldset>
           <legend>
-            <span className="section-number">💬</span>
+            <span className="section-number">2</span>
             <span>อาการสำคัญที่มารับบริการ <b>*</b><small>แตะเลือกอาการที่ตรงกับคุณ หรือพิมพ์ระบุเพิ่มเติม</small></span>
           </legend>
           
           <div className="choice-chips-group" role="group" aria-label="ตัวเลือกอาการยอดนิยม">
             {SYMPTOM_OPTIONS.map((symptom) => {
-              const clean = symptom.replace(/^[^\s]+\s/, "");
-              const isSelected = selectedSymptoms.includes(clean);
+              const isSelected = selectedSymptoms.includes(symptom);
               return (
                 <button
                   type="button"
@@ -311,7 +424,7 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
         {/* Block 3: ข้อมูลสุขภาพเบื้องต้น & โรคประจำตัว / แพ้ยา (มีช้อยส์) */}
         <fieldset>
           <legend>
-            <span className="section-number">🩺</span>
+            <span className="section-number">3</span>
             <span>ข้อมูลสุขภาพ & ประวัติแพ้ยา<small>แตะเลือกเพื่อความสะดวกรวดเร็ว</small></span>
           </legend>
           <div className="info-strip">สัญญาณชีพ (ความดัน, ชีพจร, ไข้) จะวัดที่จุดคัดกรองโดยเจ้าหน้าที่</div>
@@ -361,7 +474,7 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
                 <button
                   type="button"
                   key={item}
-                  className={`choice-chip danger ${selectedAllergies.includes(item) ? "selected" : ""}`}
+                  className={`choice-chip ${selectedAllergies.includes(item) ? "selected" : ""}`}
                   onClick={() => toggleAllergy(item)}
                 >
                   {item}
@@ -377,62 +490,131 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
           </Field>
         </fieldset>
 
-        {/* Block 4: ที่อยู่ */}
+        {/* Block 4: ที่อยู่ (Dropdown 77 จังหวัด และเชื่อมโยง อำเภอ/ตำบล/รหัสไปรษณีย์) */}
         <fieldset>
           <legend>
-            <span className="section-number">📍</span>
-            <span>ที่อยู่ปัจจุบัน<small>สำหรับระบุพื้นที่รับบริการ</small></span>
+            <span className="section-number">4</span>
+            <span>ที่อยู่ปัจจุบัน<small>สำหรับระบุพื้นที่รับบริการ (เลือกจังหวัดเพื่อค้นหาอำเภอและตำบล)</small></span>
           </legend>
           <div className="form-grid">
-            <Field label="จังหวัด"><input name="province" maxLength={100} placeholder="เช่น ขอนแก่น" autoComplete="address-level1" /></Field>
-            <Field label="อำเภอ / เขต"><input name="district" maxLength={100} autoComplete="address-level2" /></Field>
-            <Field label="ตำบล / แขวง"><input name="subdistrict" maxLength={100} autoComplete="address-level3" /></Field>
-            <Field label="รหัสไปรษณีย์"><input name="postal_code" maxLength={5} inputMode="numeric" pattern="[0-9]{5}" autoComplete="postal-code" /></Field>
+            <Field label="จังหวัด">
+              <select
+                name="province"
+                value={province}
+                onChange={handleProvinceChange}
+                autoComplete="address-level1"
+                className={fieldClass("province")}
+              >
+                <option value="">-- เลือกจังหวัด (77 จังหวัด) --</option>
+                {ALL_77_PROVINCES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="อำเภอ / เขต">
+              <select
+                name="district"
+                value={district}
+                onChange={handleDistrictChange}
+                disabled={!province}
+                autoComplete="address-level2"
+                className={fieldClass("district")}
+              >
+                <option value="">
+                  {province ? "-- เลือกอำเภอ / เขต --" : "-- กรุณาเลือกจังหวัดก่อน --"}
+                </option>
+                {districtOptions.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="ตำบล / แขวง">
+              <select
+                name="subdistrict"
+                value={subdistrict}
+                onChange={handleSubdistrictChange}
+                disabled={!district}
+                autoComplete="address-level3"
+                className={fieldClass("subdistrict")}
+              >
+                <option value="">
+                  {district ? "-- เลือกตำบล / แขวง --" : "-- กรุณาเลือกอำเภอก่อน --"}
+                </option>
+                {subdistrictOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="รหัสไปรษณีย์">
+              <input
+                name="postal_code"
+                maxLength={5}
+                inputMode="numeric"
+                pattern="[0-9]{5}"
+                autoComplete="postal-code"
+                placeholder="5 หลัก"
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                className={fieldClass("postal_code")}
+              />
+            </Field>
           </div>
         </fieldset>
 
         {/* Block 5: ผู้ติดต่อฉุกเฉิน (เพิ่มได้สูงสุด 3 คน/เบอร์) */}
         <fieldset>
           <legend>
-            <span className="section-number">🚨</span>
-            <span>ผู้ติดต่อฉุกเฉิน<small>ใช้ติดต่อกรณีจำเป็นเร่งด่วน (เพิ่มได้สูงสุด 3 คน/เบอร์)</small></span>
+            <span className="section-number">5</span>
+            <span>ผู้ติดต่อฉุกเฉิน<small>ใช้ติดต่อกรณีจำเป็นเร่งด่วน (เพิ่มได้สูงสุด 3 รายการ)</small></span>
           </legend>
           
           <div className="emergency-contacts-wrapper">
-            {/* Contact 1 */}
-            <div className="emergency-entry-card">
-              <span className="entry-tag">ผู้ติดต่อฉุกเฉินคนที่ 1 (หลัก)</span>
-              <div className="form-grid three">
-                <Field label="ชื่อผู้ติดต่อ"><input name="emergency_name_1" maxLength={120} autoComplete="name" placeholder="ชื่อ-นามสกุล" /></Field>
-                <Field label="ความสัมพันธ์">
-                  <select name="emergency_relationship_1">
-                    <option value="">-- เลือก --</option>
-                    <option value="FATHER">พ่อ</option>
-                    <option value="MOTHER">แม่</option>
-                    <option value="SPOUSE">คู่สมรส</option>
-                    <option value="CHILD">บุตร</option>
-                    <option value="SIBLING">พี่น้อง</option>
-                    <option value="RELATIVE">ญาติ</option>
-                    <option value="FRIEND">เพื่อน</option>
-                    <option value="CAREGIVER">ผู้ดูแล</option>
-                    <option value="OTHER">อื่น ๆ</option>
-                  </select>
-                </Field>
-                <Field label="เบอร์โทรศัพท์"><input name="emergency_phone_1" maxLength={20} inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxx" /></Field>
-              </div>
-            </div>
-
-            {/* Contact 2 */}
-            {emergencyCount >= 2 && (
-              <div className="emergency-entry-card">
+            {emergencyContacts.map((contact, index) => (
+              <div key={contact.id} className="emergency-entry-card">
                 <div className="entry-header">
-                  <span className="entry-tag">ผู้ติดต่อฉุกเฉินคนที่ 2</span>
-                  <button type="button" className="remove-entry-btn" onClick={() => setEmergencyCount(1)}>✕ ลบ</button>
+                  <span className="entry-tag">
+                    ผู้ติดต่อฉุกเฉินคนที่ {index + 1} {index === 0 ? "(หลัก)" : ""}
+                  </span>
+                  {index > 0 && (
+                    <button
+                      type="button"
+                      className="remove-entry-btn"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        removeEmergencyContact(contact.id);
+                      }}
+                    >
+                      ลบรายการ
+                    </button>
+                  )}
                 </div>
                 <div className="form-grid three">
-                  <Field label="ชื่อผู้ติดต่อ"><input name="emergency_name_2" maxLength={120} placeholder="ชื่อ-นามสกุล" /></Field>
+                  <Field label="ชื่อผู้ติดต่อ">
+                    <input
+                      name={`emergency_name_${index + 1}`}
+                      maxLength={120}
+                      autoComplete={index === 0 ? "name" : undefined}
+                      placeholder="ชื่อ-นามสกุล"
+                      value={contact.name}
+                      onChange={(e) => updateEmergencyContact(contact.id, "name", e.target.value)}
+                    />
+                  </Field>
                   <Field label="ความสัมพันธ์">
-                    <select name="emergency_relationship_2">
+                    <select
+                      name={`emergency_relationship_${index + 1}`}
+                      value={contact.relationship}
+                      onChange={(e) => updateEmergencyContact(contact.id, "relationship", e.target.value)}
+                    >
                       <option value="">-- เลือก --</option>
                       <option value="FATHER">พ่อ</option>
                       <option value="MOTHER">แม่</option>
@@ -445,53 +627,50 @@ export function RegistrationView({ onLogin, onSuccess }: RegistrationViewProps) 
                       <option value="OTHER">อื่น ๆ</option>
                     </select>
                   </Field>
-                  <Field label="เบอร์โทรศัพท์"><input name="emergency_phone_2" maxLength={20} inputMode="tel" placeholder="08xxxxxxxx" /></Field>
-                </div>
-              </div>
-            )}
-
-            {/* Contact 3 */}
-            {emergencyCount >= 3 && (
-              <div className="emergency-entry-card">
-                <div className="entry-header">
-                  <span className="entry-tag">ผู้ติดต่อฉุกเฉินคนที่ 3</span>
-                  <button type="button" className="remove-entry-btn" onClick={() => setEmergencyCount(2)}>✕ ลบ</button>
-                </div>
-                <div className="form-grid three">
-                  <Field label="ชื่อผู้ติดต่อ"><input name="emergency_name_3" maxLength={120} placeholder="ชื่อ-นามสกุล" /></Field>
-                  <Field label="ความสัมพันธ์">
-                    <select name="emergency_relationship_3">
-                      <option value="">-- เลือก --</option>
-                      <option value="FATHER">พ่อ</option>
-                      <option value="MOTHER">แม่</option>
-                      <option value="SPOUSE">คู่สมรส</option>
-                      <option value="CHILD">บุตร</option>
-                      <option value="SIBLING">พี่น้อง</option>
-                      <option value="RELATIVE">ญาติ</option>
-                      <option value="FRIEND">เพื่อน</option>
-                      <option value="CAREGIVER">ผู้ดูแล</option>
-                      <option value="OTHER">อื่น ๆ</option>
-                    </select>
+                  <Field label="เบอร์โทรศัพท์">
+                    <input
+                      name={`emergency_phone_${index + 1}`}
+                      maxLength={20}
+                      inputMode="tel"
+                      autoComplete={index === 0 ? "tel" : undefined}
+                      placeholder="08xxxxxxxx"
+                      value={contact.phone}
+                      onChange={(e) => updateEmergencyContact(contact.id, "phone", e.target.value)}
+                    />
                   </Field>
-                  <Field label="เบอร์โทรศัพท์"><input name="emergency_phone_3" maxLength={20} inputMode="tel" placeholder="08xxxxxxxx" /></Field>
                 </div>
               </div>
-            )}
+            ))}
 
-            {emergencyCount < 3 && (
+            {emergencyContacts.length < 3 && (
               <button
                 type="button"
                 className="add-emergency-btn"
-                onClick={() => setEmergencyCount((c) => Math.min(3, c + 1))}
+                onClick={addEmergencyContact}
               >
-                ➕ เพิ่มผู้ติดต่อฉุกเฉิน / เบอร์สำรอง ({emergencyCount}/3)
+                + เพิ่มผู้ติดต่อฉุกเฉิน ({emergencyContacts.length}/3)
               </button>
             )}
           </div>
         </fieldset>
 
+        {/* PDPA Verified status and Consent */}
+        <div className="pdpa-verified-box">
+          <div className="pdpa-verified-badge">
+            <span className="pdpa-check-icon">✓</span>
+            <span>ยินยอมตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA) แล้ว</span>
+          </div>
+          <button
+            type="button"
+            className="pdpa-review-link"
+            onClick={() => setShowPdpaReview(true)}
+          >
+            อ่านนโยบาย PDPA อีกครั้ง
+          </button>
+        </div>
+
         <label className="consent">
-          <input name="consent" type="checkbox" required />
+          <input name="consent" type="checkbox" defaultChecked required />
           <span>ข้าพเจ้ายืนยันว่าข้อมูลถูกต้อง และยินยอมให้ใช้ข้อมูลเพื่อการลงทะเบียน คัดกรอง และจัดคิวรับบริการ <b>*</b></span>
         </label>
 

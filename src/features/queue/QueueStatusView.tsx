@@ -6,6 +6,9 @@ import { generateQueueCardImage } from "./queue-card-canvas";
 interface QueueStatusViewProps {
   token: string;
   initialQueue?: Partial<QueueData> | null;
+  onBookQueue?: () => void;
+  onLogin?: () => void;
+  onMedical?: () => void;
   onAccount: () => void;
   onUnauthorized: () => void;
 }
@@ -22,8 +25,21 @@ function calculateEstimatedWaitTime(position: number | null | undefined, statusL
   return "ระบบกำลังประเมินระยะเวลารอ";
 }
 
-export function QueueStatusView({ token, initialQueue, onAccount, onUnauthorized }: QueueStatusViewProps) {
-  const { queue, error, loading, refresh } = useQueuePolling({ enabled: true, token, initialQueue, onUnauthorized });
+export function QueueStatusView({
+  token,
+  initialQueue,
+  onBookQueue,
+  onLogin,
+  onMedical,
+  onAccount,
+  onUnauthorized,
+}: QueueStatusViewProps) {
+  const { queue, error, loading, refresh } = useQueuePolling({
+    enabled: Boolean(token),
+    token,
+    initialQueue,
+    onUnauthorized,
+  });
   const { enabled: soundEnabled, toggleNotification } = useQueueNotification(queue);
 
   const updatedAt = queue?.updated_at
@@ -40,85 +56,185 @@ export function QueueStatusView({ token, initialQueue, onAccount, onUnauthorized
     generateQueueCardImage(queue, estimatedWaitText);
   }
 
+  // Case 1: Has active queue
+  if (queue && queue.queue_number) {
+    return (
+      <section id="statusView" className="page-shell status-view">
+        {isNearQueue && (
+          <div className="near-queue-banner" role="alert">
+            <div className="banner-badge">แจ้งเตือน</div>
+            <div>
+              <strong>ใกล้ถึงคิวของคุณแล้ว!</strong>
+              <p>กรุณาเตรียมตัวและรอเรียกชื่อ ณ บริเวณหน้าห้องตรวจ {queue?.room || ""}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="status-card">
+          <div className="card-top-actions">
+            <button
+              type="button"
+              className={`notif-toggle-btn ${soundEnabled ? "active" : ""}`}
+              onClick={toggleNotification}
+              title={soundEnabled ? "ปิดเสียงและการสั่นเตือน" : "เปิดเสียงและการสั่นเตือน"}
+              aria-label={soundEnabled ? "ปิดเสียงเตือน" : "เปิดเสียงเตือน"}
+            >
+              <span>{soundEnabled ? "แจ้งเตือน & สั่น: เปิด" : "แจ้งเตือน & สั่น: ปิด"}</span>
+            </button>
+          </div>
+
+          <div className="success-mark" aria-hidden="true">✓</div>
+          <p className="eyebrow">คิวรับบริการ OPD ปัจจุบัน</p>
+          <h1>คิวของคุณ</h1>
+          <div className="queue-number">{queue?.queue_number || "-"}</div>
+          <div className="status-pill"><span /><strong>{queue?.status_label || "กำลังโหลดสถานะ"}</strong></div>
+          
+          <div className="wait-time-card">
+            <div className="wait-icon-tag">รอตรวจ</div>
+            <div>
+              <span className="wait-title">ประมาณการเวลารอตรวจ</span>
+              <strong>{estimatedWaitText}</strong>
+            </div>
+          </div>
+
+          <p className="instruction">{queue?.instruction || "กรุณารอสักครู่"}</p>
+          <div className="queue-details three-col">
+            <div>
+              <span>ลำดับของคุณ</span>
+              <strong>{Number.isInteger(queue?.queue_position) ? `อันดับ ${queue?.queue_position}` : "รอจัดลำดับ"}</strong>
+            </div>
+            <div>
+              <span>คิวก่อนหน้าคุณ</span>
+              <strong>
+                {typeof queue?.queue_position === "number"
+                  ? queue.queue_position <= 1
+                    ? "คิวถัดไป"
+                    : `อีก ${queue.queue_position - 1} คิว`
+                  : "–"}
+              </strong>
+            </div>
+            <div>
+              <span>ห้องตรวจ</span>
+              <strong>{queue?.room || "ยังไม่ระบุ"}</strong>
+            </div>
+          </div>
+
+          <p className="last-updated" role={error ? "alert" : undefined}>{error || `อัปเดตล่าสุด ${updatedAt} น.`}</p>
+
+          <div className="queue-action-buttons">
+            <button className="primary-button" type="button" onClick={() => void refresh()} disabled={loading}>
+              <span>อัปเดตสถานะ</span><i aria-hidden="true">{loading ? "↻" : "⟳"}</i>
+            </button>
+            <button className="action-button-image" type="button" onClick={handleSaveImage}>
+              บันทึกบัตรคิวเป็นรูปภาพ
+            </button>
+            <button className="secondary-button" type="button" onClick={onAccount}>ดูข้อมูลและประวัติการรักษา</button>
+          </div>
+        </div>
+
+        <div className="notice-card">
+          <strong>คำแนะนำ</strong>
+          <p>สถานะจะอัปเดตอัตโนมัติทุก 10 วินาที พร้อมระบบสั่นเตือนบนโทรศัพท์เมื่อใกล้ถึงคิว</p>
+        </div>
+      </section>
+    );
+  }
+
+  // Case 2: Logged in but no active queue today
+  if (token) {
+    return (
+      <section id="statusView" className="page-shell status-view">
+        <div className="intro">
+          <span className="eyebrow">ระบบคิวผู้ป่วย OPD</span>
+          <h1>สถานะคิวปัจจุบัน</h1>
+          <p>ขณะนี้คุณยังไม่มีคิวที่กำลังรอตรวจ สามารถกดจองคิวใหม่เพื่อรับบริการได้ทันที</p>
+        </div>
+
+        <div className="status-card no-queue-card">
+          <div className="no-queue-icon" aria-hidden="true">🎟️</div>
+          <h2>ยังไม่มีคิวในขณะนี้</h2>
+          <p className="instruction">ต้องการเข้ารับการตรวจหรือคัดกรองอาการวันนี้ สามารถกดลงทะเบียนจองคิวได้ทันที</p>
+
+          <div className="queue-action-buttons">
+            {onBookQueue && (
+              <button className="primary-button" type="button" onClick={onBookQueue}>
+                <span>จองคิว / รับบริการตอนนี้</span>
+                <i aria-hidden="true">+</i>
+              </button>
+            )}
+            <button className="secondary-button" type="button" onClick={onAccount}>
+              ดูข้อมูลส่วนตัว & ประวัติการรักษา
+            </button>
+            <button className="text-button" type="button" onClick={() => void refresh()} disabled={loading}>
+              {loading ? "กำลังตรวจสอบคิว..." : "⟳ ตรวจสอบคิวอีกครั้ง"}
+            </button>
+          </div>
+        </div>
+
+        <div className="notice-card">
+          <strong>การให้บริการ</strong>
+          <p>แผนกผู้ป่วยนอกเปิดให้บริการ จันทร์ – ศุกร์ เวลา 08:00 – 16:00 น.</p>
+        </div>
+      </section>
+    );
+  }
+
+  // Case 3: Guest / Not logged in (Main Landing)
   return (
     <section id="statusView" className="page-shell status-view">
-      {isNearQueue && (
-        <div className="near-queue-banner" role="alert">
-          <span className="banner-icon" aria-hidden="true">🔔</span>
-          <div>
-            <strong>ใกล้ถึงคิวของคุณแล้ว!</strong>
-            <p>กรุณาเตรียมตัวและรอเรียกชื่อ ณ บริเวณหน้าห้องตรวจ {queue?.room || ""}</p>
-          </div>
-        </div>
-      )}
+      <div className="intro">
+        <span className="eyebrow">โรงพยาบาลรัฐ · ระบบบริการผู้ป่วยนอก (OPD)</span>
+        <h1>ระบบจองและตรวจสอบคิว</h1>
+        <p>ลงทะเบียนรับบริการ OPD รวดเร็ว สะดวก ตรวจสอบสถานะคิวแบบเรียลไทม์ผ่านมือถือ</p>
+      </div>
 
-      <div className="status-card">
-        <div className="card-top-actions">
-          <button
-            type="button"
-            className={`notif-toggle-btn ${soundEnabled ? "active" : ""}`}
-            onClick={toggleNotification}
-            title={soundEnabled ? "ปิดเสียงและการสั่นเตือน" : "เปิดเสียงและการสั่นเตือน"}
-            aria-label={soundEnabled ? "ปิดเสียงเตือน" : "เปิดเสียงเตือน"}
-          >
-            <span aria-hidden="true">{soundEnabled ? "🔔 สั่น/เตือน: เปิด" : "🔕 สั่น/เตือน: ปิด"}</span>
-          </button>
-        </div>
+      <div className="portal-hero-card">
+        <div className="hero-icon-badge" aria-hidden="true">✚</div>
+        <h2>เริ่มต้นรับบริการ</h2>
+        <p>เลือกขั้นตอนที่ต้องการเพื่อเข้ารับการตรวจ หรือเข้าสู่ระบบเพื่อดูคิวและประวัติของคุณ</p>
 
-        <div className="success-mark" aria-hidden="true">✓</div>
-        <p className="eyebrow">ลงทะเบียนเรียบร้อย</p>
-        <h1>คิวของคุณ</h1>
-        <div className="queue-number">{queue?.queue_number || "-"}</div>
-        <div className="status-pill"><span /><strong>{queue?.status_label || "กำลังโหลดสถานะ"}</strong></div>
-        
-        <div className="wait-time-card">
-          <span className="wait-icon" aria-hidden="true">⏱️</span>
-          <div>
-            <span className="wait-title">ประมาณการเวลารอตรวจ</span>
-            <strong>{estimatedWaitText}</strong>
-          </div>
-        </div>
+        <div className="hero-action-grid">
+          {onBookQueue && (
+            <button className="hero-primary-btn" type="button" onClick={onBookQueue}>
+              <div className="hero-btn-icon">📝</div>
+              <div>
+                <strong>จองคิว / ลงทะเบียนใหม่</strong>
+                <small>สำหรับผู้ป่วยใหม่และผู้ป่วยเก่าที่ต้องการรับบริการวันนี้</small>
+              </div>
+              <span>→</span>
+            </button>
+          )}
 
-        <p className="instruction">{queue?.instruction || "กรุณารอสักครู่"}</p>
-        <div className="queue-details three-col">
-          <div>
-            <span>ลำดับของคุณ</span>
-            <strong>{Number.isInteger(queue?.queue_position) ? `อันดับ ${queue?.queue_position}` : "รอจัดลำดับ"}</strong>
-          </div>
-          <div>
-            <span>คิวก่อนหน้าคุณ</span>
-            <strong>
-              {typeof queue?.queue_position === "number"
-                ? queue.queue_position <= 1
-                  ? "คิวถัดไป 🎯"
-                  : `อีก ${queue.queue_position - 1} คิว`
-                : "–"}
-            </strong>
-          </div>
-          <div>
-            <span>ห้องตรวจ</span>
-            <strong>{queue?.room || "ยังไม่ระบุ"}</strong>
-          </div>
-        </div>
-
-        <p className="last-updated" role={error ? "alert" : undefined}>{error || `อัปเดตล่าสุด ${updatedAt} น.`}</p>
-
-        <div className="queue-action-buttons">
-          <button className="primary-button" type="button" onClick={() => void refresh()} disabled={loading}>
-            <span>อัปเดตสถานะ</span><i aria-hidden="true">{loading ? "↻" : "⟳"}</i>
-          </button>
-          <button className="action-button-image" type="button" onClick={handleSaveImage} disabled={!queue}>
-            <span aria-hidden="true">🖼️</span> บันทึกบัตรคิวเป็นรูปภาพ
-          </button>
-          <button className="secondary-button" type="button" onClick={onAccount}>ดูข้อมูลและประวัติของฉัน</button>
+          {onLogin && (
+            <button className="hero-secondary-btn" type="button" onClick={onLogin}>
+              <div className="hero-btn-icon">👤</div>
+              <div>
+                <strong>เข้าสู่ระบบด้วยเลขบัตรประชาชน / ThaID</strong>
+                <small>ค้นหาคิวเดิม ตรวจสอบประวัติการรักษา และรายการนัดหมาย</small>
+              </div>
+              <span>→</span>
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="notice-card">
-        <strong>โปรดเก็บหน้านี้ไว้</strong>
-        <p>สถานะจะอัปเดตอัตโนมัติทุก 10 วินาที พร้อมระบบสั่นเตือนเมื่อใกล้ถึงคิว</p>
+      <div className="feature-highlights-grid">
+        <div className="highlight-item">
+          <span className="highlight-icon">⚡</span>
+          <strong>คิวเรียลไทม์</strong>
+          <p>รู้เวลารอตรวจโดยประมาณและลำดับคิวก่อนหน้า</p>
+        </div>
+        <div className="highlight-item">
+          <span className="highlight-icon">🔔</span>
+          <strong>สั่น & แจ้งเตือน</strong>
+          <p>เตือนอัตโนมัติเมื่อใกล้ถึงคิว 3 ลำดับล่วงหน้า</p>
+        </div>
+        <div className="highlight-item">
+          <span className="highlight-icon">🔍</span>
+          <strong>อ่านง่าย ทุกวัย</strong>
+          <p>ปรับขนาดตัวอักษรได้ 3 ระดับ เหมาะกับผู้สูงอายุ</p>
+        </div>
       </div>
     </section>
   );
 }
-
