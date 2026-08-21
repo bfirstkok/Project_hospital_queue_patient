@@ -5,6 +5,7 @@ import { RegistrationView } from "./RegistrationView";
 
 describe("RegistrationView", () => {
   beforeEach(() => {
+    localStorage.clear();
     window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
     vi.stubGlobal("fetch", vi.fn());
   });
@@ -31,6 +32,40 @@ describe("RegistrationView", () => {
     // Should now show registration form
     expect(screen.getByLabelText("ชื่อ *")).toBeDefined();
     expect(screen.getByLabelText("จังหวัด")).toBeDefined();
+  });
+
+  it("calculates age automatically when birth date is selected", async () => {
+    render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess: vi.fn() }));
+
+    const birthDateInput = screen.getByLabelText("วันเดือนปีเกิด") as HTMLInputElement;
+    const ageInput = screen.getByLabelText("อายุ") as HTMLInputElement;
+
+    // Pick a birthdate (e.g. 2000-01-01)
+    fireEvent.change(birthDateInput, { target: { value: "2000-01-01" } });
+
+    // Age should be automatically populated
+    expect(Number(ageInput.value)).toBeGreaterThan(20);
+    expect(screen.getByRole("status").textContent).toContain("อายุ:");
+  });
+
+  it("restores draft data from localStorage and displays draft banner", async () => {
+    localStorage.setItem(
+      "opd_patient_registration_draft_v1",
+      JSON.stringify({
+        firstName: "สมคิด",
+        lastName: "มุ่งมั่น",
+        nationalId: "1234567890123",
+        phone: "0812345678",
+        savedAt: "16:45",
+        isPdpaAccepted: true,
+      })
+    );
+
+    render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess: vi.fn() }));
+
+    expect(screen.getByText("กู้คืนข้อมูลร่างที่คุณเคยกรอกไว้ให้อัตโนมัติ")).toBeDefined();
+    expect((screen.getByLabelText("ชื่อ *") as HTMLInputElement).value).toBe("สมคิด");
+    expect((screen.getByLabelText("นามสกุล *") as HTMLInputElement).value).toBe("มุ่งมั่น");
   });
 
   it("cascades address dropdowns from province to district and subdistrict and fills postal code", async () => {

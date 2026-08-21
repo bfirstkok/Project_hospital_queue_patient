@@ -562,57 +562,70 @@ button {
 fieldset {
   min-width: 0;
   margin: 0;
-  padding: 28px 0;
+  padding: 38px 0 34px;
   border: 0;
-  border-bottom: 1.5px solid var(--line);
+  border-bottom: 3px solid #c4e1da;
+  display: block;
+  position: relative;
+}
+
+fieldset + fieldset {
+  margin-top: 14px;
+}
+
+fieldset:first-of-type {
+  padding-top: 12px;
 }
 
 fieldset:last-of-type {
   border-bottom: 0;
+  padding-bottom: 16px;
 }
 
 legend {
   width: 100%;
-  padding: 0;
-  margin-bottom: 20px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  font-size: 1.25rem;
+  gap: 16px;
+  padding: 0 0 16px 0;
+  margin: 0 0 26px 0;
+  font-size: 1.28rem;
   font-weight: 700;
   color: var(--ink);
+  border-bottom: 2px solid #e1edea;
 }
 
 legend small {
   display: block;
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   font-weight: 400;
 }
 
 .section-number {
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: var(--primary-light);
-  color: var(--primary-hover);
-  font-size: 1.05rem;
-  font-weight: 700;
-  border: 1px solid var(--primary-border);
+  border-radius: 12px;
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 1.15rem;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(13, 138, 125, 0.28);
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px 20px;
+  gap: 20px;
+  align-items: start;
 }
 
 .form-grid + .form-grid {
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .form-grid.three {
@@ -620,11 +633,20 @@ legend small {
 }
 
 .field {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   color: var(--ink-secondary);
   font-size: 0.98rem;
   font-weight: 600;
+}
+
+.field > span {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.3;
 }
 
 .field b, .consent b {
@@ -641,6 +663,54 @@ legend small {
 
 .field-wide {
   grid-column: 1 / -1;
+}
+
+/* Local Draft Restoration Banner */
+.draft-restore-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f0fdf9;
+  border: 1.5px solid var(--primary-border);
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: 12px;
+  animation: modalPop 0.2s ease-out;
+}
+
+.draft-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.draft-icon {
+  font-size: 1.4rem;
+}
+
+.draft-banner-text small {
+  color: var(--muted);
+}
+
+.draft-clear-button {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--danger);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.draft-clear-button:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
 }
 
 input, select, textarea {

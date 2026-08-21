@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { RegistrationPayload, RegistrationResult } from "@/shared/api/types";
 import { ALL_77_PROVINCES, getDistricts, getPostalCode, getSubdistricts } from "@/shared/data/thai-address";
@@ -78,6 +78,8 @@ const ALLERGY_OPTIONS = [
   "แพ้อาหารทะเล",
 ];
 
+const STORAGE_KEY = "opd_patient_registration_draft_v1";
+
 export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogin, onSuccess }: RegistrationViewProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [isPdpaAccepted, setIsPdpaAccepted] = useState<boolean>(initialPdpaAccepted);
@@ -86,16 +88,201 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
   const [invalidField, setInvalidField] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Address Dropdown states (77 provinces cascading)
+  // Local Draft status
+  const [hasRestoredDraft, setHasRestoredDraft] = useState<boolean>(false);
+  const [draftSavedTime, setDraftSavedTime] = useState<string>("");
+
+  // Block 1 Form states
+  const [firstName, setFirstName] = useState<string>("");
+  const [lastName, setLastName] = useState<string>("");
+  const [nationalId, setNationalId] = useState<string>("");
+  const [gender, setGender] = useState<string>("UNKNOWN");
+  const [phone, setPhone] = useState<string>("");
+  const [birthDate, setBirthDate] = useState<string>("");
+  const [calculatedAgeText, setCalculatedAgeText] = useState<string>("");
+  const [ageYears, setAgeYears] = useState<number | string>("");
+
+  // Block 2: Symptom state
+  const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
+  const [customSymptom, setCustomSymptom] = useState<string>("");
+
+  // Block 3: Health state
+  const [bloodType, setBloodType] = useState<string>("UNKNOWN");
+  const [heightCm, setHeightCm] = useState<string>("");
+  const [weightKg, setWeightKg] = useState<string>("");
+  const [selectedDiseases, setSelectedDiseases] = useState<string[]>([]);
+  const [customDisease, setCustomDisease] = useState<string>("");
+  const [selectedAllergies, setSelectedAllergies] = useState<string[]>([]);
+  const [customAllergy, setCustomAllergy] = useState<string>("");
+  const [medications, setMedications] = useState<string>("");
+
+  // Block 4: Address Dropdown states (77 provinces cascading)
   const [province, setProvince] = useState<string>("");
   const [district, setDistrict] = useState<string>("");
   const [subdistrict, setSubdistrict] = useState<string>("");
   const [postalCode, setPostalCode] = useState<string>("");
 
-  // Emergency contact list state (Max 3 items with stable IDs)
+  // Block 5: Emergency contact list state (Max 3 items with stable IDs)
   const [emergencyContacts, setEmergencyContacts] = useState<Array<{ id: string; name: string; relationship: string; phone: string }>>([
     { id: "em-initial-1", name: "", relationship: "", phone: "" },
   ]);
+
+  // Load saved draft on initial mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft && typeof draft === "object") {
+        if (draft.firstName) setFirstName(draft.firstName);
+        if (draft.lastName) setLastName(draft.lastName);
+        if (draft.nationalId) setNationalId(draft.nationalId);
+        if (draft.gender) setGender(draft.gender);
+        if (draft.phone) setPhone(draft.phone);
+        if (draft.birthDate) setBirthDate(draft.birthDate);
+        if (draft.ageYears !== undefined && draft.ageYears !== "") setAgeYears(draft.ageYears);
+        if (draft.calculatedAgeText) setCalculatedAgeText(draft.calculatedAgeText);
+        if (Array.isArray(draft.selectedSymptoms)) setSelectedSymptoms(draft.selectedSymptoms);
+        if (draft.customSymptom) setCustomSymptom(draft.customSymptom);
+        if (draft.bloodType) setBloodType(draft.bloodType);
+        if (draft.heightCm) setHeightCm(draft.heightCm);
+        if (draft.weightKg) setWeightKg(draft.weightKg);
+        if (Array.isArray(draft.selectedDiseases)) setSelectedDiseases(draft.selectedDiseases);
+        if (draft.customDisease) setCustomDisease(draft.customDisease);
+        if (Array.isArray(draft.selectedAllergies)) setSelectedAllergies(draft.selectedAllergies);
+        if (draft.customAllergy) setCustomAllergy(draft.customAllergy);
+        if (draft.medications) setMedications(draft.medications);
+        if (draft.province) setProvince(draft.province);
+        if (draft.district) setDistrict(draft.district);
+        if (draft.subdistrict) setSubdistrict(draft.subdistrict);
+        if (draft.postalCode) setPostalCode(draft.postalCode);
+        if (Array.isArray(draft.emergencyContacts) && draft.emergencyContacts.length > 0) {
+          setEmergencyContacts(draft.emergencyContacts);
+        }
+        if (draft.isPdpaAccepted) setIsPdpaAccepted(true);
+        if (draft.savedAt) setDraftSavedTime(draft.savedAt);
+        setHasRestoredDraft(true);
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  // Autosave draft when user modifies any input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const hasContent =
+        firstName ||
+        lastName ||
+        nationalId ||
+        phone ||
+        birthDate ||
+        customSymptom ||
+        selectedSymptoms.length > 0 ||
+        heightCm ||
+        weightKg ||
+        medications ||
+        province ||
+        emergencyContacts.some((c) => c.name || c.phone);
+
+      if (hasContent) {
+        const now = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+        const draftData = {
+          firstName,
+          lastName,
+          nationalId,
+          gender,
+          phone,
+          birthDate,
+          ageYears,
+          calculatedAgeText,
+          selectedSymptoms,
+          customSymptom,
+          bloodType,
+          heightCm,
+          weightKg,
+          selectedDiseases,
+          customDisease,
+          selectedAllergies,
+          customAllergy,
+          medications,
+          province,
+          district,
+          subdistrict,
+          postalCode,
+          emergencyContacts,
+          isPdpaAccepted,
+          savedAt: now,
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(draftData));
+          setDraftSavedTime(now);
+        } catch {
+          // Ignore quota errors
+        }
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [
+    firstName,
+    lastName,
+    nationalId,
+    gender,
+    phone,
+    birthDate,
+    ageYears,
+    calculatedAgeText,
+    selectedSymptoms,
+    customSymptom,
+    bloodType,
+    heightCm,
+    weightKg,
+    selectedDiseases,
+    customDisease,
+    selectedAllergies,
+    customAllergy,
+    medications,
+    province,
+    district,
+    subdistrict,
+    postalCode,
+    emergencyContacts,
+    isPdpaAccepted,
+  ]);
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    setFirstName("");
+    setLastName("");
+    setNationalId("");
+    setGender("UNKNOWN");
+    setPhone("");
+    setBirthDate("");
+    setAgeYears("");
+    setCalculatedAgeText("");
+    setSelectedSymptoms([]);
+    setCustomSymptom("");
+    setBloodType("UNKNOWN");
+    setHeightCm("");
+    setWeightKg("");
+    setSelectedDiseases([]);
+    setCustomDisease("");
+    setSelectedAllergies([]);
+    setCustomAllergy("");
+    setMedications("");
+    setProvince("");
+    setDistrict("");
+    setSubdistrict("");
+    setPostalCode("");
+    setEmergencyContacts([{ id: "em-initial-1", name: "", relationship: "", phone: "" }]);
+    setHasRestoredDraft(false);
+    setDraftSavedTime("");
+  };
 
   const addEmergencyContact = () => {
     if (emergencyContacts.length < 3) {
@@ -124,21 +311,6 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
   };
-
-  // Quick choice chip states
-  const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
-  const [customSymptom, setCustomSymptom] = useState<string>("");
-
-  const [selectedDiseases, setSelectedDiseases] = useState<string[]>([]);
-  const [customDisease, setCustomDisease] = useState<string>("");
-
-  const [selectedAllergies, setSelectedAllergies] = useState<string[]>([]);
-  const [customAllergy, setCustomAllergy] = useState<string>("");
-
-  // Detailed Age Calculation State
-  const [birthDate, setBirthDate] = useState<string>("");
-  const [calculatedAgeText, setCalculatedAgeText] = useState<string>("");
-  const [ageYears, setAgeYears] = useState<number | string>("");
 
   function handleBirthDateChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
@@ -211,6 +383,11 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
     try {
       const result = await patientApi.register(collectRegistrationPayload(form));
       if (!result.access_token) throw new ApiError("เว็บหลักไม่ได้ส่ง access token กลับมา");
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // ignore
+      }
       onSuccess(result.access_token, result);
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "ไม่สามารถบันทึกข้อมูลได้");
@@ -321,6 +498,21 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         <li><span>3</span>รอเรียกคิว</li>
       </ol>
 
+      {hasRestoredDraft && (
+        <div className="draft-restore-banner" role="status">
+          <div className="draft-banner-text">
+            <span className="draft-icon" aria-hidden="true">💾</span>
+            <div>
+              <strong>กู้คืนข้อมูลร่างที่คุณเคยกรอกไว้ให้อัตโนมัติ</strong>
+              {draftSavedTime && <small> (บันทึกล่าสุดเมื่อ {draftSavedTime} น.)</small>}
+            </div>
+          </div>
+          <button type="button" className="draft-clear-button" onClick={clearDraft}>
+            ล้างข้อมูลเพื่อเริ่มใหม่
+          </button>
+        </div>
+      )}
+
       {message && <div className="alert" role="alert">{message}</div>}
 
       <form ref={formRef} className="form-card" autoComplete="on" onSubmit={submit}>
@@ -334,25 +526,77 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
           </legend>
           <div className="form-grid">
             <Field label="ชื่อ" required>
-              <input name="first_name" maxLength={100} required placeholder="เช่น สมชาย" autoComplete="given-name" className={fieldClass("first_name")} />
+              <input
+                name="first_name"
+                maxLength={100}
+                required
+                placeholder="เช่น สมชาย"
+                autoComplete="given-name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className={fieldClass("first_name")}
+              />
             </Field>
             <Field label="นามสกุล" required>
-              <input name="last_name" maxLength={100} required placeholder="เช่น ใจดี" autoComplete="family-name" className={fieldClass("last_name")} />
+              <input
+                name="last_name"
+                maxLength={100}
+                required
+                placeholder="เช่น ใจดี"
+                autoComplete="family-name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className={fieldClass("last_name")}
+              />
             </Field>
             <Field label="เลขบัตรประชาชน" required wide help="ตัวเลข 13 หลักสำหรับค้นหาประวัติการรักษา">
-              <input name="national_id" maxLength={13} minLength={13} inputMode="numeric" pattern="[0-9]{13}" required placeholder="ตัวเลข 13 หลัก ไม่ต้องใส่ขีด" onInput={normalizeNationalId} className={fieldClass("national_id")} />
+              <input
+                name="national_id"
+                maxLength={13}
+                minLength={13}
+                inputMode="numeric"
+                pattern="[0-9]{13}"
+                required
+                placeholder="ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"
+                value={nationalId}
+                onInput={normalizeNationalId}
+                onChange={(e) => setNationalId(e.target.value)}
+                className={fieldClass("national_id")}
+              />
             </Field>
             <Field label="เพศ">
-              <select name="gender">
+              <select name="gender" value={gender} onChange={(e) => setGender(e.target.value)}>
                 <option value="UNKNOWN">ไม่ระบุ</option>
                 <option value="M">ชาย</option>
                 <option value="F">หญิง</option>
                 <option value="O">อื่น ๆ</option>
               </select>
             </Field>
-            
-            {/* Age & Date of Birth */}
-            <Field label="อายุ">
+            <Field label="เบอร์โทรศัพท์ส่วนตัว">
+              <input
+                name="phone"
+                maxLength={20}
+                inputMode="tel"
+                placeholder="08xxxxxxxx"
+                autoComplete="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </Field>
+
+            {/* Row 4: Birth date and Age side by side, aligned */}
+            <Field label="วันเดือนปีเกิด">
+              <input
+                type="date"
+                name="birth_date"
+                value={birthDate}
+                onChange={handleBirthDateChange}
+                aria-label="วันเดือนปีเกิด"
+                max={new Date().toISOString().split("T")[0]}
+              />
+            </Field>
+
+            <Field label="อายุ (ปี)">
               <SuffixInput
                 name="age"
                 type="number"
@@ -373,16 +617,15 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
                 }}
               />
             </Field>
-            <div className="field">
-              <span>หรือเลือกวันเกิด (คำนวณอายุอัตโนมัติ)</span>
-              <input type="date" value={birthDate} onChange={handleBirthDateChange} aria-label="วันเดือนปีเกิด" max={new Date().toISOString().split("T")[0]} />
-              {calculatedAgeText && <div className="age-badge-notification" role="status">{calculatedAgeText}</div>}
-            </div>
 
-            {/* Single Personal Phone Number */}
-            <Field label="เบอร์โทรศัพท์ส่วนตัว">
-              <input name="phone" maxLength={20} inputMode="tel" placeholder="08xxxxxxxx" autoComplete="tel" />
-            </Field>
+            {calculatedAgeText && (
+              <div className="field-wide">
+                <div className="age-badge-notification" role="status">
+                  <span className="badge-icon">ℹ️</span>
+                  <span>{calculatedAgeText}</span>
+                </div>
+              </div>
+            )}
           </div>
         </fieldset>
 
@@ -431,7 +674,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
 
           <div className="form-grid three">
             <Field label="หมู่เลือด">
-              <select name="blood_type">
+              <select name="blood_type" value={bloodType} onChange={(e) => setBloodType(e.target.value)}>
                 <option value="UNKNOWN">ไม่ทราบ</option>
                 <option value="A">A</option>
                 <option value="B">B</option>
@@ -440,10 +683,32 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
               </select>
             </Field>
             <Field label="ส่วนสูง">
-              <SuffixInput name="height_cm" type="number" min={30} max={250} step="0.1" inputMode="decimal" placeholder="170" suffix="ซม." />
+              <SuffixInput
+                name="height_cm"
+                type="number"
+                min={30}
+                max={250}
+                step="0.1"
+                inputMode="decimal"
+                placeholder="170"
+                suffix="ซม."
+                value={heightCm}
+                onChange={(e) => setHeightCm(e.target.value)}
+              />
             </Field>
             <Field label="น้ำหนัก">
-              <SuffixInput name="weight_kg" type="number" min={1} max={400} step="0.1" inputMode="decimal" placeholder="65" suffix="กก." />
+              <SuffixInput
+                name="weight_kg"
+                type="number"
+                min={1}
+                max={400}
+                step="0.1"
+                inputMode="decimal"
+                placeholder="65"
+                suffix="กก."
+                value={weightKg}
+                onChange={(e) => setWeightKg(e.target.value)}
+              />
             </Field>
           </div>
 
@@ -462,7 +727,11 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
                 </button>
               ))}
             </div>
-            <input placeholder="โรคประจำตัวอื่น ๆ (หากมี)" value={customDisease} onChange={(e) => setCustomDisease(e.target.value)} />
+            <input
+              placeholder="โรคประจำตัวอื่น ๆ (หากมี)"
+              value={customDisease}
+              onChange={(e) => setCustomDisease(e.target.value)}
+            />
             <input type="hidden" name="chronic_diseases" value={finalDiseases} />
           </div>
 
@@ -481,12 +750,22 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
                 </button>
               ))}
             </div>
-            <input placeholder="ยาหรือสารที่แพ้อื่น ๆ (หากมี)" value={customAllergy} onChange={(e) => setCustomAllergy(e.target.value)} />
+            <input
+              placeholder="ยาหรือสารที่แพ้อื่น ๆ (หากมี)"
+              value={customAllergy}
+              onChange={(e) => setCustomAllergy(e.target.value)}
+            />
             <input type="hidden" name="allergies" value={finalAllergies} />
           </div>
 
           <Field label="ยาที่ใช้ประจำ" wide>
-            <input name="medications" maxLength={1000} placeholder="ระบุชื่อยา (ถ้าทราบ เช่น ยาความดัน, ยาเบาหวาน)" />
+            <input
+              name="medications"
+              maxLength={1000}
+              placeholder="ระบุชื่อยา (ถ้าทราบ เช่น ยาความดัน, ยาเบาหวาน)"
+              value={medications}
+              onChange={(e) => setMedications(e.target.value)}
+            />
           </Field>
         </fieldset>
 
