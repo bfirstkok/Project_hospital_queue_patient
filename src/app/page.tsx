@@ -13,6 +13,7 @@ import { isPinEnabled, clearPin } from "@/shared/auth/pin-storage";
 import type { RegistrationResult } from "@/shared/api/types";
 import { SiteShell, type FontSize } from "@/shared/ui/SiteShell";
 import type { NavView } from "@/shared/ui/AppNavbar";
+import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 type View =
   | "login"
@@ -39,6 +40,8 @@ function getInitialFontSize(): FontSize {
   return "normal";
 }
 
+const VIEW_STORAGE_KEY = "patient_app_current_view";
+
 export default function Page() {
   const [view, setView] = useState<View>("login");
   const [token, setToken] = useState("");
@@ -50,14 +53,30 @@ export default function Page() {
     const savedToken = readToken() || "";
     setToken(savedToken);
 
+    let savedView: View | null = null;
+    try {
+      savedView = localStorage.getItem(VIEW_STORAGE_KEY) as View | null;
+    } catch {
+      // Ignore
+    }
+
     if (savedToken) {
       if (isPinEnabled()) {
         setView("pin_unlock");
+      } else if (
+        savedView &&
+        (savedView === "status" || savedView === "registration" || savedView === "account" || savedView === "settings")
+      ) {
+        setView(savedView);
       } else {
         setView("status");
       }
     } else {
-      setView("login");
+      if (savedView === "registration") {
+        setView("registration");
+      } else {
+        setView("login");
+      }
     }
     setInitialized(true);
   }, []);
@@ -65,6 +84,13 @@ export default function Page() {
   useEffect(() => {
     document.body.dataset.view = `${view}View`;
     window.scrollTo({ top: 0, behavior: "smooth" });
+    if (view === "status" || view === "registration" || view === "account" || view === "settings" || view === "login") {
+      try {
+        localStorage.setItem(VIEW_STORAGE_KEY, view);
+      } catch {
+        // Ignore
+      }
+    }
   }, [view]);
 
   const authenticate = useCallback((accessToken: string) => {
@@ -76,6 +102,11 @@ export default function Page() {
     clearToken();
     setToken("");
     setInitialQueue(null);
+    try {
+      localStorage.removeItem(VIEW_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
     setView("login");
   }, []);
 
@@ -83,6 +114,11 @@ export default function Page() {
     clearToken();
     setToken("");
     setInitialQueue(null);
+    try {
+      localStorage.removeItem(VIEW_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
     setView("login");
   }, []);
 
@@ -91,6 +127,11 @@ export default function Page() {
     clearPin();
     setToken("");
     setInitialQueue(null);
+    try {
+      localStorage.removeItem(VIEW_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
     setView("login");
   }, []);
 
@@ -137,7 +178,13 @@ export default function Page() {
     view === "pin_reset";
 
   if (!initialized) {
-    return null;
+    return (
+      <LoadingScreen
+        title="กำลังโหลด"
+        subtitle="กำลังตรวจสอบสถานะความปลอดภัยและการเข้าสู่ระบบ"
+        fullScreen
+      />
+    );
   }
 
   return (

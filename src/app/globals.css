@@ -2742,7 +2742,7 @@ input:checked + .toggle-slider:before {
 
 .account-section-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-bottom: 24px;
   background: #ffffff;
@@ -2752,16 +2752,16 @@ input:checked + .toggle-slider:before {
   box-shadow: var(--shadow-sm);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .account-section-tabs {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 }
 
 .account-tab-btn {
   padding: 12px 14px;
   border-radius: var(--radius-sm);
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--ink-secondary);
   background: transparent;
@@ -2782,6 +2782,31 @@ input:checked + .toggle-slider:before {
   background: var(--primary);
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(13, 138, 125, 0.25);
+}
+
+.profile-subgroup-title {
+  margin: 18px 0 12px;
+  font-size: 1.02rem;
+  color: var(--primary-dark);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-subgroup-title::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 16px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+.profile-section-separator {
+  margin: 24px 0 16px;
+  height: 2px;
+  background: linear-gradient(to right, #c4e1da, var(--line), transparent);
+  border: none;
 }
 
 .account-tab-content {
@@ -2881,6 +2906,56 @@ input:checked + .toggle-slider:before {
   margin-top: 24px;
   padding-top: 18px;
   border-top: 1px solid var(--line);
+}
+
+/* ==========================================================================
+   Live Hospital Display Board Link Card
+   ========================================================================== */
+.live-display-board-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #0d8a7d 0%, #06544c 100%);
+  color: #ffffff;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(13, 138, 125, 0.22);
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.live-display-board-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(13, 138, 125, 0.35);
+  filter: brightness(1.05);
+}
+
+.live-display-icon {
+  font-size: 1.8rem;
+  background: rgba(255, 255, 255, 0.18);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.live-display-info strong {
+  display: block;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 2px;
+}
+
+.live-display-info p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #c4f1e7;
 }
 
 /* ==========================================================================
@@ -3185,6 +3260,137 @@ input:checked + .toggle-slider:before {
 .text-muted-sub {
   color: var(--muted) !important;
   font-size: 0.8rem !important;
+}
+
+/* ==========================================================================
+   Loading Screen & Transitions (Unified Medical Theme)
+   ========================================================================== */
+.app-loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  width: 100%;
+  min-height: 380px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.app-loading-container.full-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.app-loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 440px;
+  width: 100%;
+  padding: 40px 32px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.pulse-loader-wrapper {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 24px;
+}
+
+.pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(13, 138, 125, 0.15);
+  animation: pulseRipple 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.pulse-ring-2 {
+  animation-delay: 0.7s;
+}
+
+.pulse-icon-center {
+  position: relative;
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 14px rgba(13, 138, 125, 0.35);
+  animation: pulseScale 2s ease-in-out infinite;
+}
+
+.hospital-cross-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.loading-spinner-ring {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #d0e4e0;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 18px;
+}
+
+.loading-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+
+.loading-subtitle {
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+@keyframes pulseRipple {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes pulseScale {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

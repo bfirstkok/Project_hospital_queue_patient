@@ -37,7 +37,7 @@ describe("RegistrationView", () => {
   it("calculates age automatically when birth date is selected", async () => {
     render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess: vi.fn() }));
 
-    const birthDateInput = screen.getByLabelText("วันเดือนปีเกิด") as HTMLInputElement;
+    const birthDateInput = screen.getByLabelText("วัน/เดือน/ปีเกิด") as HTMLInputElement;
     const ageInput = screen.getByLabelText("อายุ") as HTMLInputElement;
 
     // Pick a birthdate (e.g. 2000-01-01)
@@ -136,7 +136,7 @@ describe("RegistrationView", () => {
     fireEvent.change(screen.getByLabelText("นามสกุล *"), { target: { value: "ใจดี" } });
     fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1234567890123" } });
     fireEvent.change(screen.getByLabelText("อายุ"), { target: { value: "30" } });
-    fireEvent.change(screen.getByPlaceholderText("เช่น เวียนศีรษะ มีไข้ และไอติดต่อกัน 2 วัน"), { target: { value: "ปวดหัว" } });
+    fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
     
     // Address dropdown selection
     fireEvent.change(screen.getByLabelText("จังหวัด"), { target: { value: "ขอนแก่น" } });
@@ -144,7 +144,7 @@ describe("RegistrationView", () => {
     fireEvent.change(screen.getByLabelText("ตำบล / แขวง"), { target: { value: "ศิลา" } });
 
     // Submit form
-    fireEvent.click(screen.getByRole("button", { name: "บันทึกผู้ป่วย" }));
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
     
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("token", expect.objectContaining({ queue_number: "Q-1" })));
     const fetchBody = vi.mocked(fetch).mock.calls[0][1]?.body as string;

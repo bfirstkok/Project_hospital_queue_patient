@@ -2,6 +2,7 @@ import type { QueueData } from "@/shared/api/types";
 import { useQueuePolling } from "./useQueuePolling";
 import { useQueueNotification } from "./useQueueNotification";
 import { generateQueueCardImage } from "./queue-card-canvas";
+import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 interface QueueStatusViewProps {
   token: string;
@@ -34,7 +35,7 @@ export function QueueStatusView({
   onAccount,
   onUnauthorized,
 }: QueueStatusViewProps) {
-  const { queue, error, loading, refresh } = useQueuePolling({
+  const { queue, error, loading, initialLoading, refresh } = useQueuePolling({
     enabled: Boolean(token),
     token,
     initialQueue,
@@ -54,6 +55,18 @@ export function QueueStatusView({
   function handleSaveImage() {
     if (!queue) return;
     generateQueueCardImage(queue, estimatedWaitText);
+  }
+
+  // Initial Loading state
+  if (initialLoading) {
+    return (
+      <section id="statusView" className="page-shell status-view">
+        <LoadingScreen
+          title="กำลังโหลด"
+          subtitle="กรุณารอสักครู่ ระบบกำลังค้นหาข้อมูลคิวรับบริการของคุณจากโรงพยาบาล"
+        />
+      </section>
+    );
   }
 
   // Case 1: Has active queue
@@ -84,8 +97,8 @@ export function QueueStatusView({
           </div>
 
           <div className="success-mark" aria-hidden="true">✓</div>
-          <p className="eyebrow">คิวรับบริการ OPD ปัจจุบัน</p>
-          <h1>คิวของคุณ</h1>
+          <p className="eyebrow">ระบบคิวผู้ป่วยนอก (OPD)</p>
+          <h1>บัตรคิวรับบริการของคุณ</h1>
           <div className="queue-number">{queue?.queue_number || "-"}</div>
           <div className="status-pill"><span /><strong>{queue?.status_label || "กำลังโหลดสถานะ"}</strong></div>
           
@@ -97,14 +110,14 @@ export function QueueStatusView({
             </div>
           </div>
 
-          <p className="instruction">{queue?.instruction || "กรุณารอสักครู่"}</p>
+          <p className="instruction">{queue?.instruction || "กรุณารอเรียกตรวจตามลำดับ"}</p>
           <div className="queue-details three-col">
             <div>
               <span>ลำดับของคุณ</span>
               <strong>{Number.isInteger(queue?.queue_position) ? `อันดับ ${queue?.queue_position}` : "รอจัดลำดับ"}</strong>
             </div>
             <div>
-              <span>คิวก่อนหน้าคุณ</span>
+              <span>คิวก่อนหน้า</span>
               <strong>
                 {typeof queue?.queue_position === "number"
                   ? queue.queue_position <= 1
@@ -115,7 +128,7 @@ export function QueueStatusView({
             </div>
             <div>
               <span>ห้องตรวจ</span>
-              <strong>{queue?.room || "ยังไม่ระบุ"}</strong>
+              <strong>{queue?.room || "กำลังจัดสรร"}</strong>
             </div>
           </div>
 
@@ -123,7 +136,7 @@ export function QueueStatusView({
 
           <div className="queue-action-buttons">
             <button className="primary-button" type="button" onClick={() => void refresh()} disabled={loading}>
-              <span>อัปเดตสถานะ</span><i aria-hidden="true">{loading ? "↻" : "⟳"}</i>
+              <span>อัปเดตสถานะคิว</span><i aria-hidden="true">{loading ? "↻" : "⟳"}</i>
             </button>
             <button className="action-button-image" type="button" onClick={handleSaveImage}>
               บันทึกบัตรคิวเป็นรูปภาพ
@@ -132,9 +145,23 @@ export function QueueStatusView({
           </div>
         </div>
 
+        {/* Link to Full Hospital Queue Display Board */}
+        <a
+          href="https://hospital.bfirstkok.me/queues/display/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="live-display-board-card"
+        >
+          <div className="live-display-icon">📺</div>
+          <div className="live-display-info">
+            <strong>ดูจอแสดงผลคิวรวมทั้งโรงพยาบาล (Live OPD Board)</strong>
+            <p>ติดตามสถานะคิวทุกแผนกและห้องตรวจแบบเรียลไทม์ ↗</p>
+          </div>
+        </a>
+
         <div className="notice-card">
-          <strong>คำแนะนำ</strong>
-          <p>สถานะจะอัปเดตอัตโนมัติทุก 10 วินาที พร้อมระบบสั่นเตือนบนโทรศัพท์เมื่อใกล้ถึงคิว</p>
+          <strong>คำแนะนำการรับบริการ</strong>
+          <p>ระบบจะอัปเดตสถานะอัตโนมัติทุก 10 วินาที พร้อมส่งเสียงและสั่นเตือนบนโทรศัพท์เมื่อใกล้ถึงคิว</p>
         </div>
       </section>
     );
@@ -145,25 +172,25 @@ export function QueueStatusView({
     return (
       <section id="statusView" className="page-shell status-view">
         <div className="intro">
-          <span className="eyebrow">ระบบคิวผู้ป่วย OPD</span>
-          <h1>สถานะคิวปัจจุบัน</h1>
-          <p>ขณะนี้คุณยังไม่มีคิวที่กำลังรอตรวจ สามารถกดจองคิวใหม่เพื่อรับบริการได้ทันที</p>
+          <span className="eyebrow">ระบบบริการผู้ป่วยนอก (OPD)</span>
+          <h1>สถานะคิวรับบริการ</h1>
+          <p>ขณะนี้คุณยังไม่มีคิวที่กำลังรอตรวจ สามารถกดจองคิวเพื่อรับบริการได้ทันที</p>
         </div>
 
         <div className="status-card no-queue-card">
           <div className="no-queue-icon" aria-hidden="true">🎟️</div>
-          <h2>ยังไม่มีคิวในขณะนี้</h2>
-          <p className="instruction">ต้องการเข้ารับการตรวจหรือคัดกรองอาการวันนี้ สามารถกดลงทะเบียนจองคิวได้ทันที</p>
+          <h2>ยังไม่มีคิวรับบริการในขณะนี้</h2>
+          <p className="instruction">หากต้องการเข้ารับการตรวจหรือคัดกรองอาการวันนี้ สามารถกดลงทะเบียนเพื่อรับบัตรคิวได้ทันที</p>
 
           <div className="queue-action-buttons">
             {onBookQueue && (
               <button className="primary-button" type="button" onClick={onBookQueue}>
-                <span>จองคิว / รับบริการตอนนี้</span>
+                <span>จองคิวรับบริการวันนี้</span>
                 <i aria-hidden="true">+</i>
               </button>
             )}
             <button className="secondary-button" type="button" onClick={onAccount}>
-              ดูข้อมูลส่วนตัว & ประวัติการรักษา
+              ดูข้อมูลส่วนตัวและประวัติการรักษา
             </button>
             <button className="text-button" type="button" onClick={() => void refresh()} disabled={loading}>
               {loading ? "กำลังตรวจสอบคิว..." : "⟳ ตรวจสอบคิวอีกครั้ง"}
@@ -171,9 +198,23 @@ export function QueueStatusView({
           </div>
         </div>
 
+        {/* Link to Full Hospital Queue Display Board */}
+        <a
+          href="https://hospital.bfirstkok.me/queues/display/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="live-display-board-card"
+        >
+          <div className="live-display-icon">📺</div>
+          <div className="live-display-info">
+            <strong>ดูจอแสดงผลคิวรวมทั้งโรงพยาบาล (Live OPD Board)</strong>
+            <p>ติดตามสถานะคิวทุกแผนกและห้องตรวจแบบเรียลไทม์ ↗</p>
+          </div>
+        </a>
+
         <div className="notice-card">
-          <strong>การให้บริการ</strong>
-          <p>แผนกผู้ป่วยนอกเปิดให้บริการ จันทร์ – ศุกร์ เวลา 08:00 – 16:00 น.</p>
+          <strong>เวลาทำการแผนกผู้ป่วยนอก</strong>
+          <p>เปิดให้บริการวันจันทร์ - วันศุกร์ เวลา 08:00 - 16:00 น.</p>
         </div>
       </section>
     );

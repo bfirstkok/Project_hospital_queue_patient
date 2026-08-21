@@ -9,6 +9,19 @@ describe("QueueStatusView", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
+  it("shows LoadingScreen during initial queue status lookup", () => {
+    vi.mocked(fetch).mockReturnValue(new Promise(() => {})); // pending promise
+    render(
+      createElement(QueueStatusView, {
+        token: "mock_token",
+        onAccount: vi.fn(),
+        onUnauthorized: vi.fn(),
+      })
+    );
+
+    expect(screen.getByText("กำลังโหลด")).toBeInTheDocument();
+  });
+
   it("renders queue data, estimated wait time, and room details", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(

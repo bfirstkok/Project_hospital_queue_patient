@@ -48,6 +48,7 @@ export interface PatientProfile {
   hn?: string | null;
   phone?: string | null;
   gender?: string | null;
+  birth_date?: string | null;
   age?: number | null;
   blood_type?: string | null;
   height_cm?: number | null;
@@ -58,6 +59,7 @@ export interface PatientProfile {
   medications?: string | null;
   emergency_name?: string | null;
   emergency_phone?: string | null;
+  emergency_contacts?: Array<{ id?: string; name: string; relationship?: string; phone: string }> | null;
 }
 
 export interface VisitVitals {

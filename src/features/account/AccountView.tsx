@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { AccountData, Appointment, PatientProfile, Visit } from "@/shared/api/types";
+import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 interface AccountViewProps {
   token: string;
@@ -51,6 +52,13 @@ function downloadIcsCalendar(appointment: Appointment) {
   URL.revokeObjectURL(url);
 }
 
+interface EmergencyContactItem {
+  id: string;
+  name: string;
+  relationship: string;
+  phone: string;
+}
+
 export function AccountView({
   token,
   onQueue,
@@ -65,37 +73,36 @@ export function AccountView({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
 
   // Edit form state
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editGender, setEditGender] = useState("UNKNOWN");
+  const [editBirthDate, setEditBirthDate] = useState("");
+  const [editAge, setEditAge] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editBloodType, setEditBloodType] = useState("UNKNOWN");
+  const [editHeightCm, setEditHeightCm] = useState("");
+  const [editWeightKg, setEditWeightKg] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editChronic, setEditChronic] = useState("");
   const [editAllergies, setEditAllergies] = useState("");
   const [editMeds, setEditMeds] = useState("");
-  const [editEmergName, setEditEmergName] = useState("");
-  const [editEmergPhone, setEditEmergPhone] = useState("");
+  const [editEmergencyContacts, setEditEmergencyContacts] = useState<EmergencyContactItem[]>([]);
 
   useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     let active = true;
-    setLoading(true);
-    void patientApi
+    patientApi
       .account(token)
-      .then((result) => {
-        if (active) {
-          setAccount(result);
-          initEditForm(result.profile);
-          setLoading(false);
-        }
+      .then((data) => {
+        if (active) setAccount(data);
       })
-      .catch((reason: unknown) => {
-        const error = reason instanceof ApiError ? reason : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถโหลดข้อมูลได้");
-        if (error.status === 401) onUnauthorized();
-        else if (active) {
-          setMessage(error.message);
-          setLoading(false);
-        }
+      .catch((error) => {
+        if (!active) return;
+        const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูลบัญชีได้");
+        if (apiError.status === 401) onUnauthorized();
+        else setMessage(apiError.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
     return () => {
       active = false;
@@ -104,29 +111,92 @@ export function AccountView({
 
   function initEditForm(p?: PatientProfile) {
     if (!p) return;
+    setEditFirstName(p.first_name || "");
+    setEditLastName(p.last_name || "");
+    setEditGender(p.gender || "UNKNOWN");
+    setEditBirthDate(p.birth_date || "");
+    setEditAge(p.age ? String(p.age) : "");
     setEditPhone(p.phone || "");
+    setEditBloodType(p.blood_type || "UNKNOWN");
+    setEditHeightCm(p.height_cm ? String(p.height_cm) : "");
+    setEditWeightKg(p.weight_kg ? String(p.weight_kg) : "");
     setEditAddress(p.address || "");
     setEditChronic(p.chronic_diseases || "");
     setEditAllergies(p.allergies || "");
     setEditMeds(p.medications || "");
-    setEditEmergName(p.emergency_name || "");
-    setEditEmergPhone(p.emergency_phone || "");
+
+    const contacts = (p.emergency_contacts && p.emergency_contacts.length > 0)
+      ? p.emergency_contacts.map((c: { id?: string; name: string; relationship?: string; phone: string }) => ({
+          id: c.id || Math.random().toString(),
+          name: c.name || "",
+          relationship: c.relationship || "",
+          phone: c.phone || "",
+        }))
+      : [{ id: "c1", name: p.emergency_name || "", relationship: "", phone: p.emergency_phone || "" }];
+    setEditEmergencyContacts(contacts);
+  }
+
+  function handleBirthDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setEditBirthDate(val);
+    if (!val) {
+      setEditAge("");
+      return;
+    }
+    const birth = new Date(val);
+    const today = new Date();
+    let years = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+      years--;
+    }
+    setEditAge(String(Math.max(0, years)));
+  }
+
+  function addEmergencyContact() {
+    if (editEmergencyContacts.length >= 3) return;
+    setEditEmergencyContacts([
+      ...editEmergencyContacts,
+      { id: Date.now().toString(), name: "", relationship: "", phone: "" },
+    ]);
+  }
+
+  function removeEmergencyContact(id: string) {
+    if (editEmergencyContacts.length <= 1) return;
+    setEditEmergencyContacts(editEmergencyContacts.filter((c) => c.id !== id));
+  }
+
+  function updateEmergencyContact(id: string, field: keyof EmergencyContactItem, value: string) {
+    setEditEmergencyContacts(
+      editEmergencyContacts.map((c) => (c.id === id ? { ...c, [field]: value } : c))
+    );
   }
 
   function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!account) return;
 
+    const primaryContact = editEmergencyContacts[0] || { name: "", relationship: "", phone: "" };
+
     // Update local profile state
     const updatedProfile: PatientProfile = {
       ...account.profile,
+      first_name: editFirstName.trim() || account.profile.first_name,
+      last_name: editLastName.trim() || account.profile.last_name,
+      gender: editGender,
+      birth_date: editBirthDate || null,
+      age: editAge ? Number(editAge) : null,
       phone: editPhone.trim() || null,
+      blood_type: editBloodType,
+      height_cm: editHeightCm ? Number(editHeightCm) : null,
+      weight_kg: editWeightKg ? Number(editWeightKg) : null,
       address: editAddress.trim() || null,
       chronic_diseases: editChronic.trim() || null,
       allergies: editAllergies.trim() || null,
       medications: editMeds.trim() || null,
-      emergency_name: editEmergName.trim() || null,
-      emergency_phone: editEmergPhone.trim() || null,
+      emergency_name: primaryContact.name.trim() || null,
+      emergency_phone: primaryContact.phone.trim() || null,
+      emergency_contacts: editEmergencyContacts.filter((c) => c.name.trim() || c.phone.trim()),
     };
 
     setAccount({
@@ -135,11 +205,22 @@ export function AccountView({
     });
 
     setIsEditing(false);
-    setSaveSuccessMsg("บันทึกการแก้ไขข้อมูลส่วนตัวเรียบร้อยแล้ว");
+    setSaveSuccessMsg("บันทึกการแก้ไขข้อมูลเรียบร้อยแล้ว");
     setTimeout(() => setSaveSuccessMsg(""), 4000);
   }
 
   const profile = account?.profile;
+
+  if (loading && !account) {
+    return (
+      <section id="accountView" className="page-shell account-view">
+        <LoadingScreen
+          title="กำลังโหลด"
+          subtitle="กรุณารอสักครู่ ระบบกำลังดึงประวัติการรักษาและนัดหมายของคุณ"
+        />
+      </section>
+    );
+  }
 
   return (
     <section id="accountView" className="page-shell account-view">
@@ -147,20 +228,10 @@ export function AccountView({
       <div className="account-heading">
         <div>
           <p className="eyebrow">บัตรประจำตัวและประวัติผู้ป่วย OPD</p>
-          <h1>{profile ? `${profile.first_name} ${profile.last_name}` : "ข้อมูล & บัญชีของฉัน"}</h1>
-          <p>HN: <strong>{dash(profile?.hn)}</strong> · เลขบัตร ปชช.: <strong>{dash(profile?.national_id)}</strong></p>
+          <h1>{profile ? `${profile.first_name} ${profile.last_name}` : "ข้อมูลผู้ป่วย"}</h1>
+          <p>HN: <strong>{dash(profile?.hn)}</strong> · เลขประจำตัว ปชช.: <strong>{dash(profile?.national_id)}</strong></p>
         </div>
         <div className="account-heading-actions">
-          <button
-            type="button"
-            className="primary-button compact-button edit-profile-btn"
-            onClick={() => {
-              initEditForm(profile);
-              setIsEditing(true);
-            }}
-          >
-            ✏️ แก้ไขข้อมูลส่วนตัว
-          </button>
           <button className="secondary-button compact-button" type="button" onClick={onLogout}>
             ออกจากระบบ
           </button>
@@ -201,16 +272,7 @@ export function AccountView({
           className={`account-tab-btn ${activeTab === "profile" ? "active" : ""}`}
           onClick={() => setActiveTab("profile")}
         >
-          👤 ข้อมูลส่วนตัว & ติดต่อ
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "health"}
-          className={`account-tab-btn ${activeTab === "health" ? "active" : ""}`}
-          onClick={() => setActiveTab("health")}
-        >
-          🩺 สุขภาพ & ประวัติแพ้ยา
+          👤 ข้อมูลผู้ป่วย & สุขภาพ
         </button>
         <button
           type="button"
@@ -228,7 +290,7 @@ export function AccountView({
           className={`account-tab-btn ${activeTab === "visits" ? "active" : ""}`}
           onClick={() => setActiveTab("visits")}
         >
-          📜 ประวัติการตรวจ ({account?.visits?.length || 0})
+          📜 ประวัติการรักษา ({account?.visits?.length || 0})
         </button>
       </div>
 
@@ -237,58 +299,46 @@ export function AccountView({
       ) : (
         account && (
           <div className="account-tab-content">
-            {/* Tab 1: Profile & Contacts */}
+            {/* Tab 1: Profile & Health Unified */}
             {activeTab === "profile" && (
               <section className="account-card" aria-labelledby="profileTitle">
                 <div className="card-heading">
                   <div>
                     <span className="section-number">1</span>
-                    <h2 id="profileTitle">ข้อมูลส่วนตัว & การติดต่อ</h2>
+                    <h2 id="profileTitle">ข้อมูลผู้ป่วยและสุขภาพ</h2>
                   </div>
                   <button
                     type="button"
-                    className="text-button"
+                    className="primary-button compact-button edit-profile-btn"
                     onClick={() => {
                       initEditForm(profile);
                       setIsEditing(true);
                     }}
                   >
-                    ✏️ แก้ไข
+                    ✏️ แก้ไขข้อมูล
                   </button>
                 </div>
-                <ProfileDetails profile={account.profile} />
-              </section>
-            )}
 
-            {/* Tab 2: Health & Allergies */}
-            {activeTab === "health" && (
-              <section className="account-card" aria-labelledby="healthTitle">
-                <div className="card-heading">
-                  <div>
-                    <span className="section-number">2</span>
-                    <h2 id="healthTitle">ข้อมูลสุขภาพ & ประวัติแพ้ยา</h2>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => {
-                      initEditForm(profile);
-                      setIsEditing(true);
-                    }}
-                  >
-                    ✏️ แก้ไข
-                  </button>
+                <div className="profile-subgroup-title">
+                  <strong>ข้อมูลส่วนบุคคลและการติดต่อ</strong>
+                </div>
+                <ProfileDetails profile={account.profile} />
+
+                <div className="profile-section-separator" />
+
+                <div className="profile-subgroup-title">
+                  <strong>ข้อมูลสุขภาพและประวัติการแพ้</strong>
                 </div>
                 <HealthDetails profile={account.profile} />
               </section>
             )}
 
-            {/* Tab 3: Appointments */}
+            {/* Tab 2: Appointments */}
             {activeTab === "appointments" && (
               <section className="account-card" aria-labelledby="appointmentTitle">
                 <div className="card-heading">
                   <div>
-                    <span className="section-number">3</span>
+                    <span className="section-number">2</span>
                     <h2 id="appointmentTitle">รายการนัดหมายพบแพทย์</h2>
                   </div>
                 </div>
@@ -296,13 +346,13 @@ export function AccountView({
               </section>
             )}
 
-            {/* Tab 4: Visits History */}
+            {/* Tab 3: Visits History */}
             {activeTab === "visits" && (
               <section className="account-card" aria-labelledby="visitTitle">
                 <div className="card-heading">
                   <div>
-                    <span className="section-number">4</span>
-                    <h2 id="visitTitle">ประวัติการรับบริการ & ผลวินิจฉัย</h2>
+                    <span className="section-number">3</span>
+                    <h2 id="visitTitle">ประวัติการรับบริการและผลตรวจรักษา</h2>
                   </div>
                 </div>
                 <VisitHistory visits={account.visits || []} />
@@ -317,21 +367,75 @@ export function AccountView({
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
           <div className="modal-content">
             <div className="modal-header">
-              <h2 id="editModalTitle">แก้ไขข้อมูลส่วนตัว</h2>
+              <h2 id="editModalTitle">แก้ไขข้อมูลส่วนตัวและสุขภาพ</h2>
               <button type="button" className="close-modal-btn" onClick={() => setIsEditing(false)} aria-label="ปิด">
                 ✕
               </button>
             </div>
             <form onSubmit={handleSaveProfile} className="edit-profile-form">
               <div className="edit-form-grid">
+                {/* 1. Basic Info */}
                 <label className="field">
-                  <span>เบอร์โทรศัพท์ส่วนตัว</span>
+                  <span>ชื่อ</span>
+                  <input
+                    type="text"
+                    value={editFirstName}
+                    onChange={(e) => setEditFirstName(e.target.value)}
+                    placeholder="ชื่อ"
+                    required
+                  />
+                </label>
+
+                <label className="field">
+                  <span>นามสกุล</span>
+                  <input
+                    type="text"
+                    value={editLastName}
+                    onChange={(e) => setEditLastName(e.target.value)}
+                    placeholder="นามสกุล"
+                    required
+                  />
+                </label>
+
+                <label className="field">
+                  <span>เพศ</span>
+                  <select value={editGender} onChange={(e) => setEditGender(e.target.value)}>
+                    <option value="UNKNOWN">ไม่ระบุ</option>
+                    <option value="M">ชาย</option>
+                    <option value="F">หญิง</option>
+                    <option value="O">อื่น ๆ</option>
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>เบอร์โทรศัพท์</span>
                   <input
                     type="tel"
-                    aria-label="เบอร์โทรศัพท์ส่วนตัว"
                     value={editPhone}
                     onChange={(e) => setEditPhone(e.target.value)}
                     placeholder="08xxxxxxxx"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>วัน/เดือน/ปีเกิด</span>
+                  <input
+                    type="date"
+                    value={editBirthDate}
+                    onChange={handleBirthDateChange}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>อายุ (ปี)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={130}
+                    value={editAge}
+                    onChange={(e) => setEditAge(e.target.value)}
+                    placeholder="0"
                   />
                 </label>
 
@@ -339,10 +443,51 @@ export function AccountView({
                   <span>ที่อยู่ปัจจุบัน</span>
                   <input
                     type="text"
-                    aria-label="ที่อยู่ปัจจุบัน"
                     value={editAddress}
                     onChange={(e) => setEditAddress(e.target.value)}
-                    placeholder="เลขที่ หมู่ ตำบล อำเภอ จังหวัด"
+                    placeholder="บ้านเลขที่ ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์"
+                  />
+                </label>
+
+                {/* 2. Health Info Section */}
+                <div className="field-divider">
+                  <strong>ข้อมูลสุขภาพและประวัติการแพ้</strong>
+                </div>
+
+                <label className="field">
+                  <span>หมู่เลือด</span>
+                  <select value={editBloodType} onChange={(e) => setEditBloodType(e.target.value)}>
+                    <option value="UNKNOWN">ไม่ทราบ</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="AB">AB</option>
+                    <option value="O">O</option>
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>ส่วนสูง (ซม.)</span>
+                  <input
+                    type="number"
+                    min={30}
+                    max={250}
+                    step="0.1"
+                    value={editHeightCm}
+                    onChange={(e) => setEditHeightCm(e.target.value)}
+                    placeholder="เช่น 170"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>น้ำหนัก (กก.)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={400}
+                    step="0.1"
+                    value={editWeightKg}
+                    onChange={(e) => setEditWeightKg(e.target.value)}
+                    placeholder="เช่น 65"
                   />
                 </label>
 
@@ -350,7 +495,6 @@ export function AccountView({
                   <span>โรคประจำตัว</span>
                   <input
                     type="text"
-                    aria-label="โรคประจำตัว"
                     value={editChronic}
                     onChange={(e) => setEditChronic(e.target.value)}
                     placeholder="เช่น ความดันโลหิตสูง, เบาหวาน (ถ้าไม่มีให้ระบุ ไม่มี)"
@@ -361,10 +505,9 @@ export function AccountView({
                   <span>ประวัติแพ้ยา / แพ้อาหาร</span>
                   <input
                     type="text"
-                    aria-label="ประวัติแพ้ยา / แพ้อาหาร"
                     value={editAllergies}
                     onChange={(e) => setEditAllergies(e.target.value)}
-                    placeholder="เช่น แพ้ยาเพนิซิลลิน, แพ้อาหารทะเล"
+                    placeholder="เช่น แพ้ยาเพนิซิลลิน, แพ้อาหารทะเล (ถ้าไม่มีให้ระบุ ไม่มี)"
                   />
                 </label>
 
@@ -372,38 +515,93 @@ export function AccountView({
                   <span>ยาที่ใช้ประจำ</span>
                   <input
                     type="text"
-                    aria-label="ยาที่ใช้ประจำ"
                     value={editMeds}
                     onChange={(e) => setEditMeds(e.target.value)}
                     placeholder="ระบุชื่อยาที่รับประทานต่อเนื่อง"
                   />
                 </label>
 
+                {/* 3. Emergency Contacts Section */}
                 <div className="field-divider">
-                  <strong>ข้อมูลผู้ติดต่อฉุกเฉิน</strong>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <strong>ข้อมูลผู้ติดต่อฉุกเฉิน (สูงสุด 3 ท่าน)</strong>
+                    {editEmergencyContacts.length < 3 && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={addEmergencyContact}
+                        style={{ fontSize: "0.88rem" }}
+                      >
+                        + เพิ่มผู้ติดต่อ
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <label className="field">
-                  <span>ชื่อผู้ติดต่อฉุกเฉิน</span>
-                  <input
-                    type="text"
-                    aria-label="ชื่อผู้ติดต่อฉุกเฉิน"
-                    value={editEmergName}
-                    onChange={(e) => setEditEmergName(e.target.value)}
-                    placeholder="ชื่อ-นามสกุล (ความสัมพันธ์)"
-                  />
-                </label>
-
-                <label className="field">
-                  <span>เบอร์โทรผู้ติดต่อฉุกเฉิน</span>
-                  <input
-                    type="tel"
-                    aria-label="เบอร์โทรผู้ติดต่อฉุกเฉิน"
-                    value={editEmergPhone}
-                    onChange={(e) => setEditEmergPhone(e.target.value)}
-                    placeholder="08xxxxxxxx"
-                  />
-                </label>
+                <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {editEmergencyContacts.map((contact, index) => (
+                    <div
+                      key={contact.id}
+                      style={{
+                        background: "#f8fafc",
+                        border: "1px solid var(--line)",
+                        borderRadius: "8px",
+                        padding: "12px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                        <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--primary)" }}>
+                          ผู้ติดต่อท่านที่ {index + 1} {index === 0 ? "(หลัก)" : ""}
+                        </span>
+                        {editEmergencyContacts.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeEmergencyContact(contact.id)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "#dc2626",
+                              fontSize: "0.82rem",
+                              cursor: "pointer",
+                            }}
+                          >
+                            ลบ
+                          </button>
+                        )}
+                      </div>
+                      <div className="edit-form-grid" style={{ gap: "10px" }}>
+                        <input
+                          type="text"
+                          placeholder="ชื่อ-นามสกุล"
+                          value={contact.name}
+                          onChange={(e) => updateEmergencyContact(contact.id, "name", e.target.value)}
+                        />
+                        <select
+                          value={contact.relationship}
+                          onChange={(e) => updateEmergencyContact(contact.id, "relationship", e.target.value)}
+                        >
+                          <option value="">-- ความสัมพันธ์ --</option>
+                          <option value="บิดา">บิดา</option>
+                          <option value="มารดา">มารดา</option>
+                          <option value="คู่สมรส">คู่สมรส</option>
+                          <option value="บุตร">บุตร</option>
+                          <option value="พี่น้อง">พี่น้อง</option>
+                          <option value="ญาติ">ญาติ</option>
+                          <option value="เพื่อน">เพื่อน</option>
+                          <option value="ผู้ดูแล">ผู้ดูแล</option>
+                          <option value="อื่น ๆ">อื่น ๆ</option>
+                        </select>
+                        <input
+                          type="tel"
+                          placeholder="เบอร์โทรศัพท์"
+                          value={contact.phone}
+                          onChange={(e) => updateEmergencyContact(contact.id, "phone", e.target.value)}
+                          style={{ gridColumn: "1 / -1" }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="modal-actions">
@@ -423,22 +621,33 @@ export function AccountView({
 }
 
 function ProfileDetails({ profile }: { profile: PatientProfile }) {
+  const contactText = profile.emergency_contacts && profile.emergency_contacts.length > 0
+    ? profile.emergency_contacts
+        .map(
+          (c: { id?: string; name: string; relationship?: string; phone: string }, i: number) =>
+            `${i + 1}. ${c.name} (${c.relationship || "ผู้ติดต่อ"}) · ${c.phone}`
+        )
+        .join("\n")
+    : [profile.emergency_name, profile.emergency_phone].filter(Boolean).join(" · ");
+
   const rows: Array<[string, unknown, boolean?]> = [
     ["ชื่อ-นามสกุล", `${profile.first_name} ${profile.last_name}`],
-    ["เลขบัตรประชาชน", profile.national_id],
+    ["เลขประจำตัวประชาชน", profile.national_id],
     ["HN", profile.hn],
     ["เบอร์โทรศัพท์", profile.phone],
-    ["เพศ", profile.gender === "M" ? "ชาย" : profile.gender === "F" ? "หญิง" : profile.gender],
+    ["เพศ", profile.gender === "M" ? "ชาย" : profile.gender === "F" ? "หญิง" : profile.gender === "O" ? "อื่น ๆ" : profile.gender],
     ["อายุ", profile.age ? `${profile.age} ปี` : null],
     ["ที่อยู่", profile.address, true],
-    ["ผู้ติดต่อฉุกเฉิน", [profile.emergency_name, profile.emergency_phone].filter(Boolean).join(" · "), true],
+    ["ผู้ติดต่อฉุกเฉิน", contactText, true],
   ];
   return (
     <dl className="detail-grid">
       {rows.map(([label, value, wide]) => (
         <div className={`detail-item${wide ? " wide" : ""}`} key={label}>
           <dt>{label}</dt>
-          <dd>{dash(value)}</dd>
+          <dd style={wide && label === "ผู้ติดต่อฉุกเฉิน" ? { whiteSpace: "pre-line" } : undefined}>
+            {dash(value)}
+          </dd>
         </div>
       ))}
     </dl>
@@ -446,14 +655,24 @@ function ProfileDetails({ profile }: { profile: PatientProfile }) {
 }
 
 function HealthDetails({ profile }: { profile: PatientProfile }) {
+  const bmi = profile.height_cm && profile.weight_kg
+    ? (profile.weight_kg / Math.pow(profile.height_cm / 100, 2)).toFixed(1)
+    : null;
+
   const rows: Array<[string, unknown, boolean?]> = [
-    ["หมู่เลือด", profile.blood_type],
+    ["หมู่เลือด", profile.blood_type && profile.blood_type !== "UNKNOWN" ? profile.blood_type : "ไม่ทราบ"],
     [
-      "ส่วนสูง / น้ำหนัก",
-      [profile.height_cm && `${profile.height_cm} ซม.`, profile.weight_kg && `${profile.weight_kg} กก.`].filter(Boolean).join(" / "),
+      "ส่วนสูง / น้ำหนัก / BMI",
+      [
+        profile.height_cm && `${profile.height_cm} ซม.`,
+        profile.weight_kg && `${profile.weight_kg} กก.`,
+        bmi && `BMI ${bmi}`,
+      ]
+        .filter(Boolean)
+        .join(" · ") || null,
     ],
     ["โรคประจำตัว", profile.chronic_diseases, true],
-    ["ประวัติแพ้ยา / อาหาร", profile.allergies, true],
+    ["ประวัติแพ้ยา / แพ้อาหาร", profile.allergies, true],
     ["ยาที่ใช้ประจำ", profile.medications, true],
   ];
   return (

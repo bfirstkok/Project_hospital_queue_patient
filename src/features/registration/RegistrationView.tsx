@@ -481,12 +481,12 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
       )}
 
       <div className="intro">
-        <span className="eyebrow">ลงทะเบียนรับบริการ OPD</span>
-        <h1>{hasToken ? "จองคิวรับบริการ OPD วันนี้" : "กรอกข้อมูลผู้ป่วย"}</h1>
-        <p>แตะเลือกตัวเลือกที่ตรงกับอาการของคุณ หรือพิมพ์ระบุเพิ่มเติมได้สะดวก</p>
+        <span className="eyebrow">ระบบผู้ป่วยนอก (OPD)</span>
+        <h1>{hasToken ? "จองคิวรับบริการ OPD วันนี้" : "ลงทะเบียนผู้ป่วยใหม่"}</h1>
+        <p>กรุณากรอกข้อมูลส่วนบุคคลเพื่อบันทึกประวัติการรักษาและจัดลำดับคิวรับบริการ</p>
         {!hasToken && (
           <div className="login-prompt">
-            <span>มีประวัติหรือลงทะเบียนไว้แล้ว?</span>
+            <span>มีประวัติการรักษาอยู่แล้ว?</span>
             <button className="login-button" type="button" onClick={onLogin}>เข้าสู่ระบบ</button>
           </div>
         )}
@@ -522,7 +522,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         <fieldset>
           <legend>
             <span className="section-number">1</span>
-            <span>ข้อมูลผู้ป่วย<small>ระบุตัวตนและข้อมูลการติดต่อส่วนตัว</small></span>
+            <span>ข้อมูลส่วนบุคคล<small>ระบุชื่อและข้อมูลสำหรับติดต่อ</small></span>
           </legend>
           <div className="form-grid">
             <Field label="ชื่อ" required>
@@ -549,7 +549,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
                 className={fieldClass("last_name")}
               />
             </Field>
-            <Field label="เลขบัตรประชาชน" required wide help="ตัวเลข 13 หลักสำหรับค้นหาประวัติการรักษา">
+            <Field label="เลขประจำตัวประชาชน" required wide help="กรอกตัวเลข 13 หลักโดยไม่ต้องใส่เครื่องหมายขีด">
               <input
                 name="national_id"
                 maxLength={13}
@@ -572,7 +572,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
                 <option value="O">อื่น ๆ</option>
               </select>
             </Field>
-            <Field label="เบอร์โทรศัพท์ส่วนตัว">
+            <Field label="เบอร์โทรศัพท์">
               <input
                 name="phone"
                 maxLength={20}
@@ -585,13 +585,13 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
             </Field>
 
             {/* Row 4: Birth date and Age side by side, aligned */}
-            <Field label="วันเดือนปีเกิด">
+            <Field label="วัน/เดือน/ปีเกิด">
               <input
                 type="date"
                 name="birth_date"
                 value={birthDate}
                 onChange={handleBirthDateChange}
-                aria-label="วันเดือนปีเกิด"
+                aria-label="วัน/เดือน/ปีเกิด"
                 max={new Date().toISOString().split("T")[0]}
               />
             </Field>
@@ -633,7 +633,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         <fieldset>
           <legend>
             <span className="section-number">2</span>
-            <span>อาการสำคัญที่มารับบริการ <b>*</b><small>แตะเลือกอาการที่ตรงกับคุณ หรือพิมพ์ระบุเพิ่มเติม</small></span>
+            <span>อาการสำคัญที่มารับบริการ <b>*</b><small>เลือกอาการเบื้องต้น หรือพิมพ์ระบุรายละเอียดเพิ่มเติม</small></span>
           </legend>
           
           <div className="choice-chips-group" role="group" aria-label="ตัวเลือกอาการยอดนิยม">
@@ -652,10 +652,10 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
             })}
           </div>
 
-          <Field label="ระบุอาการเพิ่มเติม / รายละเอียด" required>
+          <Field label="ระบุรายละเอียดอาการสำคัญ" required>
             <textarea
               name="note"
-              placeholder="เช่น เวียนศีรษะ มีไข้ และไอติดต่อกัน 2 วัน"
+              placeholder="เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"
               value={customSymptom || (selectedSymptoms.length > 0 ? selectedSymptoms.join(", ") : "")}
               onChange={(e) => setCustomSymptom(e.target.value)}
               className={fieldClass("note")}
@@ -668,9 +668,9 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         <fieldset>
           <legend>
             <span className="section-number">3</span>
-            <span>ข้อมูลสุขภาพ & ประวัติแพ้ยา<small>แตะเลือกเพื่อความสะดวกรวดเร็ว</small></span>
+            <span>ข้อมูลสุขภาพและประวัติการแพ้<small>ข้อมูลเบื้องต้นเพื่อความปลอดภัยในการตรวจรักษา</small></span>
           </legend>
-          <div className="info-strip">สัญญาณชีพ (ความดัน, ชีพจร, ไข้) จะวัดที่จุดคัดกรองโดยเจ้าหน้าที่</div>
+          <div className="info-strip">สัญญาณชีพ (ความดันโลหิต ชีพจร อุณหภูมิ) จะได้รับการตรวจวัด ณ จุดคัดกรอง</div>
 
           <div className="form-grid three">
             <Field label="หมู่เลือด">
@@ -714,7 +714,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
 
           {/* โรคประจำตัว ช้อยส์ */}
           <div className="field-group-spacing">
-            <span className="field-group-title">โรคประจำตัว:</span>
+            <span className="field-group-title">โรคประจำตัว</span>
             <div className="choice-chips-group">
               {CHRONIC_OPTIONS.map((item) => (
                 <button
@@ -728,7 +728,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
               ))}
             </div>
             <input
-              placeholder="โรคประจำตัวอื่น ๆ (หากมี)"
+              placeholder="ระบุโรคประจำตัวอื่น ๆ (หากมี)"
               value={customDisease}
               onChange={(e) => setCustomDisease(e.target.value)}
             />
@@ -737,7 +737,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
 
           {/* ประวัติแพ้ยา ช้อยส์ */}
           <div className="field-group-spacing">
-            <span className="field-group-title">ประวัติแพ้ยา / อาหาร:</span>
+            <span className="field-group-title">ประวัติแพ้ยาและอาหาร</span>
             <div className="choice-chips-group">
               {ALLERGY_OPTIONS.map((item) => (
                 <button
@@ -751,7 +751,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
               ))}
             </div>
             <input
-              placeholder="ยาหรือสารที่แพ้อื่น ๆ (หากมี)"
+              placeholder="ระบุยาหรือสารที่แพ้อื่น ๆ (หากมี)"
               value={customAllergy}
               onChange={(e) => setCustomAllergy(e.target.value)}
             />
@@ -762,7 +762,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
             <input
               name="medications"
               maxLength={1000}
-              placeholder="ระบุชื่อยา (ถ้าทราบ เช่น ยาความดัน, ยาเบาหวาน)"
+              placeholder="ระบุชื่อยาที่กำลังรับประทานอยู่ (ถ้ามี เช่น ยาลดความดัน ยาเบาหวาน)"
               value={medications}
               onChange={(e) => setMedications(e.target.value)}
             />
@@ -773,7 +773,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         <fieldset>
           <legend>
             <span className="section-number">4</span>
-            <span>ที่อยู่ปัจจุบัน<small>สำหรับระบุพื้นที่รับบริการ (เลือกจังหวัดเพื่อค้นหาอำเภอและตำบล)</small></span>
+            <span>ที่อยู่ปัจจุบัน<small>ระบุที่อยู่เพื่อการติดต่อและบันทึกประวัติการรักษา</small></span>
           </legend>
           <div className="form-grid">
             <Field label="จังหวัด">
@@ -853,7 +853,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         <fieldset>
           <legend>
             <span className="section-number">5</span>
-            <span>ผู้ติดต่อฉุกเฉิน<small>ใช้ติดต่อกรณีจำเป็นเร่งด่วน (เพิ่มได้สูงสุด 3 รายการ)</small></span>
+            <span>ผู้ติดต่อฉุกเฉิน<small>ข้อมูลบุคคลที่สามารถติดต่อได้ในกรณีจำเป็นเร่งด่วน (สูงสุด 3 ท่าน)</small></span>
           </legend>
           
           <div className="emergency-contacts-wrapper">
@@ -861,7 +861,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
               <div key={contact.id} className="emergency-entry-card">
                 <div className="entry-header">
                   <span className="entry-tag">
-                    ผู้ติดต่อฉุกเฉินคนที่ {index + 1} {index === 0 ? "(หลัก)" : ""}
+                    ผู้ติดต่อฉุกเฉินท่านที่ {index + 1} {index === 0 ? "(หลัก)" : ""}
                   </span>
                   {index > 0 && (
                     <button
@@ -895,8 +895,8 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
                       onChange={(e) => updateEmergencyContact(contact.id, "relationship", e.target.value)}
                     >
                       <option value="">-- เลือก --</option>
-                      <option value="FATHER">พ่อ</option>
-                      <option value="MOTHER">แม่</option>
+                      <option value="FATHER">บิดา</option>
+                      <option value="MOTHER">มารดา</option>
                       <option value="SPOUSE">คู่สมรส</option>
                       <option value="CHILD">บุตร</option>
                       <option value="SIBLING">พี่น้อง</option>
@@ -944,24 +944,24 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
             className="pdpa-review-link"
             onClick={() => setShowPdpaReview(true)}
           >
-            อ่านนโยบาย PDPA อีกครั้ง
+            อ่านนโยบายความเป็นส่วนตัว (PDPA) อีกครั้ง
           </button>
         </div>
 
         <label className="consent">
           <input name="consent" type="checkbox" defaultChecked required />
-          <span>ข้าพเจ้ายืนยันว่าข้อมูลถูกต้อง และยินยอมให้ใช้ข้อมูลเพื่อการลงทะเบียน คัดกรอง และจัดคิวรับบริการ <b>*</b></span>
+          <span>ข้าพเจ้าขอยืนยันว่าข้อมูลข้างต้นถูกต้องตรงตามความเป็นจริง และยินยอมให้ใช้ข้อมูลในการคัดกรองและจัดลำดับคิวรับบริการ <b>*</b></span>
         </label>
 
         <div className="form-actions">
           <button className="primary-button" type="submit" disabled={loading}>
-            <span>{loading ? "กำลังบันทึกข้อมูล..." : "บันทึกผู้ป่วย"}</span>
+            <span>{loading ? "กำลังบันทึกข้อมูล..." : "บันทึกข้อมูลผู้ป่วย"}</span>
             <i aria-hidden="true">{loading ? "↻" : "✓"}</i>
           </button>
           <button className="secondary-button" type="reset">ยกเลิก</button>
         </div>
 
-        <p className="privacy-note">ระบบจะไม่แสดงชื่อ อาการ หรือระดับความเร่งด่วนบนหน้าสถานะคิว</p>
+        <p className="privacy-note">ระบบจะไม่แสดงชื่อ อาการ หรือข้อมูลส่วนบุคคลบนจอแสดงสถานะคิวสาธารณะ</p>
       </form>
     </section>
   );

@@ -14,13 +14,17 @@ export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }
   const [queue, setQueue] = useState<Partial<QueueData> | null>(initialQueue || null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(Boolean(enabled && token && !initialQueue));
   const onUnauthorizedRef = useRef(onUnauthorized);
   useEffect(() => {
     onUnauthorizedRef.current = onUnauthorized;
   }, [onUnauthorized]);
 
   const refresh = useCallback(async (silent = false) => {
-    if (!token) return;
+    if (!token) {
+      setInitialLoading(false);
+      return;
+    }
     if (!silent) setLoading(true);
     try {
       const data = await patientApi.queue(token);
@@ -32,16 +36,20 @@ export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }
       else setError(apiError.message);
     } finally {
       if (!silent) setLoading(false);
+      setInitialLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    if (!enabled || !token) return;
+    if (!enabled || !token) {
+      setInitialLoading(false);
+      return;
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch resolves asynchronously.
     void refresh();
     const timer = window.setInterval(() => void refresh(true), getRuntimeConfig().statusRefreshMs);
     return () => window.clearInterval(timer);
   }, [enabled, token, refresh]);
 
-  return { queue, error, loading, refresh };
+  return { queue, error, loading, initialLoading, refresh };
 }
