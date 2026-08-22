@@ -45,6 +45,16 @@ describe("patientApi", () => {
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer patient-token");
   });
 
+  it("uses the cancel queue endpoint with Bearer header", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, message: "ยกเลิกคิวเรียบร้อยแล้ว" }));
+    await patientApi.cancelQueue("patient-token");
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/queue/cancel/", expect.objectContaining({
+      method: "POST",
+    }));
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer patient-token");
+  });
+
   it("maps API validation errors without changing their message", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: false, error: "ข้อมูลไม่ถูกต้อง", errors: { note: ["กรุณาระบุอาการ"] } }, 400));
     await expect(patientApi.login("1234567890123")).rejects.toMatchObject({

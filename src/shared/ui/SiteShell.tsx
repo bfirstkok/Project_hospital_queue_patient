@@ -63,8 +63,8 @@ export function SiteShell({
             <span><strong>OPD Queue</strong><small>ระบบบริการผู้ป่วยนอก</small></span>
           </Link>
 
-          {/* Desktop Top Menu (Shown when not in Auth gate) */}
-          {!hideNav && (
+          {/* Desktop Top Menu (Shown when logged in) */}
+          {!hideNav && hasSavedAccount && (
             <div className="header-desktop-nav">
               <AppNavbar
                 currentView={currentView}
@@ -78,10 +78,10 @@ export function SiteShell({
         </div>
       </header>
 
-      <main className={`main-content ${hideNav ? "no-bottom-pad" : ""}`}>{children}</main>
+      <main className={`main-content ${hideNav || !hasSavedAccount ? "no-bottom-pad" : ""}`}>{children}</main>
 
       {/* Mobile Bottom Navigation Bar (Shown when logged in) */}
-      {!hideNav && (
+      {!hideNav && hasSavedAccount && (
         <div className="mobile-bottom-nav">
           <AppNavbar
             currentView={currentView}

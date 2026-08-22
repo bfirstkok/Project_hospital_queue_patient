@@ -3,12 +3,16 @@ import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { RegistrationPayload, RegistrationResult } from "@/shared/api/types";
 import { ALL_77_PROVINCES, getDistricts, getPostalCode, getSubdistricts } from "@/shared/data/thai-address";
 import { PdpaConsentGate } from "./PdpaConsentModal";
+import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 interface RegistrationViewProps {
+  token?: string;
   hasToken?: boolean;
   initialPdpaAccepted?: boolean;
   onLogin: () => void;
+  onCancel?: () => void;
   onSuccess: (token: string, result: RegistrationResult) => void;
+  onUnauthorized?: () => void;
 }
 
 const numericFields = new Set(["age", "height_cm", "weight_kg"]);
@@ -40,6 +44,21 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
   for (const field of numericFields) {
     payload[field] = payload[field] === null ? null : String(Number(payload[field]));
   }
+
+  // Normalize national_id to numeric only
+  if (payload.national_id) {
+    let cleanId = payload.national_id.replace(/\D/g, "");
+    if (cleanId.length !== 13) {
+      try {
+        const saved = (sessionStorage.getItem("patient_national_id") || localStorage.getItem("patient_national_id") || "").replace(/\D/g, "");
+        if (saved.length === 13) cleanId = saved;
+      } catch {
+        // ignore
+      }
+    }
+    payload.national_id = cleanId;
+  }
+
   return {
     ...payload,
     age: payload.age === null ? null : Number(payload.age),
@@ -78,15 +97,39 @@ const ALLERGY_OPTIONS = [
   "แพ้อาหารทะเล",
 ];
 
+const MEDICATION_OPTIONS = [
+  "ไม่มียาที่ใช้ประจำ",
+  "ยาลดความดันโลหิต",
+  "ยารักษาโรคเบาหวาน",
+  "ยาลดไขมันในเลือด",
+  "ยาโรคหัวใจ",
+  "ยาละลายลิ่มเลือด / ต้านเกล็ดเลือด",
+  "ยาพ่นหอบหืด / ยาภูมิแพ้",
+  "ยาลดกรด / ยาโรคกระเพาะ",
+  "ยาไทรอยด์",
+];
+
 const STORAGE_KEY = "opd_patient_registration_draft_v1";
 
-export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogin, onSuccess }: RegistrationViewProps) {
+export function RegistrationView({
+  token,
+  hasToken,
+  initialPdpaAccepted = false,
+  onLogin,
+  onCancel,
+  onSuccess,
+  onUnauthorized,
+}: RegistrationViewProps) {
+  const isUserLoggedIn = Boolean(token || hasToken);
   const formRef = useRef<HTMLFormElement>(null);
-  const [isPdpaAccepted, setIsPdpaAccepted] = useState<boolean>(initialPdpaAccepted);
+  const [isPdpaAccepted, setIsPdpaAccepted] = useState<boolean>(initialPdpaAccepted || isUserLoggedIn);
   const [showPdpaReview, setShowPdpaReview] = useState<boolean>(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
   const [message, setMessage] = useState("");
   const [invalidField, setInvalidField] = useState("");
   const [loading, setLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState<boolean>(Boolean(token));
+  const [hasLoadedProfile, setHasLoadedProfile] = useState<boolean>(false);
 
   // Local Draft status
   const [hasRestoredDraft, setHasRestoredDraft] = useState<boolean>(false);
@@ -114,7 +157,8 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
   const [customDisease, setCustomDisease] = useState<string>("");
   const [selectedAllergies, setSelectedAllergies] = useState<string[]>([]);
   const [customAllergy, setCustomAllergy] = useState<string>("");
-  const [medications, setMedications] = useState<string>("");
+  const [selectedMedications, setSelectedMedications] = useState<string[]>([]);
+  const [customMedication, setCustomMedication] = useState<string>("");
 
   // Block 4: Address Dropdown states (77 provinces cascading)
   const [province, setProvince] = useState<string>("");
@@ -127,8 +171,170 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
     { id: "em-initial-1", name: "", relationship: "", phone: "" },
   ]);
 
-  // Load saved draft on initial mount
+  function calculateAge(val: string) {
+    if (!val) {
+      setCalculatedAgeText("");
+      setAgeYears("");
+      return;
+    }
+    const birth = new Date(val);
+    const now = new Date();
+    if (isNaN(birth.getTime()) || birth > now) return;
+
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    let days = now.getDate() - birth.getDate();
+
+    if (days < 0) {
+      months -= 1;
+      const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      days += prevMonth.getDate();
+    }
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+
+    setAgeYears(years);
+    setCalculatedAgeText(`อายุ: ${years} ปี ${months} เดือน ${days} วัน`);
+  }
+
+  // Load existing profile when logged in (booking queue mode)
   useEffect(() => {
+    if (!token) {
+      setProfileLoading(false);
+      return;
+    }
+    let active = true;
+    setProfileLoading(true);
+    patientApi
+      .account(token)
+      .then((data) => {
+        if (!active || !data.profile) return;
+        const p = data.profile;
+        if (p.first_name) setFirstName(p.first_name);
+        if (p.last_name) setLastName(p.last_name);
+        
+        // National ID resolution
+        let savedRawId = "";
+        try {
+          savedRawId = sessionStorage.getItem("patient_national_id") || localStorage.getItem("patient_national_id") || "";
+        } catch {
+          // ignore
+        }
+        const cleanSaved = savedRawId.replace(/\D/g, "");
+        const cleanP = p.national_id ? p.national_id.replace(/\D/g, "") : "";
+
+        if (cleanP.length === 13) {
+          setNationalId(cleanP);
+          try {
+            sessionStorage.setItem("patient_national_id", cleanP);
+            localStorage.setItem("patient_national_id", cleanP);
+          } catch {
+            // ignore
+          }
+        } else if (cleanSaved.length === 13) {
+          setNationalId(cleanSaved);
+        } else {
+          setNationalId("");
+        }
+
+        if (p.gender) setGender(p.gender);
+        if (p.phone) setPhone(p.phone);
+        if (p.birth_date) {
+          setBirthDate(p.birth_date);
+          calculateAge(p.birth_date);
+        } else if (p.age) {
+          setAgeYears(p.age);
+          setCalculatedAgeText(`อายุ: ${p.age} ปี`);
+        }
+        if (p.blood_type) setBloodType(p.blood_type);
+        if (p.height_cm) setHeightCm(String(p.height_cm));
+        if (p.weight_kg) setWeightKg(String(p.weight_kg));
+
+        // Chronic diseases
+        if (p.chronic_diseases) {
+          const items = p.chronic_diseases.split(",").map((s) => s.trim()).filter(Boolean);
+          const matched = items.filter((item) => CHRONIC_OPTIONS.includes(item));
+          const unmatched = items.filter((item) => !CHRONIC_OPTIONS.includes(item));
+          if (matched.length > 0) setSelectedDiseases(matched);
+          if (unmatched.length > 0) setCustomDisease(unmatched.join(", "));
+        }
+
+        // Allergies
+        if (p.allergies) {
+          const items = p.allergies.split(",").map((s) => s.trim()).filter(Boolean);
+          const matched = items.filter((item) => ALLERGY_OPTIONS.includes(item));
+          const unmatched = items.filter((item) => !ALLERGY_OPTIONS.includes(item));
+          if (matched.length > 0) setSelectedAllergies(matched);
+          if (unmatched.length > 0) setCustomAllergy(unmatched.join(", "));
+        }
+
+        // Medications
+        if (p.medications) {
+          const items = p.medications.split(",").map((s) => s.trim()).filter(Boolean);
+          const matched = items.filter((item) => MEDICATION_OPTIONS.includes(item));
+          const unmatched = items.filter((item) => !MEDICATION_OPTIONS.includes(item));
+          if (matched.length > 0) setSelectedMedications(matched);
+          if (unmatched.length > 0) setCustomMedication(unmatched.join(", "));
+        }
+
+        // Address
+        const prov = (p as any).province || (p.address ? ALL_77_PROVINCES.find((pv) => p.address?.includes(pv)) : "");
+        if (prov) {
+          setProvince(prov);
+          const dist = (p as any).district || (p.address ? getDistricts(prov).find((d) => p.address?.includes(d)) : "");
+          if (dist) {
+            setDistrict(dist);
+            const sub = (p as any).subdistrict || (p.address ? getSubdistricts(prov, dist).find((s) => p.address?.includes(s)) : "");
+            if (sub) {
+              setSubdistrict(sub);
+              const post = (p as any).postal_code || (p.address ? getPostalCode(prov, dist, sub) : "");
+              if (post) setPostalCode(post);
+            }
+          }
+        }
+
+        // Emergency contacts
+        if (p.emergency_contacts && p.emergency_contacts.length > 0) {
+          setEmergencyContacts(
+            p.emergency_contacts.map((c, i) => ({
+              id: c.id || `em-prof-${i}`,
+              name: c.name || "",
+              relationship: c.relationship || "",
+              phone: c.phone || "",
+            }))
+          );
+        } else if (p.emergency_name || p.emergency_phone) {
+          setEmergencyContacts([
+            {
+              id: "em-initial-1",
+              name: p.emergency_name || "",
+              relationship: (p as any).emergency_relationship || "",
+              phone: p.emergency_phone || "",
+            },
+          ]);
+        }
+        setHasLoadedProfile(true);
+      })
+      .catch((err) => {
+        if (!active) return;
+        const apiErr = err instanceof ApiError ? err : new ApiError(err instanceof Error ? err.message : "");
+        if (apiErr.status === 401 && onUnauthorized) {
+          onUnauthorized();
+        }
+      })
+      .finally(() => {
+        if (active) setProfileLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, onUnauthorized]);
+
+  // Load saved draft on initial mount (for guest new registrations)
+  useEffect(() => {
+    if (token) return;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
@@ -151,7 +357,9 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         if (draft.customDisease) setCustomDisease(draft.customDisease);
         if (Array.isArray(draft.selectedAllergies)) setSelectedAllergies(draft.selectedAllergies);
         if (draft.customAllergy) setCustomAllergy(draft.customAllergy);
-        if (draft.medications) setMedications(draft.medications);
+        if (Array.isArray(draft.selectedMedications)) setSelectedMedications(draft.selectedMedications);
+        if (draft.customMedication) setCustomMedication(draft.customMedication);
+        else if (draft.medications && !Array.isArray(draft.selectedMedications)) setCustomMedication(draft.medications);
         if (draft.province) setProvince(draft.province);
         if (draft.district) setDistrict(draft.district);
         if (draft.subdistrict) setSubdistrict(draft.subdistrict);
@@ -166,7 +374,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
     } catch {
       // Ignore localStorage errors
     }
-  }, []);
+  }, [token]);
 
   // Autosave draft when user modifies any input
   useEffect(() => {
@@ -181,7 +389,8 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         selectedSymptoms.length > 0 ||
         heightCm ||
         weightKg ||
-        medications ||
+        customMedication ||
+        selectedMedications.length > 0 ||
         province ||
         emergencyContacts.some((c) => c.name || c.phone);
 
@@ -205,7 +414,8 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
           customDisease,
           selectedAllergies,
           customAllergy,
-          medications,
+          selectedMedications,
+          customMedication,
           province,
           district,
           subdistrict,
@@ -242,7 +452,8 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
     customDisease,
     selectedAllergies,
     customAllergy,
-    medications,
+    selectedMedications,
+    customMedication,
     province,
     district,
     subdistrict,
@@ -274,7 +485,8 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
     setCustomDisease("");
     setSelectedAllergies([]);
     setCustomAllergy("");
-    setMedications("");
+    setSelectedMedications([]);
+    setCustomMedication("");
     setProvince("");
     setDistrict("");
     setSubdistrict("");
@@ -315,31 +527,7 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
   function handleBirthDateChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
     setBirthDate(val);
-    if (!val) {
-      setCalculatedAgeText("");
-      setAgeYears("");
-      return;
-    }
-    const birth = new Date(val);
-    const now = new Date();
-    if (isNaN(birth.getTime()) || birth > now) return;
-
-    let years = now.getFullYear() - birth.getFullYear();
-    let months = now.getMonth() - birth.getMonth();
-    let days = now.getDate() - birth.getDate();
-
-    if (days < 0) {
-      months -= 1;
-      const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-      days += prevMonth.getDate();
-    }
-    if (months < 0) {
-      years -= 1;
-      months += 12;
-    }
-
-    setAgeYears(years);
-    setCalculatedAgeText(`อายุ: ${years} ปี ${months} เดือน ${days} วัน`);
+    calculateAge(val);
   }
 
   function toggleSymptom(item: string) {
@@ -370,8 +558,65 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
     });
   }
 
+  function toggleMedication(item: string) {
+    if (item === "ไม่มียาที่ใช้ประจำ") {
+      setSelectedMedications(["ไม่มียาที่ใช้ประจำ"]);
+      return;
+    }
+    setSelectedMedications((prev) => {
+      const filtered = prev.filter((m) => m !== "ไม่มียาที่ใช้ประจำ");
+      return filtered.includes(item) ? filtered.filter((m) => m !== item) : [...filtered, item];
+    });
+  }
+
   const finalDiseases = [...selectedDiseases, customDisease.trim()].filter(Boolean).join(", ");
   const finalAllergies = [...selectedAllergies, customAllergy.trim()].filter(Boolean).join(", ");
+  const finalMedications = [...selectedMedications, customMedication.trim()].filter(Boolean).join(", ");
+  const isFormDirty = Boolean(
+    firstName.trim() ||
+    lastName.trim() ||
+    nationalId.trim() ||
+    phone.trim() ||
+    birthDate.trim() ||
+    customSymptom.trim() ||
+    selectedSymptoms.length > 0 ||
+    heightCm.trim() ||
+    weightKg.trim() ||
+    selectedDiseases.length > 0 ||
+    customDisease.trim() ||
+    selectedAllergies.length > 0 ||
+    customAllergy.trim() ||
+    selectedMedications.length > 0 ||
+    customMedication.trim() ||
+    province.trim() ||
+    district.trim() ||
+    subdistrict.trim() ||
+    postalCode.trim() ||
+    emergencyContacts.some((c) => c.name.trim() || c.phone.trim())
+  );
+
+  const handleCancelClick = () => {
+    if (isFormDirty) {
+      setShowCancelConfirm(true);
+    } else {
+      clearDraft();
+      if (onCancel) {
+        onCancel();
+      } else {
+        onLogin();
+      }
+    }
+  };
+
+  const handleConfirmCancel = () => {
+    setShowCancelConfirm(false);
+    clearDraft();
+    if (onCancel) {
+      onCancel();
+    } else {
+      onLogin();
+    }
+  };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -379,12 +624,51 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
     setMessage("");
     setInvalidField("");
     if (!form.reportValidity()) return;
+
+    const payload = collectRegistrationPayload(form);
+    if (!payload.national_id || payload.national_id.length !== 13) {
+      setInvalidField("national_id");
+      setMessage("กรุณาระบุเลขประจำตัวประชาชนให้ถูกต้องและครบ 13 หลัก");
+      const input = form.elements.namedItem("national_id");
+      if (input instanceof HTMLElement) input.focus();
+      return;
+    }
+
+    if (!finalDiseases) {
+      setInvalidField("chronic_diseases");
+      setMessage("กรุณาระบุข้อมูลโรคประจำตัว หรือเลือก 'ไม่มีโรคประจำตัว'");
+      const el = document.getElementById("field-group-chronic");
+      el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    if (!finalAllergies) {
+      setInvalidField("allergies");
+      setMessage("กรุณาระบุประวัติแพ้ยาและอาหาร หรือเลือก 'ไม่มีประวัติแพ้ยา'");
+      const el = document.getElementById("field-group-allergies");
+      el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    if (!finalMedications) {
+      setInvalidField("medications");
+      setMessage("กรุณาระบุข้อมูลยาที่ใช้ประจำ หรือเลือก 'ไม่มียาที่ใช้ประจำ'");
+      const el = document.getElementById("field-group-medications");
+      el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await patientApi.register(collectRegistrationPayload(form));
+      const result = await patientApi.register(payload);
       if (!result.access_token) throw new ApiError("เว็บหลักไม่ได้ส่ง access token กลับมา");
       try {
         localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem("opd_cancelled_queue_number");
+        if (payload.national_id) {
+          sessionStorage.setItem("patient_national_id", payload.national_id);
+          localStorage.setItem("patient_national_id", payload.national_id);
+        }
       } catch {
         // ignore
       }
@@ -437,6 +721,18 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
   };
   const fieldClass = (name: string) => invalidField === name ? "invalid" : "";
 
+  // Profile Loading Screen when fetching existing user data
+  if (profileLoading) {
+    return (
+      <section id="registrationView" className="page-shell">
+        <LoadingScreen
+          title="กำลังดึงข้อมูลผู้ป่วย"
+          subtitle="กรุณารอสักครู่ ระบบกำลังโหลดประวัติส่วนบุคคลเพื่อความสะดวกในการจองคิว"
+        />
+      </section>
+    );
+  }
+
   // PDPA Consent Gate Screen before entering registration form
   if (!isPdpaAccepted) {
     return (
@@ -480,23 +776,84 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
         </div>
       )}
 
+      {showCancelConfirm && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cancelConfirmTitle">
+          <div className="modal-content" style={{ maxWidth: "440px", textAlign: "center" }}>
+            <div style={{ fontSize: "2.5rem", marginBottom: "12px" }} aria-hidden="true">⚠️</div>
+            <h2 id="cancelConfirmTitle" style={{ fontSize: "1.25rem", fontWeight: 800, marginBottom: "8px", color: "var(--ink)" }}>
+              ยืนยันการยกเลิกหรือไม่?
+            </h2>
+            <p style={{ color: "var(--muted)", fontSize: "0.95rem", lineHeight: 1.5, marginBottom: "24px" }}>
+              คุณได้กรอกข้อมูลบางส่วนไว้แล้ว หากยกเลิก ข้อมูลที่กรอกไว้จะไม่ถูกบันทึกและระบบจะพากลับไปยังหน้าเดิม
+            </p>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ flex: 1 }}
+                onClick={() => setShowCancelConfirm(false)}
+              >
+                กรอกข้อมูลต่อ
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                style={{ flex: 1, backgroundColor: "#dc2626", borderColor: "#dc2626" }}
+                onClick={handleConfirmCancel}
+              >
+                ยืนยันยกเลิก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="intro">
         <span className="eyebrow">ระบบผู้ป่วยนอก (OPD)</span>
         <h1>{hasToken ? "จองคิวรับบริการ OPD วันนี้" : "ลงทะเบียนผู้ป่วยใหม่"}</h1>
-        <p>กรุณากรอกข้อมูลส่วนบุคคลเพื่อบันทึกประวัติการรักษาและจัดลำดับคิวรับบริการ</p>
+        <p>
+          {hasToken
+            ? "ระบบได้ดึงข้อมูลส่วนบุคคลของคุณมาให้อัตโนมัติแล้ว กรุณาเลือกหรือระบุอาการที่มารับบริการวันนี้"
+            : "กรุณากรอกข้อมูลส่วนบุคคลเพื่อบันทึกประวัติการรักษาและจัดลำดับคิวรับบริการ"}
+        </p>
         {!hasToken && (
           <div className="login-prompt">
             <span>มีประวัติการรักษาอยู่แล้ว?</span>
-            <button className="login-button" type="button" onClick={onLogin}>เข้าสู่ระบบ</button>
+            <button className="login-button" type="button" onClick={handleCancelClick}>เข้าสู่ระบบ</button>
           </div>
         )}
       </div>
 
       <ol className="steps" aria-label="ขั้นตอนรับบริการ">
-        <li className="active"><span>1</span>ลงทะเบียน</li>
+        <li className="active"><span>1</span>{hasToken ? "ระบุอาการ & จองคิว" : "ลงทะเบียน"}</li>
         <li><span>2</span>วัดสัญญาณชีพ</li>
         <li><span>3</span>รอเรียกคิว</li>
       </ol>
+
+      {hasToken && hasLoadedProfile && (
+        <div
+          className="profile-prefilled-banner"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)",
+            border: "1px solid #6ee7b7",
+            color: "#065f46",
+            padding: "14px 18px",
+            borderRadius: "var(--radius-md, 8px)",
+            marginBottom: "20px",
+            fontSize: "0.95rem",
+            boxShadow: "0 2px 8px rgba(5, 150, 105, 0.08)",
+          }}
+        >
+          <span style={{ fontSize: "1.5rem" }} aria-hidden="true">📋</span>
+          <div>
+            <strong style={{ display: "block", fontSize: "1rem", color: "#064e3b" }}>ดึงข้อมูลผู้ป่วยเดิมให้อัตโนมัติเรียบร้อยแล้ว</strong>
+            <span>คุณเพียงแค่ระบุ <u>อาการสำคัญที่มารับบริการ</u> ในข้อ 2 แล้วกดยืนยันเพื่อรับบัตรคิวได้ทันที</span>
+          </div>
+        </div>
+      )}
 
       {hasRestoredDraft && (
         <div className="draft-restore-banner" role="status">
@@ -549,7 +906,16 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
                 className={fieldClass("last_name")}
               />
             </Field>
-            <Field label="เลขประจำตัวประชาชน" required wide help="กรอกตัวเลข 13 หลักโดยไม่ต้องใส่เครื่องหมายขีด">
+            <Field
+              label="เลขประจำตัวประชาชน"
+              required
+              wide
+              help={
+                hasToken && nationalId && nationalId.length === 13 && !nationalId.includes("x")
+                  ? "ดึงจากบัญชีผู้ป่วยของคุณอัตโนมัติ"
+                  : "กรอกตัวเลข 13 หลักโดยไม่ต้องใส่เครื่องหมายขีด"
+              }
+            >
               <input
                 name="national_id"
                 maxLength={13}
@@ -559,9 +925,21 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
                 required
                 placeholder="ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"
                 value={nationalId}
+                readOnly={Boolean(hasToken && nationalId && nationalId.length === 13 && !nationalId.includes("x"))}
                 onInput={normalizeNationalId}
-                onChange={(e) => setNationalId(e.target.value)}
-                className={fieldClass("national_id")}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 13);
+                  setNationalId(val);
+                  if (val.length === 13) {
+                    try {
+                      sessionStorage.setItem("patient_national_id", val);
+                      localStorage.setItem("patient_national_id", val);
+                    } catch {
+                      // ignore
+                    }
+                  }
+                }}
+                className={`${fieldClass("national_id")} ${hasToken && nationalId && nationalId.length === 13 && !nationalId.includes("x") ? "readonly-field" : ""}`}
               />
             </Field>
             <Field label="เพศ">
@@ -713,15 +1091,24 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
           </div>
 
           {/* โรคประจำตัว ช้อยส์ */}
-          <div className="field-group-spacing">
-            <span className="field-group-title">โรคประจำตัว</span>
+          <div
+            id="field-group-chronic"
+            className={`field-group-spacing ${invalidField === "chronic_diseases" ? "field-group-invalid" : ""}`}
+          >
+            <span className="field-group-title">
+              โรคประจำตัว <b>*</b>
+              <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มีโรคประจำตัว&quot;)</small>
+            </span>
             <div className="choice-chips-group">
               {CHRONIC_OPTIONS.map((item) => (
                 <button
                   type="button"
                   key={item}
                   className={`choice-chip ${selectedDiseases.includes(item) ? "selected" : ""}`}
-                  onClick={() => toggleDisease(item)}
+                  onClick={() => {
+                    toggleDisease(item);
+                    if (invalidField === "chronic_diseases") setInvalidField("");
+                  }}
                 >
                   {item}
                 </button>
@@ -730,21 +1117,33 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
             <input
               placeholder="ระบุโรคประจำตัวอื่น ๆ (หากมี)"
               value={customDisease}
-              onChange={(e) => setCustomDisease(e.target.value)}
+              onChange={(e) => {
+                setCustomDisease(e.target.value);
+                if (invalidField === "chronic_diseases") setInvalidField("");
+              }}
             />
             <input type="hidden" name="chronic_diseases" value={finalDiseases} />
           </div>
 
           {/* ประวัติแพ้ยา ช้อยส์ */}
-          <div className="field-group-spacing">
-            <span className="field-group-title">ประวัติแพ้ยาและอาหาร</span>
+          <div
+            id="field-group-allergies"
+            className={`field-group-spacing ${invalidField === "allergies" ? "field-group-invalid" : ""}`}
+          >
+            <span className="field-group-title">
+              ประวัติแพ้ยาและอาหาร <b>*</b>
+              <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มีประวัติแพ้ยา&quot;)</small>
+            </span>
             <div className="choice-chips-group">
               {ALLERGY_OPTIONS.map((item) => (
                 <button
                   type="button"
                   key={item}
                   className={`choice-chip ${selectedAllergies.includes(item) ? "selected" : ""}`}
-                  onClick={() => toggleAllergy(item)}
+                  onClick={() => {
+                    toggleAllergy(item);
+                    if (invalidField === "allergies") setInvalidField("");
+                  }}
                 >
                   {item}
                 </button>
@@ -753,20 +1152,48 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
             <input
               placeholder="ระบุยาหรือสารที่แพ้อื่น ๆ (หากมี)"
               value={customAllergy}
-              onChange={(e) => setCustomAllergy(e.target.value)}
+              onChange={(e) => {
+                setCustomAllergy(e.target.value);
+                if (invalidField === "allergies") setInvalidField("");
+              }}
             />
             <input type="hidden" name="allergies" value={finalAllergies} />
           </div>
 
-          <Field label="ยาที่ใช้ประจำ" wide>
+          {/* ยาที่ใช้ประจำ ช้อยส์ */}
+          <div
+            id="field-group-medications"
+            className={`field-group-spacing ${invalidField === "medications" ? "field-group-invalid" : ""}`}
+          >
+            <span className="field-group-title">
+              ยาที่ใช้ประจำ <b>*</b>
+              <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มียาที่ใช้ประจำ&quot;)</small>
+            </span>
+            <div className="choice-chips-group">
+              {MEDICATION_OPTIONS.map((item) => (
+                <button
+                  type="button"
+                  key={item}
+                  className={`choice-chip ${selectedMedications.includes(item) ? "selected" : ""}`}
+                  onClick={() => {
+                    toggleMedication(item);
+                    if (invalidField === "medications") setInvalidField("");
+                  }}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
             <input
-              name="medications"
-              maxLength={1000}
-              placeholder="ระบุชื่อยาที่กำลังรับประทานอยู่ (ถ้ามี เช่น ยาลดความดัน ยาเบาหวาน)"
-              value={medications}
-              onChange={(e) => setMedications(e.target.value)}
+              placeholder="ระบุชื่อยาอื่น ๆ หรือรายละเอียดเพิ่มเติม (หากมี เช่น ขนาดยา วิธีรับประทาน)"
+              value={customMedication}
+              onChange={(e) => {
+                setCustomMedication(e.target.value);
+                if (invalidField === "medications") setInvalidField("");
+              }}
             />
-          </Field>
+            <input type="hidden" name="medications" value={finalMedications} />
+          </div>
         </fieldset>
 
         {/* Block 4: ที่อยู่ (Dropdown 77 จังหวัด และเชื่อมโยง อำเภอ/ตำบล/รหัสไปรษณีย์) */}
@@ -955,10 +1382,10 @@ export function RegistrationView({ hasToken, initialPdpaAccepted = false, onLogi
 
         <div className="form-actions">
           <button className="primary-button" type="submit" disabled={loading}>
-            <span>{loading ? "กำลังบันทึกข้อมูล..." : "บันทึกข้อมูลผู้ป่วย"}</span>
+            <span>{loading ? "กำลังบันทึกข้อมูล..." : hasToken ? "ยืนยันการจองคิวรับบริการ OPD" : "บันทึกข้อมูลผู้ป่วย"}</span>
             <i aria-hidden="true">{loading ? "↻" : "✓"}</i>
           </button>
-          <button className="secondary-button" type="reset">ยกเลิก</button>
+          <button className="secondary-button" type="button" onClick={handleCancelClick}>ยกเลิก</button>
         </div>
 
         <p className="privacy-note">ระบบจะไม่แสดงชื่อ อาการ หรือข้อมูลส่วนบุคคลบนจอแสดงสถานะคิวสาธารณะ</p>

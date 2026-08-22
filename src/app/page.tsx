@@ -82,6 +82,10 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
+    if (!token && view !== "login" && view !== "thaid_connect" && view !== "registration") {
+      setView("login");
+      return;
+    }
     document.body.dataset.view = `${view}View`;
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (view === "status" || view === "registration" || view === "account" || view === "settings" || view === "login") {
@@ -91,7 +95,7 @@ export default function Page() {
         // Ignore
       }
     }
-  }, [view]);
+  }, [view, token]);
 
   const authenticate = useCallback((accessToken: string) => {
     saveToken(accessToken);
@@ -170,6 +174,7 @@ export default function Page() {
   const hasActiveQueue = Boolean(activeQueueNumber || hasSavedAccount);
 
   const isAuthGateView =
+    !hasSavedAccount ||
     view === "login" ||
     view === "thaid_connect" ||
     view === "pin_unlock" ||
@@ -260,9 +265,12 @@ export default function Page() {
 
       {view === "registration" && (
         <RegistrationView
+          token={token}
           hasToken={hasSavedAccount}
           onLogin={() => setView("login")}
+          onCancel={() => setView(hasSavedAccount ? "status" : "login")}
           onSuccess={registrationSuccess}
+          onUnauthorized={expireSession}
         />
       )}
 

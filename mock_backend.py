@@ -49,6 +49,15 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             self._send_json(200, response_data)
             return
 
+        # 3. Cancel Queue Endpoint
+        if path == "/api/patient/queue/cancel/":
+            response_data = {
+                "ok": True,
+                "message": "ยกเลิกคิวเรียบร้อยแล้ว"
+            }
+            self._send_json(200, response_data)
+            return
+
         self._send_json(404, {"ok": False, "error": "Not Found"})
 
     def do_GET(self):

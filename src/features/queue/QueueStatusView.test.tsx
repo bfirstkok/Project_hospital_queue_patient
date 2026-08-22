@@ -87,4 +87,81 @@ describe("QueueStatusView", () => {
     const saveImgBtn = screen.getByRole("button", { name: /บันทึกบัตรคิวเป็นรูปภาพ/ });
     expect(saveImgBtn).toBeInTheDocument();
   });
+
+  it("handles cancelling active queue with 2-step confirmation modal", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            queue_number: "C001",
+            status_label: "รอตรวจ",
+            instruction: "กรุณารอสักครู่",
+            queue_position: 1,
+            room: "ห้องตรวจ 3",
+            updated_at: "2026-08-20T10:00:00Z",
+          }),
+          { headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            message: "ยกเลิกคิวเรียบร้อยแล้ว",
+          }),
+          { headers: { "content-type": "application/json" } }
+        )
+      );
+
+    render(
+      createElement(QueueStatusView, {
+        token: "mock_token",
+        onAccount: vi.fn(),
+        onUnauthorized: vi.fn(),
+      })
+    );
+
+    await waitFor(() => expect(screen.getByText("C001")).toBeInTheDocument());
+
+    // Click cancel queue button
+    const cancelBtn = screen.getByRole("button", { name: "ยกเลิกคิวรับบริการ" });
+    fireEvent.click(cancelBtn);
+
+    // Step 1 modal appears
+    expect(screen.getByText("ขั้นตอนที่ 1 จาก 2 : ตรวจสอบความตั้งใจ")).toBeInTheDocument();
+    expect(screen.getByText("คุณต้องการยกเลิกคิวรับบริการหรือไม่?")).toBeInTheDocument();
+
+    // Dismiss modal on step 1
+    const dismissBtn = screen.getByRole("button", { name: "ไม่ยกเลิก (คงคิวไว้)" });
+    fireEvent.click(dismissBtn);
+    expect(screen.queryByText("ขั้นตอนที่ 1 จาก 2 : ตรวจสอบความตั้งใจ")).toBeNull();
+    expect(screen.getByText("C001")).toBeInTheDocument();
+
+    // Open again to Step 1
+    fireEvent.click(cancelBtn);
+    expect(screen.getByText("ขั้นตอนที่ 1 จาก 2 : ตรวจสอบความตั้งใจ")).toBeInTheDocument();
+
+    // Proceed to Step 2
+    const nextStepBtn = screen.getByRole("button", { name: "ดำเนินการต่อ (ขั้นที่ 2) →" });
+    fireEvent.click(nextStepBtn);
+
+    // Step 2 modal appears
+    expect(screen.getByText("ขั้นตอนที่ 2 จาก 2 : ยืนยันครั้งสุดท้าย")).toBeInTheDocument();
+    expect(screen.getByText(/ยืนยันการสละสิทธิ์คิว C001/)).toBeInTheDocument();
+
+    // Test back button to Step 1
+    const backBtn = screen.getByRole("button", { name: "← ย้อนกลับ" });
+    fireEvent.click(backBtn);
+    expect(screen.getByText("ขั้นตอนที่ 1 จาก 2 : ตรวจสอบความตั้งใจ")).toBeInTheDocument();
+
+    // Go to Step 2 again and Confirm
+    fireEvent.click(screen.getByRole("button", { name: "ดำเนินการต่อ (ขั้นที่ 2) →" }));
+    const confirmBtn = screen.getByRole("button", { name: "ยืนยันยกเลิกคิวทันที" });
+    fireEvent.click(confirmBtn);
+
+    // Should call cancel API and show success message in no-queue view
+    await waitFor(() => expect(screen.getByText("ยกเลิกคิวรับบริการเรียบร้อยแล้ว")).toBeInTheDocument());
+    expect(screen.getByText("ยังไม่มีคิวรับบริการในขณะนี้")).toBeInTheDocument();
+  });
 });

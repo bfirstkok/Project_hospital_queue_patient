@@ -15,7 +15,12 @@ export function AppNavbar({
   onSelectView,
   hasActiveQueue,
   queueNumber,
+  hasToken,
 }: AppNavbarProps) {
+  if (!hasToken) {
+    return null;
+  }
+
   const items: Array<{
     id: NavView;
     label: string;

@@ -50,5 +50,9 @@ export const patientApi = {
     body: JSON.stringify({ national_id: nationalId.trim() }),
   }),
   queue: (token: string) => request<QueueData>("/api/patient/queue/", { cache: "no-store" }, token),
+  cancelQueue: (token: string) => request<ApiEnvelope>("/api/patient/queue/cancel/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  }, token),
   account: (token: string) => request<AccountData>("/api/patient/me/", { cache: "no-store" }, token),
 };

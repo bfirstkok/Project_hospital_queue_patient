@@ -20,6 +20,12 @@ export function ThaidConnectView({ onSuccess, onCancel }: ThaidConnectViewProps)
       if (!result.access_token) {
         throw new ApiError("ระบบ ThaID ไม่ส่ง Access Token กลับมา");
       }
+      try {
+        sessionStorage.setItem("patient_national_id", mockThaId);
+        localStorage.setItem("patient_national_id", mockThaId);
+      } catch {
+        // ignore
+      }
       onSuccess(result.access_token);
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "การเชื่อมต่อ ThaID ล้มเหลว");

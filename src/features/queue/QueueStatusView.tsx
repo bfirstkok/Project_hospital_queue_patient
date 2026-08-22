@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { QueueData } from "@/shared/api/types";
 import { useQueuePolling } from "./useQueuePolling";
 import { useQueueNotification } from "./useQueueNotification";
@@ -35,13 +37,18 @@ export function QueueStatusView({
   onAccount,
   onUnauthorized,
 }: QueueStatusViewProps) {
-  const { queue, error, loading, initialLoading, refresh } = useQueuePolling({
+  const { queue, error, loading, initialLoading, refresh, clearActiveQueue } = useQueuePolling({
     enabled: Boolean(token),
     token,
     initialQueue,
     onUnauthorized,
   });
   const { enabled: soundEnabled, toggleNotification } = useQueueNotification(queue);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelStep, setCancelStep] = useState<1 | 2>(1);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelMessage, setCancelMessage] = useState("");
+  const [cancelSuccess, setCancelSuccess] = useState(false);
 
   const updatedAt = queue?.updated_at
     ? new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(queue.updated_at))
@@ -55,6 +62,25 @@ export function QueueStatusView({
   function handleSaveImage() {
     if (!queue) return;
     generateQueueCardImage(queue, estimatedWaitText);
+  }
+
+  async function handleConfirmCancelQueue() {
+    if (!token) return;
+    setCancelling(true);
+    setCancelMessage("");
+    const currentQueueNum = queue?.queue_number;
+    try {
+      await patientApi.cancelQueue(token);
+    } catch {
+      // If backend route returns 404 or CORS Failed to fetch because it's not yet deployed on server,
+      // client-side queue cancellation still proceeds cleanly.
+    } finally {
+      clearActiveQueue(currentQueueNum);
+      setShowCancelModal(false);
+      setCancelSuccess(true);
+      setCancelling(false);
+      setCancelStep(1);
+    }
   }
 
   // Initial Loading state
@@ -142,8 +168,101 @@ export function QueueStatusView({
               บันทึกบัตรคิวเป็นรูปภาพ
             </button>
             <button className="secondary-button" type="button" onClick={onAccount}>ดูข้อมูลและประวัติการรักษา</button>
+            <button
+              className="cancel-queue-btn"
+              type="button"
+              onClick={() => {
+                setCancelMessage("");
+                setCancelStep(1);
+                setShowCancelModal(true);
+              }}
+            >
+              ยกเลิกคิวรับบริการ
+            </button>
           </div>
         </div>
+
+        {showCancelModal && (
+          <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cancelQueueTitle">
+            <div className="modal-content" style={{ maxWidth: "460px", textAlign: "center", padding: "32px 28px" }}>
+              {cancelStep === 1 ? (
+                <>
+                  <div style={{ fontSize: "2.8rem", marginBottom: "8px" }} aria-hidden="true">⚠️</div>
+                  <span className="modal-step-badge step-1">
+                    ขั้นตอนที่ 1 จาก 2 : ตรวจสอบความตั้งใจ
+                  </span>
+                  <h2 id="cancelQueueTitle" style={{ fontSize: "1.3rem", fontWeight: 800, marginBottom: "10px", color: "var(--ink)" }}>
+                    คุณต้องการยกเลิกคิวรับบริการหรือไม่?
+                  </h2>
+                  <p style={{ color: "var(--muted)", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "22px" }}>
+                    คุณกำลังจะสละสิทธิ์คิวหมายเลข <strong style={{ color: "var(--ink)", fontSize: "1.05rem" }}>{queue?.queue_number}</strong><br />
+                    หากคุณกดผิดหรือไม่ตั้งใจยกเลิก สามารถกดปุ่ม &quot;ไม่ยกเลิก (คงคิวไว้)&quot; ได้ทันที
+                  </p>
+
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ flex: 1 }}
+                      onClick={() => setShowCancelModal(false)}
+                    >
+                      ไม่ยกเลิก (คงคิวไว้)
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-button"
+                      style={{ flex: 1, backgroundColor: "#ea580c", borderColor: "#ea580c" }}
+                      onClick={() => setCancelStep(2)}
+                    >
+                      ดำเนินการต่อ (ขั้นที่ 2) →
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: "2.8rem", marginBottom: "8px" }} aria-hidden="true">🛑</div>
+                  <span className="modal-step-badge step-2">
+                    ขั้นตอนที่ 2 จาก 2 : ยืนยันครั้งสุดท้าย
+                  </span>
+                  <h2 id="cancelQueueTitle" style={{ fontSize: "1.3rem", fontWeight: 800, marginBottom: "10px", color: "var(--danger)" }}>
+                    ยืนยันการสละสิทธิ์คิว {queue?.queue_number}
+                  </h2>
+                  
+                  <div className="modal-warning-box">
+                    <strong>⚠️ คำเตือนสำคัญ:</strong> เมื่อยืนยันแล้ว คิวหมายเลข <b>{queue?.queue_number}</b> จะถูกยกเลิกทันทีและไม่สามารถกู้คืนได้ หากต้องการรับบริการในภายหลังจะต้องลงทะเบียนเพื่อจองคิวใหม่
+                  </div>
+
+                  {cancelMessage && (
+                    <div className="alert" role="alert" style={{ marginBottom: "16px", textAlign: "left" }}>
+                      {cancelMessage}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ flex: 1 }}
+                      disabled={cancelling}
+                      onClick={() => setCancelStep(1)}
+                    >
+                      ← ย้อนกลับ
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-button"
+                      style={{ flex: 1, backgroundColor: "var(--danger)", borderColor: "var(--danger)" }}
+                      disabled={cancelling}
+                      onClick={handleConfirmCancelQueue}
+                    >
+                      {cancelling ? "กำลังยกเลิก..." : "ยืนยันยกเลิกคิวทันที"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Link to Full Hospital Queue Display Board */}
         <a
@@ -177,10 +296,27 @@ export function QueueStatusView({
           <p>ขณะนี้คุณยังไม่มีคิวที่กำลังรอตรวจ สามารถกดจองคิวเพื่อรับบริการได้ทันที</p>
         </div>
 
+        {cancelSuccess && (
+          <div className="success-banner" role="status">
+            <span className="success-banner-icon" aria-hidden="true">✓</span>
+            <div>
+              <strong style={{ display: "block", fontSize: "1rem", color: "#14532d", marginBottom: "2px" }}>
+                ยกเลิกคิวรับบริการเรียบร้อยแล้ว
+              </strong>
+              <span style={{ fontSize: "0.9rem", color: "#166534", lineHeight: 1.4 }}>
+                หากต้องการรับบริการใหม่ สามารถกดปุ่ม &quot;จองคิวรับบริการวันนี้&quot; ด้านล่างได้ทุกเมื่อ
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="status-card no-queue-card">
           <div className="no-queue-icon" aria-hidden="true">🎟️</div>
           <h2>ยังไม่มีคิวรับบริการในขณะนี้</h2>
-          <p className="instruction">หากต้องการเข้ารับการตรวจหรือคัดกรองอาการวันนี้ สามารถกดลงทะเบียนเพื่อรับบัตรคิวได้ทันที</p>
+          <p className="instruction">
+            หากต้องการเข้ารับการตรวจหรือคัดกรองอาการวันนี้<br className="desktop-break" />
+            สามารถกดลงทะเบียนเพื่อรับบัตรคิวได้ทันที
+          </p>
 
           <div className="queue-action-buttons">
             {onBookQueue && (

@@ -138,6 +138,11 @@ describe("RegistrationView", () => {
     fireEvent.change(screen.getByLabelText("อายุ"), { target: { value: "30" } });
     fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
     
+    // Select sensitive health fields (mandatory)
+    fireEvent.click(screen.getByRole("button", { name: "ไม่มีโรคประจำตัว" }));
+    fireEvent.click(screen.getByRole("button", { name: "ไม่มีประวัติแพ้ยา" }));
+    fireEvent.click(screen.getByRole("button", { name: "ไม่มียาที่ใช้ประจำ" }));
+
     // Address dropdown selection
     fireEvent.change(screen.getByLabelText("จังหวัด"), { target: { value: "ขอนแก่น" } });
     fireEvent.change(screen.getByLabelText("อำเภอ / เขต"), { target: { value: "เมืองขอนแก่น" } });
@@ -153,5 +158,128 @@ describe("RegistrationView", () => {
     expect(fetchBody).toContain('"district":"เมืองขอนแก่น"');
     expect(fetchBody).toContain('"subdistrict":"ศิลา"');
     expect(fetchBody).toContain('"postal_code":"40000"');
+    expect(fetchBody).toContain('"chronic_diseases":"ไม่มีโรคประจำตัว"');
+    expect(fetchBody).toContain('"allergies":"ไม่มีประวัติแพ้ยา"');
+    expect(fetchBody).toContain('"medications":"ไม่มียาที่ใช้ประจำ"');
+  });
+
+  it("requires mandatory sensitive health information before submission", async () => {
+    render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess: vi.fn() }));
+
+    fireEvent.change(screen.getByLabelText("ชื่อ *"), { target: { value: "สมชาย" } });
+    fireEvent.change(screen.getByLabelText("นามสกุล *"), { target: { value: "ใจดี" } });
+    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1234567890123" } });
+    fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
+
+    // Try submit without selecting chronic diseases
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
+    expect(screen.getByText("กรุณาระบุข้อมูลโรคประจำตัว หรือเลือก 'ไม่มีโรคประจำตัว'")).toBeDefined();
+
+    // Select chronic disease
+    fireEvent.click(screen.getByRole("button", { name: "ไม่มีโรคประจำตัว" }));
+
+    // Try submit without allergies
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
+    expect(screen.getByText("กรุณาระบุประวัติแพ้ยาและอาหาร หรือเลือก 'ไม่มีประวัติแพ้ยา'")).toBeDefined();
+
+    // Select allergies
+    fireEvent.click(screen.getByRole("button", { name: "ไม่มีประวัติแพ้ยา" }));
+
+    // Try submit without medications
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
+    expect(screen.getByText("กรุณาระบุข้อมูลยาที่ใช้ประจำ หรือเลือก 'ไม่มียาที่ใช้ประจำ'")).toBeDefined();
+  });
+
+  it("directly triggers onCancel/onLogin when cancel is clicked on an untouched form", async () => {
+    const onCancel = vi.fn();
+    render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onCancel, onSuccess: vi.fn() }));
+
+    fireEvent.click(screen.getByRole("button", { name: "ยกเลิก" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("ยืนยันการยกเลิกหรือไม่?")).toBeNull();
+  });
+
+  it("shows confirmation modal when form has input and allows canceling or continuing", async () => {
+    const onCancel = vi.fn();
+    render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onCancel, onSuccess: vi.fn() }));
+
+    fireEvent.change(screen.getByLabelText("ชื่อ *"), { target: { value: "สมชาย" } });
+
+    // Click cancel button
+    fireEvent.click(screen.getByRole("button", { name: "ยกเลิก" }));
+
+    // Should open modal
+    expect(screen.getByText("ยืนยันการยกเลิกหรือไม่?")).toBeDefined();
+    expect(onCancel).not.toHaveBeenCalled();
+
+    // Click continue filling
+    fireEvent.click(screen.getByRole("button", { name: "กรอกข้อมูลต่อ" }));
+    expect(screen.queryByText("ยืนยันการยกเลิกหรือไม่?")).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+
+    // Click cancel again and confirm
+    fireEvent.click(screen.getByRole("button", { name: "ยกเลิก" }));
+    fireEvent.click(screen.getByRole("button", { name: "ยืนยันยกเลิก" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("pre-fills existing patient profile data automatically when token is provided", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          profile: {
+            first_name: "กิตติ",
+            last_name: "มีสุข",
+            national_id: "1100200300401",
+            phone: "0891234567",
+            gender: "MALE",
+            birth_date: "1995-05-15",
+            blood_type: "B",
+            height_cm: 175,
+            weight_kg: 70,
+            chronic_diseases: "ความดันโลหิตสูง, ไตเรื้อรัง",
+            allergies: "แพ้ยากลุ่มเพนิซิลลิน (Penicillin)",
+            medications: "ยาลดความดันโลหิต",
+            address: "อำเภอเมืองขอนแก่น ตำบลศิลา ขอนแก่น 40000",
+            emergency_name: "มารดา สมหญิง",
+            emergency_phone: "0897654321",
+          },
+        }),
+        { headers: { "content-type": "application/json" } }
+      )
+    );
+
+    render(
+      createElement(RegistrationView, {
+        token: "mock-token-xyz",
+        hasToken: true,
+        onLogin: vi.fn(),
+        onCancel: vi.fn(),
+        onSuccess: vi.fn(),
+      })
+    );
+
+    // Wait for profile loading to finish
+    await waitFor(() => expect(screen.getByText("ดึงข้อมูลผู้ป่วยเดิมให้อัตโนมัติเรียบร้อยแล้ว")).toBeDefined());
+
+    // Verify fields are pre-filled
+    expect((screen.getByLabelText("ชื่อ *") as HTMLInputElement).value).toBe("กิตติ");
+    expect((screen.getByLabelText("นามสกุล *") as HTMLInputElement).value).toBe("มีสุข");
+    expect((screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด") as HTMLInputElement).value).toBe("1100200300401");
+    expect((screen.getAllByLabelText("เบอร์โทรศัพท์")[0] as HTMLInputElement).value).toBe("0891234567");
+    expect((screen.getByLabelText("ส่วนสูง") as HTMLInputElement).value).toBe("175");
+    expect((screen.getByLabelText("น้ำหนัก") as HTMLInputElement).value).toBe("70");
+
+    // Choice chips should be marked selected
+    expect(screen.getByRole("button", { name: "ความดันโลหิตสูง" }).className).toContain("selected");
+    expect(screen.getByRole("button", { name: "แพ้ยากลุ่มเพนิซิลลิน (Penicillin)" }).className).toContain("selected");
+    expect(screen.getByRole("button", { name: "ยาลดความดันโลหิต" }).className).toContain("selected");
+
+    // Custom non-chip disease should be placed in custom input
+    expect((screen.getByPlaceholderText("ระบุโรคประจำตัวอื่น ๆ (หากมี)") as HTMLInputElement).value).toBe("ไตเรื้อรัง");
+
+    // Submit button should display booking text
+    expect(screen.getByRole("button", { name: /ยืนยันการจองคิวรับบริการ OPD/ })).toBeDefined();
   });
 });

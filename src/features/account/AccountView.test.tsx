@@ -86,4 +86,59 @@ describe("AccountView", () => {
     await waitFor(() => expect(screen.getByText("0899999999")).toBeInTheDocument());
     expect(screen.getByText(/มารดา ใจดี/)).toBeInTheDocument();
   });
+
+  it("syncs live queue and suppresses cancelled queue in AccountView", async () => {
+    sessionStorage.setItem("opd_cancelled_queue_number", "Q-OLD");
+
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      if (url.includes("/api/patient/queue/")) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            queue_number: "A001",
+            status_label: "รอตรวจ",
+            instruction: "รอเรียกหน้าห้องตรวจ 3",
+            room: "ห้องตรวจ 3",
+            queue_position: 1,
+            updated_at: "2026-08-22T10:00:00Z",
+          }),
+          { headers: { "content-type": "application/json" } }
+        );
+      }
+      // /api/patient/me/
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          profile: {
+            first_name: "สมศรี",
+            last_name: "สดใส",
+            national_id: "1234567890123",
+          },
+          active_queue: {
+            queue_number: "Q-OLD",
+            status_label: "คิวเก่า",
+            instruction: "...",
+          },
+          visits: [],
+          appointments: [],
+        }),
+        { headers: { "content-type": "application/json" } }
+      );
+    });
+
+    render(
+      createElement(AccountView, {
+        token: "token",
+        onQueue: vi.fn(),
+        onLogout: vi.fn(),
+        onUnauthorized: vi.fn(),
+      })
+    );
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "สมศรี สดใส" })).toBeInTheDocument());
+    // Should show live queue A001 instead of stale/cancelled Q-OLD
+    expect(screen.getByText("A001")).toBeInTheDocument();
+    expect(screen.queryByText("Q-OLD")).toBeNull();
+  });
 });

@@ -20,8 +20,17 @@ export function LoginView({ onRegister, onThaidConnect, onSuccess }: LoginViewPr
     setLoading(true);
     try {
       const nationalId = new FormData(form).get("national_id");
-      const result = await patientApi.login(typeof nationalId === "string" ? nationalId : "");
+      const rawId = typeof nationalId === "string" ? nationalId.replace(/\D/g, "") : "";
+      const result = await patientApi.login(rawId);
       if (!result.access_token) throw new ApiError("เว็บหลักไม่ได้ส่ง access token กลับมา");
+      if (rawId) {
+        try {
+          sessionStorage.setItem("patient_national_id", rawId);
+          localStorage.setItem("patient_national_id", rawId);
+        } catch {
+          // ignore
+        }
+      }
       onSuccess(result.access_token);
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "ไม่สามารถเข้าสู่ระบบได้");
@@ -116,7 +125,7 @@ export function LoginView({ onRegister, onThaidConnect, onSuccess }: LoginViewPr
             className="secondary-button register-link-btn"
             onClick={onRegister}
           >
-            📝 ลงทะเบียนผู้ป่วยใหม่ / จองคิว OPD
+            📝 ลงทะเบียนผู้ป่วยใหม่
           </button>
         </div>
 

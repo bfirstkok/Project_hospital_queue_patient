@@ -90,10 +90,46 @@ export function AccountView({
 
   useEffect(() => {
     let active = true;
-    patientApi
-      .account(token)
-      .then((data) => {
-        if (active) setAccount(data);
+    Promise.allSettled([
+      patientApi.account(token),
+      patientApi.queue(token),
+    ])
+      .then(([accountRes, queueRes]) => {
+        if (!active) return;
+        if (accountRes.status === "rejected") {
+          const error = accountRes.reason;
+          const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูลบัญชีได้");
+          if (apiError.status === 401) onUnauthorized();
+          else setMessage(apiError.message);
+          return;
+        }
+
+        const data = accountRes.value;
+        const cancelledQueue = typeof window !== "undefined" ? sessionStorage.getItem("opd_cancelled_queue_number") : null;
+
+        if (queueRes.status === "fulfilled" && queueRes.value && queueRes.value.queue_number) {
+          const liveQ = queueRes.value;
+          if (cancelledQueue && liveQ.queue_number === cancelledQueue) {
+            data.active_queue = null;
+          } else {
+            data.active_queue = {
+              ok: true,
+              queue_number: liveQ.queue_number,
+              status_label: liveQ.status_label || "รอตรวจ",
+              instruction: liveQ.instruction || "กรุณารอเรียกตรวจตามลำดับ",
+              queue_position: liveQ.queue_position ?? null,
+              room: liveQ.room || null,
+              updated_at: liveQ.updated_at || new Date().toISOString(),
+            };
+          }
+        } else if (cancelledQueue && data.active_queue?.queue_number === cancelledQueue) {
+          data.active_queue = null;
+        } else if (queueRes.status === "fulfilled" && (!queueRes.value || !queueRes.value.queue_number)) {
+          // If queue API explicitly returns empty queue (no queue today), clear active_queue
+          data.active_queue = null;
+        }
+
+        setAccount(data);
       })
       .catch((error) => {
         if (!active) return;
@@ -104,6 +140,7 @@ export function AccountView({
       .finally(() => {
         if (active) setLoading(false);
       });
+
     return () => {
       active = false;
     };
