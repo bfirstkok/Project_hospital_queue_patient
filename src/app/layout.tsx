@@ -12,7 +12,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="th">
       <body>
         {children}
-        <Script src="/runtime-config.js" strategy="beforeInteractive" />
+        <Script src="/patient/runtime-config.js" strategy="beforeInteractive" />
       </body>
     </html>
   );

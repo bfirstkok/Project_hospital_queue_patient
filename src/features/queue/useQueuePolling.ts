@@ -61,7 +61,6 @@ export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }
       setInitialLoading(false);
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch resolves asynchronously.
     void refresh();
     const timer = window.setInterval(() => void refresh(true), getRuntimeConfig().statusRefreshMs);
     return () => window.clearInterval(timer);
