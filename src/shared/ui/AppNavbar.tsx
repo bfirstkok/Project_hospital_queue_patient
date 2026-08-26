@@ -27,6 +27,7 @@ export function AppNavbar({
     icon: ReactNode;
     hasBadge?: boolean;
     badgeText?: string | null;
+    disabled?: boolean;
   }> = [
     {
       id: "status",
@@ -44,7 +45,8 @@ export function AppNavbar({
     },
     {
       id: "registration",
-      label: "จองคิว",
+      label: hasActiveQueue ? "มีคิวแล้ว" : "จองคิว",
+      disabled: Boolean(hasActiveQueue),
       icon: (
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M12 5v14M5 12h14" />
@@ -84,6 +86,8 @@ export function AppNavbar({
               type="button"
               className={`nav-tab-btn ${isActive ? "active" : ""}`}
               onClick={() => onSelectView(item.id)}
+              disabled={item.disabled}
+              title={item.disabled ? "มีคิวที่กำลังรับบริการอยู่แล้ว กรุณาตรวจสอบคิวเดิม" : undefined}
               aria-current={isActive ? "page" : undefined}
             >
               <div className="nav-icon-wrapper">

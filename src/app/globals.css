@@ -1915,9 +1915,16 @@ footer {
   text-decoration: none;
 }
 
-.nav-tab-btn:hover {
+.nav-tab-btn:hover:not(:disabled) {
   background: var(--surface-alt);
   color: var(--primary);
+}
+
+.nav-tab-btn:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: #f1f5f4;
+  opacity: 0.82;
 }
 
 .nav-tab-btn.active {

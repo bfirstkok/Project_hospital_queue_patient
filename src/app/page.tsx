@@ -46,6 +46,7 @@ export default function Page() {
   const [view, setView] = useState<View>("login");
   const [token, setToken] = useState("");
   const [initialQueue, setInitialQueue] = useState<Partial<RegistrationResult> | null>(null);
+  const [queueActive, setQueueActive] = useState(false);
   const [fontSize, setFontSize] = useState<FontSize>(getInitialFontSize);
   const [initialized, setInitialized] = useState(false);
 
@@ -102,10 +103,16 @@ export default function Page() {
     setToken(accessToken);
   }, []);
 
+  const handleQueueStateChange = useCallback((active: boolean) => {
+    setQueueActive(active);
+    if (!active) setInitialQueue(null);
+  }, []);
+
   const expireSession = useCallback(() => {
     clearToken();
     setToken("");
     setInitialQueue(null);
+    setQueueActive(false);
     try {
       localStorage.removeItem(VIEW_STORAGE_KEY);
     } catch {
@@ -118,6 +125,7 @@ export default function Page() {
     clearToken();
     setToken("");
     setInitialQueue(null);
+    setQueueActive(false);
     try {
       localStorage.removeItem(VIEW_STORAGE_KEY);
     } catch {
@@ -131,6 +139,7 @@ export default function Page() {
     clearPin();
     setToken("");
     setInitialQueue(null);
+    setQueueActive(false);
     try {
       localStorage.removeItem(VIEW_STORAGE_KEY);
     } catch {
@@ -139,9 +148,17 @@ export default function Page() {
     setView("login");
   }, []);
 
+  const activeQueueNumber = initialQueue?.queue_number || null;
+  const hasSavedAccount = Boolean(token);
+  const hasActiveQueue = Boolean(activeQueueNumber || queueActive);
+
   function handleSelectNav(navView: NavView) {
     if (!token && navView !== "registration") {
       setView("login");
+      return;
+    }
+    if (navView === "registration" && hasActiveQueue) {
+      setView("status");
       return;
     }
     setView(navView);
@@ -150,12 +167,14 @@ export default function Page() {
   function registrationSuccess(accessToken: string, result: RegistrationResult) {
     authenticate(accessToken);
     setInitialQueue(result);
+    setQueueActive(true);
     setView("status");
   }
 
   function loginSuccess(accessToken: string) {
     authenticate(accessToken);
     setInitialQueue(null);
+    setQueueActive(false);
     setView("status");
   }
 
@@ -168,10 +187,6 @@ export default function Page() {
       // Ignore
     }
   }
-
-  const activeQueueNumber = initialQueue?.queue_number || null;
-  const hasSavedAccount = Boolean(token);
-  const hasActiveQueue = Boolean(activeQueueNumber || hasSavedAccount);
 
   const isAuthGateView =
     !hasSavedAccount ||
@@ -260,6 +275,7 @@ export default function Page() {
           onLogin={() => setView("login")}
           onAccount={() => setView("account")}
           onUnauthorized={expireSession}
+          onQueueStateChange={handleQueueStateChange}
         />
       )}
 

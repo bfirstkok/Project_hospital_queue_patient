@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { QueueData } from "@/shared/api/types";
 import { useQueuePolling } from "./useQueuePolling";
@@ -14,6 +14,7 @@ interface QueueStatusViewProps {
   onMedical?: () => void;
   onAccount: () => void;
   onUnauthorized: () => void;
+  onQueueStateChange?: (hasActiveQueue: boolean) => void;
 }
 
 function calculateEstimatedWaitTime(position: number | null | undefined, statusLabel: string): string {
@@ -36,6 +37,7 @@ export function QueueStatusView({
   onMedical,
   onAccount,
   onUnauthorized,
+  onQueueStateChange,
 }: QueueStatusViewProps) {
   const { queue, error, loading, initialLoading, refresh, clearActiveQueue } = useQueuePolling({
     enabled: Boolean(token),
@@ -49,6 +51,12 @@ export function QueueStatusView({
   const [cancelling, setCancelling] = useState(false);
   const [cancelMessage, setCancelMessage] = useState("");
   const [cancelSuccess, setCancelSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!initialLoading) {
+      onQueueStateChange?.(Boolean(queue?.queue_number));
+    }
+  }, [initialLoading, onQueueStateChange, queue?.queue_number]);
 
   const updatedAt = queue?.updated_at
     ? new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(queue.updated_at))
