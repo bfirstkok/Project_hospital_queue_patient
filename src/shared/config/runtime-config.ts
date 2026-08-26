@@ -14,8 +14,9 @@ export interface RuntimeConfig {
 
 export function getRuntimeConfig(): RuntimeConfig {
   const runtime = typeof window === "undefined" ? undefined : window.PATIENT_APP_ENV;
+  const sameOriginApiBaseUrl = typeof window === "undefined" ? "" : window.location.origin;
   return {
-    apiBaseUrl: String(runtime?.API_BASE_URL || "").trim().replace(/\/$/, ""),
+    apiBaseUrl: String(runtime?.API_BASE_URL || sameOriginApiBaseUrl).trim().replace(/\/$/, ""),
     statusRefreshMs: Number(runtime?.STATUS_REFRESH_MS) || 10000,
   };
 }
