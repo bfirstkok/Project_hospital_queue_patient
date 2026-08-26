@@ -68,18 +68,20 @@ export function QueueStatusView({
     if (!token) return;
     setCancelling(true);
     setCancelMessage("");
-    const currentQueueNum = queue?.queue_number;
     try {
       await patientApi.cancelQueue(token);
-    } catch {
-      // If backend route returns 404 or CORS Failed to fetch because it's not yet deployed on server,
-      // client-side queue cancellation still proceeds cleanly.
-    } finally {
-      clearActiveQueue(currentQueueNum);
+      clearActiveQueue();
       setShowCancelModal(false);
       setCancelSuccess(true);
-      setCancelling(false);
       setCancelStep(1);
+    } catch (reason) {
+      const apiError = reason instanceof ApiError
+        ? reason
+        : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถยกเลิกคิวได้");
+      if (apiError.status === 401) onUnauthorized();
+      else setCancelMessage(apiError.message);
+    } finally {
+      setCancelling(false);
     }
   }
 

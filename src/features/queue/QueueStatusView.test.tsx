@@ -164,4 +164,45 @@ describe("QueueStatusView", () => {
     await waitFor(() => expect(screen.getByText("ยกเลิกคิวรับบริการเรียบร้อยแล้ว")).toBeInTheDocument());
     expect(screen.getByText("ยังไม่มีคิวรับบริการในขณะนี้")).toBeInTheDocument();
   });
+
+  it("keeps the queue visible and shows the API error when cancellation fails", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            queue_number: "C002",
+            status_label: "รอตรวจ",
+            instruction: "กรุณารอสักครู่",
+            queue_position: 1,
+            room: "ห้องตรวจ 3",
+            updated_at: "2026-08-20T10:00:00Z",
+          }),
+          { headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ ok: false, error: "ไม่สามารถยกเลิกคิวนี้ได้" }),
+          { status: 409, headers: { "content-type": "application/json" } }
+        )
+      );
+
+    render(
+      createElement(QueueStatusView, {
+        token: "mock_token",
+        onAccount: vi.fn(),
+        onUnauthorized: vi.fn(),
+      })
+    );
+
+    await waitFor(() => expect(screen.getByText("C002")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "ยกเลิกคิวรับบริการ" }));
+    fireEvent.click(screen.getByRole("button", { name: "ดำเนินการต่อ (ขั้นที่ 2) →" }));
+    fireEvent.click(screen.getByRole("button", { name: "ยืนยันยกเลิกคิวทันที" }));
+
+    await waitFor(() => expect(screen.getByText("ไม่สามารถยกเลิกคิวนี้ได้")).toBeInTheDocument());
+    expect(screen.getAllByText("C002").length).toBeGreaterThan(0);
+    expect(screen.queryByText("ยกเลิกคิวรับบริการเรียบร้อยแล้ว")).toBeNull();
+  });
 });

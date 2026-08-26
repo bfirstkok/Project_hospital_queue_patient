@@ -10,16 +10,8 @@ interface UseQueuePollingOptions {
   onUnauthorized: () => void;
 }
 
-const CANCELLED_QUEUE_KEY = "opd_cancelled_queue_number";
-
 export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }: UseQueuePollingOptions) {
-  const [queue, setQueue] = useState<Partial<QueueData> | null>(() => {
-    if (typeof window !== "undefined") {
-      const cancelled = sessionStorage.getItem(CANCELLED_QUEUE_KEY);
-      if (cancelled && initialQueue?.queue_number === cancelled) return null;
-    }
-    return initialQueue || null;
-  });
+  const [queue, setQueue] = useState<Partial<QueueData> | null>(initialQueue || null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(Boolean(enabled && token && !initialQueue));
@@ -36,19 +28,15 @@ export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }
     if (!silent) setLoading(true);
     try {
       const data = await patientApi.queue(token);
-      const cancelled = typeof window !== "undefined" ? sessionStorage.getItem(CANCELLED_QUEUE_KEY) : null;
-      if (cancelled && data?.queue_number === cancelled) {
-        setQueue(null);
-      } else {
-        if (cancelled && data?.queue_number && data.queue_number !== cancelled) {
-          sessionStorage.removeItem(CANCELLED_QUEUE_KEY);
-        }
-        setQueue(data);
-      }
+      setQueue(data);
       setError("");
     } catch (reason) {
       const apiError = reason instanceof ApiError ? reason : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถอัปเดตสถานะได้");
       if (apiError.status === 401) onUnauthorizedRef.current();
+      else if (apiError.status === 404) {
+        setQueue(null);
+        setError("");
+      }
       else setError(apiError.message);
     } finally {
       if (!silent) setLoading(false);
@@ -66,10 +54,7 @@ export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }
     return () => window.clearInterval(timer);
   }, [enabled, token, refresh]);
 
-  const clearActiveQueue = useCallback((queueNumber?: string) => {
-    if (queueNumber && typeof window !== "undefined") {
-      sessionStorage.setItem(CANCELLED_QUEUE_KEY, queueNumber);
-    }
+  const clearActiveQueue = useCallback(() => {
     setQueue(null);
   }, []);
 
