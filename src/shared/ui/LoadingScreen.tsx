@@ -21,6 +21,8 @@ export function LoadingScreen({
             <svg
               className="hospital-cross-icon"
               viewBox="0 0 24 24"
+              width="28"
+              height="28"
               fill="none"
               stroke="currentColor"
               strokeWidth="2.5"

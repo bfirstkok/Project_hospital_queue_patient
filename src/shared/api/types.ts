@@ -102,3 +102,11 @@ export interface RegistrationResult extends QueueData {
 export interface LoginResult extends ApiEnvelope {
   access_token: string;
 }
+
+export interface PinSetupResult extends ApiEnvelope {
+  message?: string;
+}
+
+export interface PinVerifyResult extends ApiEnvelope {
+  access_token: string;
+}

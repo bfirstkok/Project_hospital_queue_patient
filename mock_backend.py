@@ -58,6 +58,24 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             self._send_json(200, response_data)
             return
 
+        # 4. PIN Setup Endpoint
+        if path == "/api/patient/pin/setup/":
+            response_data = {
+                "ok": True,
+                "message": "ตั้งรหัส PIN สำเร็จ"
+            }
+            self._send_json(200, response_data)
+            return
+
+        # 5. PIN Verify/Login Endpoint
+        if path == "/api/patient/pin/verify/":
+            response_data = {
+                "ok": True,
+                "access_token": "mock_patient_token_12345"
+            }
+            self._send_json(200, response_data)
+            return
+
         self._send_json(404, {"ok": False, "error": "Not Found"})
 
     def do_GET(self):

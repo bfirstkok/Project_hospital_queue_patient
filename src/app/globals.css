@@ -890,15 +890,40 @@ input:disabled {
 
 .secondary-button {
   border: 1.5px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-secondary);
+  background: #ffffff;
+  color: #112624 !important;
+  font-weight: 700;
 }
 
 .secondary-button:hover {
   background: var(--surface-alt);
-  border-color: #b0c9c4;
-  color: var(--ink);
+  border-color: #0d8a7d;
+  color: #0d8a7d !important;
   transform: translateY(-1px);
+}
+
+.danger-button {
+  border: 0;
+  background: #dc2626;
+  color: #ffffff !important;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  padding: 12px 24px;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.25);
+  transition: all 0.2s ease;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(220, 38, 38, 0.35);
 }
 
 .action-button-image {
@@ -2364,6 +2389,104 @@ footer {
   color: var(--ink-secondary);
 }
 
+/* Redesigned Logout Box in Settings */
+.logout-wrapper-card {
+  background: #fff8f8;
+  border: 2px solid #fca5a5;
+  border-radius: var(--radius-md);
+  padding: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 18px rgba(220, 38, 38, 0.08);
+}
+
+.logout-wrapper-card.not-logged {
+  background: var(--surface-alt);
+  border: 2px solid var(--line);
+  box-shadow: none;
+}
+
+.logout-wrapper-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 240px;
+}
+
+.logout-icon-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.logout-wrapper-card.not-logged .logout-icon-circle {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.logout-wrapper-info strong {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #991b1b;
+  margin-bottom: 4px;
+}
+
+.logout-wrapper-card.not-logged .logout-wrapper-info strong {
+  color: var(--ink);
+}
+
+.logout-wrapper-info p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #7f1d1d;
+  line-height: 1.5;
+}
+
+.logout-wrapper-card.not-logged .logout-wrapper-info p {
+  color: var(--ink-secondary);
+}
+
+.logout-action-btn {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  border-radius: var(--radius-md) !important;
+  padding: 14px 28px !important;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+
+.logout-action-btn:hover {
+  background: #b91c1c !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(220, 38, 38, 0.4) !important;
+}
+
+.compact-login-btn {
+  width: auto !important;
+  padding: 12px 24px !important;
+  font-size: 1rem !important;
+}
+
 .app-version-tag {
   display: flex;
   gap: 8px;
@@ -2643,14 +2766,17 @@ footer {
   width: 100%;
   padding: 14px;
   font-weight: 700;
-  color: var(--primary);
-  border-color: var(--primary-border);
-  background: var(--primary-light);
+  color: #065f46 !important;
+  border: 2px solid #0d8a7d !important;
+  background: #e6f7f5 !important;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
 }
 
 .register-link-btn:hover {
-  background: #ffffff;
-  border-color: var(--primary);
+  background: #0d8a7d !important;
+  color: #ffffff !important;
+  border-color: #0d8a7d !important;
 }
 
 /* ==========================================================================
@@ -2778,25 +2904,106 @@ footer {
 }
 
 .keypad-btn.action-btn {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--muted);
-  background: transparent;
-  border-color: transparent;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1e293b !important;
+  background: #f1f5f9;
+  border: 1.5px solid #cbd5e1;
+}
+
+.keypad-btn.action-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a !important;
 }
 
 .keypad-btn.delete-btn {
-  font-size: 1.4rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #dc2626 !important;
+  background: #fef2f2;
+  border: 1.5px solid #fecaca;
+}
+
+.keypad-btn.delete-btn:hover {
+  background: #fee2e2;
+  color: #b91c1c !important;
+}
+
+.pin-patient-greeting {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.pin-patient-greeting .greeting-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 4px;
+}
+
+.pin-patient-greeting .greeting-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 2px 0 4px;
+}
+
+.pin-patient-greeting .greeting-id {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-family: monospace;
+  margin: 0;
+}
+
+.pin-lockout-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 20px;
+  color: #991b1b;
+}
+
+.pin-lockout-box strong {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.pin-lockout-box p {
+  font-size: 0.85rem;
+  margin: 0 0 10px;
+}
+
+.pin-lockout-timer {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: monospace;
+  color: #dc2626;
 }
 
 .pin-bottom-links {
   margin-top: 12px;
 }
 
-.pin-bottom-links .text-button {
-  font-size: 0.85rem;
-  color: var(--muted);
-  text-decoration: underline;
+.unlock-actions-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.text-muted-sub {
+  color: #334155 !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
 }
 
 /* Settings View PIN Toggles */
@@ -2877,8 +3084,27 @@ input:checked + .toggle-slider:before {
 }
 
 .pin-manage-btn {
-  font-size: 0.92rem;
-  padding: 10px 18px;
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  font-weight: 700 !important;
+  border-radius: var(--radius-md) !important;
+  padding: 14px 28px !important;
+  font-size: 1.05rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  box-shadow: 0 4px 14px rgba(13, 138, 125, 0.25) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.pin-manage-btn:hover {
+  background: var(--primary-hover) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(13, 138, 125, 0.35) !important;
 }
 
 .no-bottom-pad {
@@ -3143,6 +3369,68 @@ input:checked + .toggle-slider:before {
   gap: 16px;
   margin-top: 12px;
   text-align: left;
+}
+
+/* Recovery Method Tabs (Email / Phone) */
+.recovery-method-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  background: var(--surface-alt);
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--line);
+  margin-bottom: 8px;
+}
+
+.recovery-tab-btn {
+  border: none;
+  background: transparent;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.recovery-tab-btn.active {
+  background: #ffffff;
+  color: var(--primary-hover);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--primary-border);
+}
+
+.recovery-tab-btn:hover:not(.active) {
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--ink);
+}
+
+.pin-manage-btn-secondary {
+  background: #ffffff !important;
+  color: var(--primary-hover) !important;
+  border: 2px solid var(--primary-border) !important;
+  font-weight: 700 !important;
+  border-radius: var(--radius-md) !important;
+  padding: 14px 24px !important;
+  font-size: 1rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.pin-manage-btn-secondary:hover {
+  background: var(--primary-light) !important;
+  border-color: var(--primary) !important;
+  transform: translateY(-2px);
 }
 
 .otp-info-badge {

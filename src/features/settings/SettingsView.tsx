@@ -9,8 +9,8 @@ interface SettingsViewProps {
   onLogout: () => void;
   onLogin?: () => void;
   onChangePin: () => void;
-  onSetupPin: () => void;
-  onResetPin: () => void;
+  onSetupPin?: () => void;
+  onResetPin?: () => void;
 }
 
 export function SettingsView({
@@ -20,27 +20,8 @@ export function SettingsView({
   onLogout,
   onLogin,
   onChangePin,
-  onSetupPin,
   onResetPin,
 }: SettingsViewProps) {
-  const [pinConfigured, setPinConfigured] = useState<boolean>(false);
-  const [pinActive, setPinActive] = useState<boolean>(false);
-
-  useEffect(() => {
-    setPinConfigured(hasPin());
-    setPinActive(isPinEnabled());
-  }, []);
-
-  function handleTogglePin(e: React.ChangeEvent<HTMLInputElement>) {
-    const checked = e.target.checked;
-    if (checked && !pinConfigured) {
-      onSetupPin();
-      return;
-    }
-    setPinEnabled(checked);
-    setPinActive(checked);
-  }
-
   return (
     <section id="settingsView" className="page-shell settings-view">
       <div className="intro">
@@ -58,50 +39,24 @@ export function SettingsView({
           </div>
         </div>
         <p className="settings-desc">
-          ปกป้องข้อมูลสุขภาพและบัตรประจำตัวผู้ป่วยด้วยรหัส PIN เมื่อเปิดเข้าใช้งานแอปพลิเคชัน
+          ปกป้องข้อมูลสุขภาพและบัตรประจำตัวผู้ป่วยด้วยรหัส PIN 6 หลักในการเข้าใช้งานทุกครั้ง
         </p>
 
-        <div className="setting-row-item">
-          <div className="setting-row-text">
-            <strong>ระบบล็อคแอปด้วยรหัส PIN</strong>
-            <small>{pinConfigured ? (pinActive ? "เปิดใช้งานรหัส PIN แล้ว" : "ปิดการล็อคชั่วคราว") : "ยังไม่ได้ตั้งรหัส PIN"}</small>
-          </div>
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={pinActive}
-              onChange={handleTogglePin}
-              aria-label="เปิด/ปิดการล็อคด้วย PIN"
-            />
-            <span className="toggle-slider" />
-          </label>
-        </div>
-
         <div className="pin-action-buttons-group">
-          {pinConfigured ? (
-            <>
-              <button
-                type="button"
-                className="secondary-button pin-manage-btn"
-                onClick={onChangePin}
-              >
-                🔑 เปลี่ยนรหัส PIN ใหม่
-              </button>
-              <button
-                type="button"
-                className="secondary-button pin-manage-btn"
-                onClick={onResetPin}
-              >
-                📱 รีเซ็ตรหัส PIN ผ่านเบอร์โทร (OTP)
-              </button>
-            </>
-          ) : (
+          <button
+            type="button"
+            className="primary-button pin-manage-btn"
+            onClick={onChangePin}
+          >
+            🔑 เปลี่ยนรหัส PIN
+          </button>
+          {onResetPin && (
             <button
               type="button"
-              className="primary-button pin-manage-btn"
-              onClick={onSetupPin}
+              className="secondary-button pin-manage-btn-secondary"
+              onClick={onResetPin}
             >
-              🔒 ตั้งรหัส PIN 6 หลักตอนนี้
+              📱✉️ กู้คืนรหัสผ่านอีเมล / เบอร์โทร
             </button>
           )}
         </div>
@@ -202,35 +157,41 @@ export function SettingsView({
         <div className="app-version-tag">
           <span>OPD Patient Portal v2.0</span>
           <span>•</span>
-          <span>Security PIN & ThaID Enabled</span>
+          <span>Security PIN Protected</span>
         </div>
       </section>
 
-      {/* Block 5: การจัดการเซสชันและบัญชี */}
-      <section className="account-card settings-card" aria-labelledby="accountManageTitle">
+      {/* Block 5: การจัดการเซสชันและการออกจากระบบ */}
+      <section className="account-card settings-card logout-setting-card" aria-labelledby="accountManageTitle">
         <div className="card-heading">
           <div>
             <span className="section-number">5</span>
-            <h2 id="accountManageTitle">สถานะบัญชีและการใช้งาน</h2>
+            <h2 id="accountManageTitle">การออกจากระบบ (Logout)</h2>
           </div>
         </div>
         {hasToken ? (
-          <div className="account-session-box">
-            <div>
-              <strong>เข้าสู่ระบบอยู่ขณะนี้</strong>
-              <p>บันทึกเซสชันอย่างปลอดภัยในอุปกรณ์นี้</p>
+          <div className="logout-wrapper-card">
+            <div className="logout-wrapper-content">
+              <div className="logout-icon-circle" aria-hidden="true">🚪</div>
+              <div className="logout-wrapper-info">
+                <strong>ออกจากระบบบนอุปกรณ์นี้</strong>
+                <p>เซสชันจะถูกปิดอย่างปลอดภัย คุณจะต้องกรอกเลขบัตรประชาชนและ PIN เพื่อเข้าสู่ระบบอีกครั้ง</p>
+              </div>
             </div>
-            <button className="danger-button" type="button" onClick={onLogout}>
-              ออกจากระบบในเครื่องนี้
+            <button className="logout-action-btn" type="button" onClick={onLogout}>
+              <span>🚪 ออกจากระบบทันที</span>
             </button>
           </div>
         ) : (
-          <div className="account-session-box">
-            <div>
-              <strong>ยังไม่ได้เข้าสู่ระบบ</strong>
-              <p>เข้าสู่ระบบเพื่อใช้งานระบบเต็มรูปแบบ</p>
+          <div className="logout-wrapper-card not-logged">
+            <div className="logout-wrapper-content">
+              <div className="logout-icon-circle" aria-hidden="true">🔒</div>
+              <div className="logout-wrapper-info">
+                <strong>ยังไม่ได้เข้าสู่ระบบ</strong>
+                <p>เข้าสู่ระบบเพื่อตรวจสอบคิวผู้ป่วยและประวัติการรักษา</p>
+              </div>
             </div>
-            <button className="primary-button" type="button" onClick={onLogin}>
+            <button className="primary-button compact-login-btn" type="button" onClick={onLogin}>
               เข้าสู่ระบบด้วยเลขบัตรประชาชน
             </button>
           </div>

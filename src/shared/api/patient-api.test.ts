@@ -55,6 +55,27 @@ describe("patientApi", () => {
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer patient-token");
   });
 
+  it("calls setupPin with Bearer token and pin payload", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, message: "ตั้งรหัส PIN สำเร็จ" }));
+    await patientApi.setupPin("123456", "patient-token");
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/pin/setup/", expect.objectContaining({
+      method: "POST",
+      body: '{"pin":"123456"}',
+    }));
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer patient-token");
+  });
+
+  it("calls loginWithPin with national_id and pin payload", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, access_token: "pin-token" }));
+    const result = await patientApi.loginWithPin(" 1234567890123 ", "123456");
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/pin/verify/", expect.objectContaining({
+      method: "POST",
+      body: '{"national_id":"1234567890123","pin":"123456"}',
+    }));
+    expect(result.access_token).toBe("pin-token");
+  });
+
   it("maps API validation errors without changing their message", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: false, error: "ข้อมูลไม่ถูกต้อง", errors: { note: ["กรุณาระบุอาการ"] } }, 400));
     await expect(patientApi.login("1234567890123")).rejects.toMatchObject({

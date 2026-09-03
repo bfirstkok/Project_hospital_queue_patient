@@ -3,13 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { AccountView } from "@/features/account/AccountView";
 import { LoginView } from "@/features/auth/LoginView";
-import { ThaidConnectView } from "@/features/auth/ThaidConnectView";
 import { PinAuthView } from "@/features/auth/PinAuthView";
 import { QueueStatusView } from "@/features/queue/QueueStatusView";
 import { RegistrationView } from "@/features/registration/RegistrationView";
 import { SettingsView } from "@/features/settings/SettingsView";
 import { clearToken, readToken, saveToken } from "@/shared/auth/token-storage";
-import { isPinEnabled, clearPin } from "@/shared/auth/pin-storage";
+import {
+  clearPairedPatient,
+  clearPin,
+  hasPin,
+  isPinEnabled,
+  savePairedPatient,
+} from "@/shared/auth/pin-storage";
+import { patientApi } from "@/shared/api/patient-api";
 import type { RegistrationResult } from "@/shared/api/types";
 import { SiteShell, type FontSize } from "@/shared/ui/SiteShell";
 import type { NavView } from "@/shared/ui/AppNavbar";
@@ -17,7 +23,6 @@ import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 type View =
   | "login"
-  | "thaid_connect"
   | "pin_unlock"
   | "pin_setup"
   | "pin_change"
@@ -44,16 +49,23 @@ const VIEW_STORAGE_KEY = "patient_app_current_view";
 
 export default function Page() {
   const [view, setView] = useState<View>("login");
+  const [pinSetupReturnView, setPinSetupReturnView] = useState<View>("status");
   const [token, setToken] = useState("");
+  const [pendingAuth, setPendingAuth] = useState<{ token: string; nationalId?: string } | null>(null);
   const [initialQueue, setInitialQueue] = useState<Partial<RegistrationResult> | null>(null);
   const [queueActive, setQueueActive] = useState(false);
   const [fontSize, setFontSize] = useState<FontSize>(getInitialFontSize);
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    const savedToken = readToken() || "";
-    setToken(savedToken);
+    let isUnlocked = false;
+    try {
+      isUnlocked = sessionStorage.getItem("patient_session_unlocked") === "true";
+    } catch {
+      // Ignore
+    }
 
+    const savedToken = readToken() || "";
     let savedView: View | null = null;
     try {
       savedView = localStorage.getItem(VIEW_STORAGE_KEY) as View | null;
@@ -61,10 +73,9 @@ export default function Page() {
       // Ignore
     }
 
-    if (savedToken) {
-      if (isPinEnabled()) {
-        setView("pin_unlock");
-      } else if (
+    if (savedToken && isUnlocked) {
+      setToken(savedToken);
+      if (
         savedView &&
         (savedView === "status" || savedView === "registration" || savedView === "account" || savedView === "settings")
       ) {
@@ -73,17 +84,22 @@ export default function Page() {
         setView("status");
       }
     } else {
-      if (savedView === "registration") {
-        setView("registration");
-      } else {
-        setView("login");
-      }
+      // Starting on website -> always choose login method first
+      setView("login");
     }
     setInitialized(true);
   }, []);
 
   useEffect(() => {
-    if (!token && view !== "login" && view !== "thaid_connect" && view !== "registration") {
+    if (
+      !token &&
+      !pendingAuth &&
+      view !== "login" &&
+      view !== "registration" &&
+      view !== "pin_unlock" &&
+      view !== "pin_setup" &&
+      view !== "pin_reset"
+    ) {
       setView("login");
       return;
     }
@@ -96,11 +112,16 @@ export default function Page() {
         // Ignore
       }
     }
-  }, [view, token]);
+  }, [view, token, pendingAuth]);
 
   const authenticate = useCallback((accessToken: string) => {
     saveToken(accessToken);
     setToken(accessToken);
+    try {
+      sessionStorage.setItem("patient_session_unlocked", "true");
+    } catch {
+      // Ignore
+    }
   }, []);
 
   const handleQueueStateChange = useCallback((active: boolean) => {
@@ -110,43 +131,67 @@ export default function Page() {
 
   const expireSession = useCallback(() => {
     clearToken();
-    setToken("");
-    setInitialQueue(null);
-    setQueueActive(false);
     try {
+      sessionStorage.removeItem("patient_session_unlocked");
       localStorage.removeItem(VIEW_STORAGE_KEY);
     } catch {
       // Ignore
     }
+    setToken("");
+    setPendingAuth(null);
+    setInitialQueue(null);
+    setQueueActive(false);
     setView("login");
   }, []);
 
   const logout = useCallback(() => {
     clearToken();
-    setToken("");
-    setInitialQueue(null);
-    setQueueActive(false);
     try {
+      sessionStorage.removeItem("patient_session_unlocked");
       localStorage.removeItem(VIEW_STORAGE_KEY);
     } catch {
       // Ignore
     }
+    setToken("");
+    setPendingAuth(null);
+    setInitialQueue(null);
+    setQueueActive(false);
     setView("login");
   }, []);
 
   const handleForgotPin = useCallback(() => {
     clearToken();
-    clearPin();
-    setToken("");
-    setInitialQueue(null);
-    setQueueActive(false);
+    clearPin(pendingAuth?.nationalId);
+    clearPairedPatient();
     try {
+      sessionStorage.removeItem("patient_session_unlocked");
       localStorage.removeItem(VIEW_STORAGE_KEY);
     } catch {
       // Ignore
     }
+    setToken("");
+    setPendingAuth(null);
+    setInitialQueue(null);
+    setQueueActive(false);
     setView("login");
-  }, []);
+  }, [pendingAuth]);
+
+  const handleSwitchAccount = useCallback(() => {
+    clearToken();
+    clearPin(pendingAuth?.nationalId);
+    clearPairedPatient();
+    try {
+      sessionStorage.removeItem("patient_session_unlocked");
+      localStorage.removeItem(VIEW_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
+    setToken("");
+    setPendingAuth(null);
+    setInitialQueue(null);
+    setQueueActive(false);
+    setView("login");
+  }, [pendingAuth]);
 
   const activeQueueNumber = initialQueue?.queue_number || null;
   const hasSavedAccount = Boolean(token);
@@ -164,18 +209,55 @@ export default function Page() {
     setView(navView);
   }
 
-  function registrationSuccess(accessToken: string, result: RegistrationResult) {
-    authenticate(accessToken);
-    setInitialQueue(result);
-    setQueueActive(true);
-    setView("status");
+  function fetchAndSavePairedProfile(accessToken: string) {
+    patientApi
+      .account(accessToken)
+      .then((account) => {
+        if (account.profile) {
+          const natId = account.profile.national_id || "";
+          const masked =
+            natId.length === 13
+              ? `${natId[0]}-xxxx-xxxx${natId.slice(9, 11)}-${natId[12]}`
+              : undefined;
+          savePairedPatient({
+            name: `${account.profile.first_name} ${account.profile.last_name}`.trim(),
+            nationalId: natId,
+            maskedId: masked,
+          });
+        }
+      })
+      .catch(() => {
+        // Fallback gracefully if backend is offline
+      });
   }
 
-  function loginSuccess(accessToken: string) {
-    authenticate(accessToken);
+  function registrationSuccess(accessToken: string, result: RegistrationResult) {
+    setPendingAuth({ token: accessToken });
+    setInitialQueue(result);
+    setQueueActive(true);
+    fetchAndSavePairedProfile(accessToken);
+
+    if (!hasPin()) {
+      setPinSetupReturnView("status");
+      setView("pin_setup");
+    } else {
+      setView("pin_unlock");
+    }
+  }
+
+  function loginSuccess(accessToken: string, nationalId?: string) {
+    setPendingAuth({ token: accessToken, nationalId });
     setInitialQueue(null);
     setQueueActive(false);
-    setView("status");
+    fetchAndSavePairedProfile(accessToken);
+
+    const userHasPin = hasPin(nationalId);
+    if (userHasPin) {
+      setView("pin_unlock");
+    } else {
+      setPinSetupReturnView("status");
+      setView("pin_setup");
+    }
   }
 
   function changeFontSize(size: FontSize) {
@@ -190,8 +272,8 @@ export default function Page() {
 
   const isAuthGateView =
     !hasSavedAccount ||
+    Boolean(pendingAuth) ||
     view === "login" ||
-    view === "thaid_connect" ||
     view === "pin_unlock" ||
     view === "pin_setup" ||
     view === "pin_change" ||
@@ -220,33 +302,60 @@ export default function Page() {
       {view === "login" && (
         <LoginView
           onRegister={() => setView("registration")}
-          onThaidConnect={() => setView("thaid_connect")}
           onSuccess={loginSuccess}
+          onUnlockWithPin={undefined}
         />
       )}
 
-      {/* 2. ThaID Gateway Simulation */}
-      {view === "thaid_connect" && (
-        <ThaidConnectView
-          onSuccess={loginSuccess}
-          onCancel={() => setView("login")}
-        />
-      )}
-
-      {/* 3. PIN Security Views */}
+      {/* 2. PIN Security Views */}
       {view === "pin_unlock" && (
         <PinAuthView
           mode="unlock"
-          onSuccess={() => setView("status")}
+          nationalId={pendingAuth?.nationalId}
+          onSuccess={() => {
+            const finalToken = pendingAuth?.token || token || readToken() || "";
+            if (finalToken) {
+              authenticate(finalToken);
+            }
+            setPendingAuth(null);
+            setView("status");
+          }}
           onForgotPin={handleForgotPin}
+          onSwitchAccount={handleSwitchAccount}
+          onCancel={() => {
+            setPendingAuth(null);
+            setView("login");
+          }}
         />
       )}
 
       {view === "pin_setup" && (
         <PinAuthView
           mode="setup"
-          onSuccess={() => setView("settings")}
-          onCancel={() => setView("settings")}
+          nationalId={pendingAuth?.nationalId}
+          isMandatory={Boolean(pendingAuth)}
+          onSuccess={() => {
+            const finalToken = pendingAuth?.token || token || readToken() || "";
+            if (finalToken) {
+              authenticate(finalToken);
+            }
+            setPendingAuth(null);
+            setView(pinSetupReturnView);
+          }}
+          onCancel={() => {
+            setPendingAuth(null);
+            setView(hasSavedAccount && !pendingAuth ? pinSetupReturnView : "login");
+          }}
+          onPinConfigured={async (pin) => {
+            const activeTok = pendingAuth?.token || token;
+            if (activeTok) {
+              try {
+                await patientApi.setupPin(pin, activeTok);
+              } catch {
+                // Graceful fallback
+              }
+            }
+          }}
         />
       )}
 
@@ -255,14 +364,44 @@ export default function Page() {
           mode="change"
           onSuccess={() => setView("settings")}
           onCancel={() => setView("settings")}
+          onPinConfigured={async (pin) => {
+            if (token) {
+              try {
+                await patientApi.setupPin(pin, token);
+              } catch {
+                // Graceful fallback
+              }
+            }
+          }}
         />
       )}
 
       {view === "pin_reset" && (
         <PinAuthView
           mode="reset"
-          onSuccess={() => setView("settings")}
-          onCancel={() => setView("settings")}
+          nationalId={pendingAuth?.nationalId}
+          onSuccess={() => {
+            const finalToken = pendingAuth?.token || token || readToken() || "";
+            if (finalToken) {
+              authenticate(finalToken);
+            }
+            setPendingAuth(null);
+            setView(hasSavedAccount && !pendingAuth ? "settings" : "status");
+          }}
+          onCancel={() => {
+            setPendingAuth(null);
+            setView(hasSavedAccount && !pendingAuth ? "settings" : "login");
+          }}
+          onPinConfigured={async (pin) => {
+            const activeTok = pendingAuth?.token || token;
+            if (activeTok) {
+              try {
+                await patientApi.setupPin(pin, activeTok);
+              } catch {
+                // Graceful fallback
+              }
+            }
+          }}
         />
       )}
 
@@ -306,7 +445,10 @@ export default function Page() {
           hasToken={hasSavedAccount}
           onLogout={logout}
           onLogin={() => setView("login")}
-          onSetupPin={() => setView("pin_setup")}
+          onSetupPin={() => {
+            setPinSetupReturnView("settings");
+            setView("pin_setup");
+          }}
           onChangePin={() => setView("pin_change")}
           onResetPin={() => setView("pin_reset")}
         />

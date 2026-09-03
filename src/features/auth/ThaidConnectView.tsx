@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 
 interface ThaidConnectViewProps {
-  onSuccess: (token: string) => void;
+  onSuccess: (token: string, nationalId?: string) => void;
   onCancel: () => void;
 }
 
@@ -26,7 +26,7 @@ export function ThaidConnectView({ onSuccess, onCancel }: ThaidConnectViewProps)
       } catch {
         // ignore
       }
-      onSuccess(result.access_token);
+      onSuccess(result.access_token, mockThaId);
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "การเชื่อมต่อ ThaID ล้มเหลว");
       setMessage(apiError.message === "Failed to fetch" ? "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ ThaID ได้ กรุณาลองใหม่อีกครั้ง" : apiError.message);

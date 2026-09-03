@@ -1,5 +1,15 @@
 import { getRuntimeConfig } from "@/shared/config/runtime-config";
-import type { AccountData, ApiEnvelope, FieldErrors, LoginResult, QueueData, RegistrationPayload, RegistrationResult } from "./types";
+import type {
+  AccountData,
+  ApiEnvelope,
+  FieldErrors,
+  LoginResult,
+  PinSetupResult,
+  PinVerifyResult,
+  QueueData,
+  RegistrationPayload,
+  RegistrationResult,
+} from "./types";
 
 const INVALID_RESPONSE = "เว็บหลักตอบกลับในรูปแบบที่ไม่ถูกต้อง กรุณาตรวจสอบ API URL";
 const DEFAULT_ERROR = "ไม่สามารถดำเนินการได้";
@@ -48,6 +58,16 @@ export const patientApi = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ national_id: nationalId.trim() }),
+  }),
+  setupPin: (pin: string, token: string) => request<PinSetupResult>("/api/patient/pin/setup/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin }),
+  }, token),
+  loginWithPin: (nationalId: string, pin: string) => request<PinVerifyResult>("/api/patient/pin/verify/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ national_id: nationalId.trim(), pin }),
   }),
   queue: (token: string) => request<QueueData>("/api/patient/queue/", { cache: "no-store" }, token),
   cancelQueue: (token: string) => request<ApiEnvelope>("/api/patient/queue/cancel/", {
