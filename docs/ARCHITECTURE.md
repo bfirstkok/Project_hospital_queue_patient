@@ -7,10 +7,13 @@ The application is a single patient portal implemented with Next.js App Router. 
 ```text
 src/app/page.tsx
 ├─ registration → src/features/registration/
-├─ login        → src/features/auth/
+├─ login/PIN    → src/features/auth/
 ├─ queue        → src/features/queue/
-└─ account      → src/features/account/
+├─ account      → src/features/account/
+└─ settings     → src/features/settings/
 ```
+
+`src/features/medical-records/` and `src/features/auth/ThaidConnectView.tsx` exist but are not wired into `page.tsx` yet — treat them as in-progress, not dead code to delete without checking with whoever added them.
 
 ## Responsibilities
 

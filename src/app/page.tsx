@@ -129,69 +129,32 @@ export default function Page() {
     if (!active) setInitialQueue(null);
   }, []);
 
-  const expireSession = useCallback(() => {
-    clearToken();
-    try {
-      sessionStorage.removeItem("patient_session_unlocked");
-      localStorage.removeItem(VIEW_STORAGE_KEY);
-    } catch {
-      // Ignore
-    }
-    setToken("");
-    setPendingAuth(null);
-    setInitialQueue(null);
-    setQueueActive(false);
-    setView("login");
-  }, []);
+  const resetToLogin = useCallback(
+    (clearPinData: boolean) => {
+      clearToken();
+      if (clearPinData) {
+        clearPin(pendingAuth?.nationalId);
+        clearPairedPatient();
+      }
+      try {
+        sessionStorage.removeItem("patient_session_unlocked");
+        localStorage.removeItem(VIEW_STORAGE_KEY);
+      } catch {
+        // Ignore
+      }
+      setToken("");
+      setPendingAuth(null);
+      setInitialQueue(null);
+      setQueueActive(false);
+      setView("login");
+    },
+    [pendingAuth],
+  );
 
-  const logout = useCallback(() => {
-    clearToken();
-    try {
-      sessionStorage.removeItem("patient_session_unlocked");
-      localStorage.removeItem(VIEW_STORAGE_KEY);
-    } catch {
-      // Ignore
-    }
-    setToken("");
-    setPendingAuth(null);
-    setInitialQueue(null);
-    setQueueActive(false);
-    setView("login");
-  }, []);
-
-  const handleForgotPin = useCallback(() => {
-    clearToken();
-    clearPin(pendingAuth?.nationalId);
-    clearPairedPatient();
-    try {
-      sessionStorage.removeItem("patient_session_unlocked");
-      localStorage.removeItem(VIEW_STORAGE_KEY);
-    } catch {
-      // Ignore
-    }
-    setToken("");
-    setPendingAuth(null);
-    setInitialQueue(null);
-    setQueueActive(false);
-    setView("login");
-  }, [pendingAuth]);
-
-  const handleSwitchAccount = useCallback(() => {
-    clearToken();
-    clearPin(pendingAuth?.nationalId);
-    clearPairedPatient();
-    try {
-      sessionStorage.removeItem("patient_session_unlocked");
-      localStorage.removeItem(VIEW_STORAGE_KEY);
-    } catch {
-      // Ignore
-    }
-    setToken("");
-    setPendingAuth(null);
-    setInitialQueue(null);
-    setQueueActive(false);
-    setView("login");
-  }, [pendingAuth]);
+  const expireSession = useCallback(() => resetToLogin(false), [resetToLogin]);
+  const logout = useCallback(() => resetToLogin(false), [resetToLogin]);
+  const handleForgotPin = useCallback(() => resetToLogin(true), [resetToLogin]);
+  const handleSwitchAccount = useCallback(() => resetToLogin(true), [resetToLogin]);
 
   const activeQueueNumber = initialQueue?.queue_number || null;
   const hasSavedAccount = Boolean(token);
@@ -260,6 +223,26 @@ export default function Page() {
     }
   }
 
+  function finishPinFlow(nextView: View) {
+    const finalToken = pendingAuth?.token || token || readToken() || "";
+    if (finalToken) {
+      authenticate(finalToken);
+    }
+    setPendingAuth(null);
+    setView(nextView);
+  }
+
+  async function persistPin(pin: string) {
+    const activeTok = pendingAuth?.token || token;
+    if (activeTok) {
+      try {
+        await patientApi.setupPin(pin, activeTok);
+      } catch {
+        // Graceful fallback
+      }
+    }
+  }
+
   function changeFontSize(size: FontSize) {
     setFontSize(size);
     try {
@@ -312,14 +295,7 @@ export default function Page() {
         <PinAuthView
           mode="unlock"
           nationalId={pendingAuth?.nationalId}
-          onSuccess={() => {
-            const finalToken = pendingAuth?.token || token || readToken() || "";
-            if (finalToken) {
-              authenticate(finalToken);
-            }
-            setPendingAuth(null);
-            setView("status");
-          }}
+          onSuccess={() => finishPinFlow("status")}
           onForgotPin={handleForgotPin}
           onSwitchAccount={handleSwitchAccount}
           onCancel={() => {
@@ -334,28 +310,12 @@ export default function Page() {
           mode="setup"
           nationalId={pendingAuth?.nationalId}
           isMandatory={Boolean(pendingAuth)}
-          onSuccess={() => {
-            const finalToken = pendingAuth?.token || token || readToken() || "";
-            if (finalToken) {
-              authenticate(finalToken);
-            }
-            setPendingAuth(null);
-            setView(pinSetupReturnView);
-          }}
+          onSuccess={() => finishPinFlow(pinSetupReturnView)}
           onCancel={() => {
             setPendingAuth(null);
             setView(hasSavedAccount && !pendingAuth ? pinSetupReturnView : "login");
           }}
-          onPinConfigured={async (pin) => {
-            const activeTok = pendingAuth?.token || token;
-            if (activeTok) {
-              try {
-                await patientApi.setupPin(pin, activeTok);
-              } catch {
-                // Graceful fallback
-              }
-            }
-          }}
+          onPinConfigured={persistPin}
         />
       )}
 
@@ -364,15 +324,7 @@ export default function Page() {
           mode="change"
           onSuccess={() => setView("settings")}
           onCancel={() => setView("settings")}
-          onPinConfigured={async (pin) => {
-            if (token) {
-              try {
-                await patientApi.setupPin(pin, token);
-              } catch {
-                // Graceful fallback
-              }
-            }
-          }}
+          onPinConfigured={persistPin}
         />
       )}
 
@@ -380,28 +332,12 @@ export default function Page() {
         <PinAuthView
           mode="reset"
           nationalId={pendingAuth?.nationalId}
-          onSuccess={() => {
-            const finalToken = pendingAuth?.token || token || readToken() || "";
-            if (finalToken) {
-              authenticate(finalToken);
-            }
-            setPendingAuth(null);
-            setView(hasSavedAccount && !pendingAuth ? "settings" : "status");
-          }}
+          onSuccess={() => finishPinFlow(hasSavedAccount && !pendingAuth ? "settings" : "status")}
           onCancel={() => {
             setPendingAuth(null);
             setView(hasSavedAccount && !pendingAuth ? "settings" : "login");
           }}
-          onPinConfigured={async (pin) => {
-            const activeTok = pendingAuth?.token || token;
-            if (activeTok) {
-              try {
-                await patientApi.setupPin(pin, activeTok);
-              } catch {
-                // Graceful fallback
-              }
-            }
-          }}
+          onPinConfigured={persistPin}
         />
       )}
 

@@ -37,8 +37,10 @@ src/
 ├─ features/            Patient-facing flows, grouped by feature
 │  ├─ account/
 │  ├─ auth/
+│  ├─ medical-records/
 │  ├─ queue/
-│  └─ registration/
+│  ├─ registration/
+│  └─ settings/
 └─ shared/              Code reused by multiple features
    ├─ api/              Backend contract, types, and fetch client
    ├─ auth/             Browser token storage
