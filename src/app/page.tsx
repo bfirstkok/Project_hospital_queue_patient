@@ -12,6 +12,7 @@ import {
   clearPairedPatient,
   clearPin,
   hasPin,
+  readPairedPatient,
   savePairedPatient,
 } from "@/shared/auth/pin-storage";
 import { patientApi } from "@/shared/api/patient-api";
@@ -257,6 +258,10 @@ export default function Page() {
     }
   }
 
+  // Same identity for every PIN view — whether entered from the unlock gate
+  // (pendingAuth set) or from Settings after login (pendingAuth null).
+  const pinNationalId = pendingAuth?.nationalId || readPairedPatient()?.nationalId || undefined;
+
   const isAuthGateView =
     !hasSavedAccount ||
     Boolean(pendingAuth) ||
@@ -297,10 +302,11 @@ export default function Page() {
       {view === "pin_unlock" && (
         <PinAuthView
           mode="unlock"
-          nationalId={pendingAuth?.nationalId}
+          nationalId={pinNationalId}
           onSuccess={() => finishPinFlow("status")}
           onForgotPin={handleForgotPin}
           onSwitchAccount={handleSwitchAccount}
+          onPinConfigured={persistPin}
           onCancel={() => {
             setPendingAuth(null);
             setView("login");
@@ -311,7 +317,7 @@ export default function Page() {
       {view === "pin_setup" && (
         <PinAuthView
           mode="setup"
-          nationalId={pendingAuth?.nationalId}
+          nationalId={pinNationalId}
           isMandatory={Boolean(pendingAuth)}
           onSuccess={() => finishPinFlow(pinSetupReturnView)}
           onCancel={() => {
@@ -325,6 +331,7 @@ export default function Page() {
       {view === "pin_change" && (
         <PinAuthView
           mode="change"
+          nationalId={pinNationalId}
           onSuccess={() => setView("settings")}
           onCancel={() => setView("settings")}
           onPinConfigured={persistPin}
@@ -334,8 +341,10 @@ export default function Page() {
       {view === "pin_reset" && (
         <PinAuthView
           mode="reset"
-          nationalId={pendingAuth?.nationalId}
+          nationalId={pinNationalId}
           onSuccess={() => finishPinFlow(hasSavedAccount && !pendingAuth ? "settings" : "status")}
+          onForgotPin={handleForgotPin}
+          onSwitchAccount={handleSwitchAccount}
           onCancel={() => {
             setPendingAuth(null);
             setView(hasSavedAccount && !pendingAuth ? "settings" : "login");
