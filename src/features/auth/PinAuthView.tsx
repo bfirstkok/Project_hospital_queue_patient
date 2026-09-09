@@ -6,6 +6,8 @@ import {
   isLockedOut,
   MAX_FAILED_ATTEMPTS,
   readPairedPatient,
+  recordFailedAttempt,
+  resetLockout,
   savePin,
   verifyPin,
 } from "@/shared/auth/pin-storage";
@@ -70,6 +72,7 @@ export function PinAuthView({
   const [otpCountdown, setOtpCountdown] = useState<number>(60);
   const [sendingOtp, setSendingOtp] = useState<boolean>(false);
   const [confirmingReset, setConfirmingReset] = useState<boolean>(false);
+  const [verifyingPin, setVerifyingPin] = useState<boolean>(false);
   // Backend has no OTP endpoints yet — when the request fails we fall back to
   // verifying identity with the real national-ID login, then set a new local PIN.
   const [otpUnavailable, setOtpUnavailable] = useState<boolean>(false);
@@ -149,7 +152,7 @@ export function PinAuthView({
   }
 
   function handleDigit(digit: string) {
-    if (lockoutSeconds > 0) return;
+    if (lockoutSeconds > 0 || verifyingPin) return;
     if (enteredPin.length >= 6) return;
     const nextPin = enteredPin + digit;
     setEnteredPin(nextPin);
@@ -172,26 +175,58 @@ export function PinAuthView({
     setErrorMessage("");
   }
 
+  /**
+   * Verify a PIN: server first (POST /api/patient/pin/verify/), local hash as
+   * fallback when the endpoint is missing / offline. Once the backend ships,
+   * editing localStorage no longer bypasses the PIN.
+   */
+  async function checkPin(pin: string): Promise<"ok" | "wrong" | "locked"> {
+    const nid = (nationalId || pairedInfo?.nationalId || "").replace(/\D/g, "");
+    if (nid) {
+      try {
+        await patientApi.loginWithPin(nid, pin);
+        resetLockout();
+        return "ok";
+      } catch (reason) {
+        const e = reason instanceof ApiError ? reason : new ApiError("");
+        if (e.status === 423 || e.status === 429) return "locked";
+        if (e.status === 401) {
+          recordFailedAttempt();
+          return isLockedOut() ? "locked" : "wrong";
+        }
+        // 404 / "Failed to fetch" / config missing -> fall through to local check
+      }
+    }
+    // verifyPin() records the failed attempt / resets lockout itself.
+    return verifyPin(pin, nationalId) ? "ok" : isLockedOut() ? "locked" : "wrong";
+  }
+
   async function handleComplete(pin: string) {
     if (currentMode === "unlock") {
       if (lockoutSeconds > 0) {
         triggerError(`ระบบระงับชั่วคราว กรุณารอ ${lockoutSeconds} วินาที`);
         return;
       }
+      if (verifyingPin) return;
 
-      if (verifyPin(pin, nationalId)) {
+      setVerifyingPin(true);
+      let outcome: "ok" | "wrong" | "locked";
+      try {
+        outcome = await checkPin(pin);
+      } finally {
+        setVerifyingPin(false);
+      }
+
+      if (outcome === "ok") {
         onSuccess();
+      } else if (outcome === "locked") {
+        const remaining = getLockoutRemainingSeconds();
+        setLockoutSeconds(remaining);
+        triggerError(
+          `คุณใส่รหัสผิดเกิน ${MAX_FAILED_ATTEMPTS} ครั้ง ระบบถูกระงับชั่วคราว ${formatLockoutDuration(remaining)}`,
+        );
       } else {
-        if (isLockedOut()) {
-          const remaining = getLockoutRemainingSeconds();
-          setLockoutSeconds(remaining);
-          triggerError(
-            `คุณใส่รหัสผิดเกิน ${MAX_FAILED_ATTEMPTS} ครั้ง ระบบถูกระงับชั่วคราว ${formatLockoutDuration(remaining)}`,
-          );
-        } else {
-          const attemptsLeft = getRemainingAttempts();
-          triggerError(`รหัส PIN ไม่ถูกต้อง (เหลือโอกาสอีก ${attemptsLeft} ครั้ง)`);
-        }
+        triggerError(`รหัส PIN ไม่ถูกต้อง (เหลือโอกาสอีก ${getRemainingAttempts()} ครั้ง)`);
       }
     } else if (currentMode === "setup") {
       if (step === 1) {

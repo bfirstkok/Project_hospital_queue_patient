@@ -1,15 +1,20 @@
-# Backend Handoff — Email / SMS OTP สำหรับกู้คืนรหัส PIN
+# Backend Handoff — เก็บรหัส PIN ที่ server + กู้คืนผ่าน OTP (อีเมล/SMS)
 
-เอกสารนี้ส่งให้ทีม backend (`Project_hospital_queue`, Django) เพื่อ implement การกู้คืนรหัส PIN
-ผ่าน OTP ทางอีเมล (และเบอร์โทร). อ่านจบไฟล์เดียวพอ — ภาพรวม auth ทั้งหมดอยู่ใน
-`docs/BACKEND_API_SPEC.md` (อ้างอิงเพิ่มเติมได้ แต่ไม่จำเป็นสำหรับงานนี้).
+เอกสารนี้ส่งให้ทีม backend (`Project_hospital_queue`, Django). อ่านจบไฟล์เดียวพอ —
+ภาพรวม auth ทั้งหมดอยู่ใน `docs/BACKEND_API_SPEC.md` (อ้างอิงเพิ่มเติมได้).
+
+**2 งานหลัก:**
+1. **ย้ายรหัส PIN 6 หลักมาเก็บ/ตรวจที่ server** (ตอนนี้อยู่ใน `localStorage` ฝั่ง browser —
+   แก้ localStorage = ข้าม PIN ได้)
+2. **กู้คืน PIN ด้วย OTP** ไปที่อีเมล (และเบอร์โทร) ที่ลงทะเบียนไว้
 
 ---
 
 ## 1. เป้าหมาย
 
-ผู้ป่วยลืมรหัส PIN 6 หลัก → **ขอ OTP ไปที่อีเมล/เบอร์ที่ลงทะเบียนไว้** → กรอก OTP →
-ตั้งรหัส PIN ใหม่ → กลับเข้าใช้งานได้
+- ผู้ป่วยตั้ง/เปลี่ยน PIN → hash เก็บที่ server, ตรวจที่ server ทุกครั้งที่ปลดล็อก
+- ผู้ป่วยลืม PIN → **ขอ OTP ไปที่อีเมล/เบอร์ที่ลงทะเบียนไว้** → กรอก OTP → ตั้ง PIN ใหม่ → กลับเข้าใช้งานได้
+- กรอก PIN ผิดซ้ำ → escalating lockout ที่ server (ล้าง browser ไม่ช่วย)
 
 ---
 
@@ -25,6 +30,9 @@
 - frontend มี **auto-fallback** อยู่แล้ว → ถ้า endpoint ยังไม่เสร็จ / ตอบ 404 ระบบไม่พัง
   จะ degrade ไปใช้ national_id re-login. พอ endpoint ตอบ 2xx จริง flow OTP จะทำงานเองทันที
   โดยไม่ต้องแก้ frontend
+- **PIN unlock ทุกครั้ง frontend เรียก `POST /api/patient/pin/verify/` ก่อน** (server-first) แล้วค่อย
+  fallback ไปเช็ค hash ใน localStorage เมื่อ endpoint 404/offline → พอ backend ทำ `pin/verify` เสร็จ
+  **การแก้ localStorage จะข้าม PIN ไม่ได้อีก** ทันที ไม่ต้องแก้ frontend
 
 ### Response envelope (ใช้กับทุก endpoint)
 
@@ -44,32 +52,59 @@
 
 ---
 
-## 3. Prerequisite — ย้าย PIN มาเก็บที่ server
+## 3. เก็บรหัส PIN ที่ server (งานหลักที่ 1)
 
-การ reset PIN ต้องมี "ที่เขียน hash ใหม่" → PIN ต้องอยู่ที่ server. ทำ 3 endpoint นี้ควบคู่:
+PIN 6 หลักต้อง hash เก็บที่ server และตรวจที่ server. 3 endpoint นี้ + escalating lockout.
 
-### 3.1 `POST /api/patient/pin/setup/`  (auth required)
+### 3.1 `POST /api/patient/pin/setup/`  (auth required — Bearer token)
+ตั้ง PIN ครั้งแรก หรือตั้งใหม่บนเครื่องใหม่.
 ```json
 { "pin": "445566" }
 ```
+- validate: `pin` ต้องเป็นตัวเลข 6 หลัก
 - hash ด้วย `django.contrib.auth.hashers.make_password` (PBKDF2 มากับ Django) หรือ argon2
-- เก็บใน `PatientPin.pin_hash`, reset `failed_attempts` / `locked_until` / `lockout_level`
+- เก็บใน `PatientPin.pin_hash` (upsert), reset `failed_attempts` / `locked_until` / `lockout_level` = 0
 - ตอบ `{ "ok": true, "access_token": "<token>", "message": "ตั้งรหัส PIN สำเร็จ" }`
 
+> frontend เรียก endpoint นี้อยู่แล้วหลังตั้ง/เปลี่ยน/reset PIN (ตอนนี้ error ถูกกลืนเงียบ).
+> เมื่อ endpoint ทำงานจริง hash จะไปอยู่ที่ server ทันที.
+
 ### 3.2 `POST /api/patient/pin/verify/`  (ไม่ต้อง auth)
+ตรวจ PIN ตอนปลดล็อก — **frontend เรียกทุกครั้งที่ unlock**.
 ```json
 { "national_id": "1101700230708", "pin": "445566" }
 ```
-- `locked_until` > now → `423 { "ok": false, "error": "ถูกระงับชั่วคราว", "locked_until": "<ISO>" }`
-- PIN ถูก → reset counters, `{ "ok": true, "access_token": "<token>" }`
-- PIN ผิด → `failed_attempts += 1`; ครบ 3 → ตั้ง `locked_until = now + tier`, `lockout_level += 1`
-  โดย tier = `[60s, 300s, 1800s]` (tier สุดท้ายวนซ้ำ)
-  ตอบ `401 { "ok": false, "error": "รหัส PIN ไม่ถูกต้อง", "attempts_left": 2 }`
+Logic:
+1. `locked_until` > now → `423 { "ok": false, "error": "ถูกระงับชั่วคราว", "locked_until": "<ISO>" }`
+2. ไม่มี `PatientPin` (ยังไม่เคยตั้ง) → `404 { "ok": false, "error": "ยังไม่ได้ตั้งรหัส PIN" }`
+   (frontend จะ fallback ไปตั้ง PIN)
+3. PIN ถูก (`check_password`) → reset `failed_attempts` / `lockout_level` = 0,
+   ตอบ `{ "ok": true, "access_token": "<token ใหม่ของผู้ป่วยคนนั้น>" }`
+4. PIN ผิด → `failed_attempts += 1`; ครบ 3 → `locked_until = now + tier(lockout_level)`,
+   `lockout_level += 1` โดย tier = `[60s, 300s, 1800s]` (tier สุดท้ายวนซ้ำ), reset `failed_attempts` = 0
+   ตอบ `401 { "ok": false, "error": "รหัส PIN ไม่ถูกต้อง", "attempts_left": 2 }`
+5. หมดเวลา lockout → `failed_attempts` = 0 แต่ **`lockout_level` คงไว้** (ครั้งถัดไปนานขึ้น)
+6. login ใหม่ / เปลี่ยนอุปกรณ์ **ต้องไม่** รีเซ็ต `lockout_until` / `lockout_level` — มีแค่ PIN ถูกที่เคลียร์ได้
 
-### 3.3 `POST /api/patient/pin/change/`  (auth, ทำทีหลังได้)
+> **frontend ทำ server-first แล้ว:** unlock → เรียก `pin/verify` → 2xx = ผ่าน, 401 = ผิด,
+> 423 = ถูกระงับ, 404/offline = fallback ไปเช็ค hash localStorage. พอ endpoint นี้ live
+> การแก้ localStorage จะข้าม PIN ไม่ได้อีก
+
+### 3.3 `POST /api/patient/pin/change/`  (auth required — Bearer token)
+เปลี่ยน PIN ทั้งที่รู้ PIN เดิม.
 ```json
 { "current_pin": "445566", "new_pin": "778899" }
 ```
+- `locked_until` > now → `423` (เหมือน `pin/verify`)
+- `current_pin` ผิด → นับเป็น failed attempt (escalating lockout เหมือน `pin/verify`),
+  `401 { "ok": false, "error": "รหัส PIN เดิมไม่ถูกต้อง", "attempts_left": 2 }`
+- `new_pin` ต้อง 6 หลัก และ ≠ `current_pin` → ไม่งั้น `400`
+- สำเร็จ → เขียน `pin_hash` ใหม่, reset lockout ทั้งหมด,
+  `{ "ok": true, "message": "เปลี่ยนรหัส PIN สำเร็จ" }`
+- แนะนำ: แจ้งเตือนเจ้าของบัญชี (email/SMS) ว่ามีการเปลี่ยน PIN
+
+> frontend มี `patientApi.changePin(current, new, token)` แล้ว (path `/api/patient/pin/change/`).
+> หน้า Settings "เปลี่ยนรหัส PIN" จะ wire มายิง endpoint นี้เมื่อ live.
 
 ---
 
@@ -248,6 +283,10 @@ PIN_LOCKOUT_TIERS = [60, 300, 1800]
 
 ## 11. Test checklist
 
+- [ ] `pin/setup` → hash เก็บ, `pin/verify` ด้วย PIN ถูก → ได้ token
+- [ ] `pin/verify` PIN ผิด 3 ครั้ง → `locked_until` set (60s), ครั้งถัดไปนานขึ้น (300s, 1800s)
+- [ ] `lockout_level` ไม่รีเซ็ตเมื่อ login ใหม่ — รีเซ็ตเฉพาะ PIN ถูก
+- [ ] `pin/change` PIN เดิมผิด → นับ failed attempt; PIN เดิมถูก → เปลี่ยนได้
 - [ ] ขอ OTP → ได้อีเมลจริง, โค้ด 6 หลัก
 - [ ] confirm ด้วยโค้ดถูก → PIN เปลี่ยน, ได้ token, login ด้วย PIN ใหม่ได้
 - [ ] โค้ดผิด 5 ครั้ง → challenge โมฆะ ต้องขอใหม่
@@ -272,10 +311,12 @@ PIN_LOCKOUT_TIERS = [60, 300, 1800]
 
 ## 13. ลำดับที่แนะนำ
 
-1. `PatientPin` model + `pin/setup` + `pin/verify` (ข้อ 3–4)
+1. `PatientPin` model + `pin/setup` + `pin/verify` + `pin/change` + escalating lockout (ข้อ 3–4)
 2. `OtpChallenge` model + `pin/reset/request` + `pin/reset/confirm` — **email เท่านั้น** (ข้อ 5–6)
 3. เพิ่ม `email` ใน `GET /me/` (ข้อ 5.3)
 4. Rate limit + audit + แจ้งเตือน (ข้อ 10)
 5. SMS (ข้อ 7) — เมื่อพร้อม gateway
 
-frontend ไม่ต้องแก้อะไรเพิ่ม — พอ endpoint ตอบ 2xx จริง flow OTP จะเปิดใช้เอง
+**frontend ไม่ต้องแก้อะไรเพิ่ม** — พอ endpoint ตอบ 2xx จริง:
+- `pin/verify` → PIN ถูกตรวจที่ server ทุก unlock (localStorage ข้ามไม่ได้)
+- flow OTP reset → เปิดใช้เอง แทน national_id re-login

@@ -15,7 +15,7 @@ describe("PinAuthView", () => {
     clearPin();
   });
 
-  it("unlocks when correct 6-digit PIN is entered", () => {
+  it("unlocks when correct 6-digit PIN is entered", async () => {
     savePin("123456");
     const onSuccess = vi.fn();
     render(createElement(PinAuthView, { mode: "unlock", onSuccess }));
@@ -24,10 +24,10 @@ describe("PinAuthView", () => {
       fireEvent.click(screen.getByRole("button", { name: num }));
     });
 
-    expect(onSuccess).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
   });
 
-  it("shows error alert with remaining attempts on incorrect PIN", () => {
+  it("shows error alert with remaining attempts on incorrect PIN", async () => {
     savePin("123456");
     const onSuccess = vi.fn();
     render(createElement(PinAuthView, { mode: "unlock", onSuccess }));
@@ -36,8 +36,8 @@ describe("PinAuthView", () => {
       fireEvent.click(screen.getByRole("button", { name: num }));
     });
 
+    expect(await screen.findByText("รหัส PIN ไม่ถูกต้อง (เหลือโอกาสอีก 2 ครั้ง)")).toBeInTheDocument();
     expect(onSuccess).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent("รหัส PIN ไม่ถูกต้อง (เหลือโอกาสอีก 2 ครั้ง)");
   });
 
   it("displays patient greeting in unlock mode", () => {
@@ -110,7 +110,7 @@ describe("PinAuthView", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("unlocks with patient-specific PIN", () => {
+  it("unlocks with patient-specific PIN", async () => {
     const natId = "1234567890123";
     savePin("654321", natId);
     const onSuccess = vi.fn();
@@ -120,7 +120,59 @@ describe("PinAuthView", () => {
       fireEvent.click(screen.getByRole("button", { name: num }));
     });
 
-    expect(onSuccess).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  it("verifies the PIN against the server when the endpoint is reachable", async () => {
+    window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
+    // Local hash says WRONG, server says OK -> server wins.
+    savePin("000000", "1101700230708");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/api/patient/pin/verify/")) {
+          return new Response(JSON.stringify({ ok: true, access_token: "srv" }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+      }),
+    );
+    const onSuccess = vi.fn();
+    render(createElement(PinAuthView, { mode: "unlock", nationalId: "1101700230708", onSuccess }));
+
+    ["1", "2", "3", "4", "5", "6"].forEach((n) => fireEvent.click(screen.getByRole("button", { name: n })));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(
+      vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes("/api/patient/pin/verify/")),
+    ).toBe(true);
+  });
+
+  it("rejects the PIN when the server says it is wrong even if the local hash matches", async () => {
+    window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
+    savePin("123456", "1101700230708"); // local hash matches
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/api/patient/pin/verify/")) {
+          return new Response(JSON.stringify({ ok: false, error: "รหัส PIN ไม่ถูกต้อง" }), {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+      }),
+    );
+    const onSuccess = vi.fn();
+    render(createElement(PinAuthView, { mode: "unlock", nationalId: "1101700230708", onSuccess }));
+
+    ["1", "2", "3", "4", "5", "6"].forEach((n) => fireEvent.click(screen.getByRole("button", { name: n })));
+
+    expect(await screen.findByText(/รหัส PIN ไม่ถูกต้อง/)).toBeInTheDocument();
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
   it("recovers PIN via OTP to the registered phone (no re-typing)", async () => {

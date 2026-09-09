@@ -72,6 +72,11 @@ export const patientApi = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ national_id: nationalId.trim(), pin }),
   }),
+  changePin: (currentPin: string, newPin: string, token: string) => request<PinSetupResult>("/api/patient/pin/change/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_pin: currentPin, new_pin: newPin }),
+  }, token),
   requestPinReset: (payload: PinResetRequestPayload) => request<ApiEnvelope>("/api/patient/pin/reset/request/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
