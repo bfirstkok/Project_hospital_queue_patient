@@ -1,7 +1,7 @@
 # Backend Handoff — เก็บรหัส PIN ที่ server + กู้คืนผ่าน OTP (อีเมล/SMS)
 
 เอกสารนี้ส่งให้ทีม backend (`Project_hospital_queue`, Django). อ่านจบไฟล์เดียวพอ —
-ภาพรวม auth ทั้งหมดอยู่ใน `docs/BACKEND_API_SPEC.md` (อ้างอิงเพิ่มเติมได้).
+สภาพ API ปัจจุบัน (4 endpoint ที่มีอยู่) ดูใน `docs/BACKEND_API_SPEC.md`.
 
 **2 งานหลัก:**
 1. **ย้ายรหัส PIN 6 หลักมาเก็บ/ตรวจที่ server** (ตอนนี้อยู่ใน `localStorage` ฝั่ง browser —

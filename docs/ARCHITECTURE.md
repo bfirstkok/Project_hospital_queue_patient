@@ -18,8 +18,10 @@ src/app/page.tsx
 intake fields. It is rendered both by `registration` (new patient) and by `account` (edit
 profile) — do not re-inline those fields anywhere else.
 
-Login is national-ID only today; the planned move to phone + SMS OTP + PIN is specified in
-[BACKEND_API_SPEC.md](BACKEND_API_SPEC.md). ThaID login was removed.
+Login is national-ID only today and the PIN is client-side (localStorage) as a stopgap.
+The current backend contract is [BACKEND_API_SPEC.md](BACKEND_API_SPEC.md); the server-side
+PIN + email/OTP recovery that the backend team needs to build is
+[BACKEND_HANDOFF.md](BACKEND_HANDOFF.md). ThaID login was removed.
 
 ## Responsibilities
 
