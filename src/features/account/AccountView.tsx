@@ -140,18 +140,19 @@ export function AccountView({
       return;
     }
     const payload = profileRef.current.getPayload();
+    const { national_id: _nationalId, ...profileUpdatePayload } = payload;
     const updatedProfile: PatientProfile = {
       ...account.profile,
-      ...payload,
-      first_name: payload.first_name ?? account.profile.first_name,
-      last_name: payload.last_name ?? account.profile.last_name,
-      emergency_contacts: payload.emergency_contacts ?? [],
+      ...profileUpdatePayload,
+      first_name: profileUpdatePayload.first_name ?? account.profile.first_name,
+      last_name: profileUpdatePayload.last_name ?? account.profile.last_name,
+      emergency_contacts: profileUpdatePayload.emergency_contacts ?? [],
     };
 
     setSaving(true);
     setSaveError("");
     try {
-      await patientApi.updateProfile(payload, token);
+      await patientApi.updateProfile(profileUpdatePayload, token);
       setAccount({ ...account, profile: updatedProfile });
       setIsEditing(false);
       setSaveSuccessMsg("บันทึกการแก้ไขข้อมูลเรียบร้อยแล้ว");
