@@ -11,8 +11,9 @@ export const MAX_FAILED_ATTEMPTS = 3;
  * 5 min, then 30 min (last tier repeats). The escalation level survives clearPin
  * (re-logging in with the national ID does NOT reset a lockout); only a correct
  * PIN entry clears it.
- * ponytail: client-side deterrent only — the real gate is the server-side PIN
- * store in docs/BACKEND_HANDOFF.md §3 (pin/verify).
+ *
+ * Note: this is a client-side deterrent only — the real gate is the server-side
+ * PIN store described in docs/BACKEND_HANDOFF.md §3 (pin/verify).
  */
 export const LOCKOUT_TIERS_SECONDS = [60, 300, 1800];
 
