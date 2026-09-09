@@ -469,9 +469,8 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
         district: district || null,
         subdistrict: subdistrict || null,
         postal_code: postalCode || null,
-        address: addressText,
         emergency_name: primary?.name.trim() || null,
-        emergency_relationship: contacts.find((c) => c.relationship)?.relationship || null,
+        emergency_relationship: primary?.relationship || null,
         emergency_phone: primary?.phone.trim() || null,
         emergency_contacts: contacts.map((c) => ({
           id: c.id,
