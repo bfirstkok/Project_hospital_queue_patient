@@ -185,6 +185,8 @@ export default function Page() {
             name: `${account.profile.first_name} ${account.profile.last_name}`.trim(),
             nationalId: natId,
             maskedId: masked,
+            phone: account.profile.phone || undefined,
+            email: account.profile.email || undefined,
           });
         }
       })

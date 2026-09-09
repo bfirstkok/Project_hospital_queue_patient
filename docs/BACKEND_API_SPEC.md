@@ -277,8 +277,10 @@ Logic:
 ```json
 { "national_id": "1101700230708", "channel": "phone", "target": "0812345678" }
 ```
-> ของเดิม frontend ส่งแบบนี้. ตอนสลับ model จะเปลี่ยนเป็น `{ "phone": "...", "purpose": "PIN_RESET" }`.
-> รองรับทั้งสอง หรือแจ้ง frontend ให้ย้ายไป `auth/otp/request/` เลย.
+> `target` = **เบอร์/อีเมลที่ลงทะเบียนไว้กับบัญชี** (frontend ดึงจาก cache ของ `/me` มาส่งให้ ผู้ใช้ไม่ได้พิมพ์เอง).
+> Backend ควรตรวจว่า `target` ตรงกับ contact ที่ผูก `national_id` นั้นจริง — ถ้าไม่ตรง อย่าส่ง OTP
+> (แต่ยังตอบ `{ "ok": true }` เพื่อกัน enumerate). ตอนสลับ model จะเป็น `{ "phone": "...", "purpose": "PIN_RESET" }`
+> และ backend เป็นคน lookup contact เอง.
 
 - ตอบ `{ "ok": true }` เสมอ (กัน enumerate). Rate-limit เหมือน `otp/request`.
 

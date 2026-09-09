@@ -3190,6 +3190,36 @@ input:checked + .toggle-slider:before {
   text-align: left;
 }
 
+/* Registered contact the OTP will be sent to (read-only, not typed) */
+.recovery-target-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--primary-border);
+  background: var(--primary-light);
+  border-radius: var(--radius-md);
+}
+
+.recovery-target-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.recovery-target-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--primary-hover);
+  letter-spacing: 0.5px;
+}
+
+.recovery-target-box small {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 /* Recovery Method Tabs (Email / Phone) */
 .recovery-method-tabs {
   display: grid;

@@ -272,6 +272,9 @@ export interface PairedPatientInfo {
   name: string;
   nationalId: string;
   maskedId?: string;
+  /** Registered contact channels, cached from /me so PIN recovery can target them without re-typing. */
+  phone?: string;
+  email?: string;
 }
 
 export function savePairedPatient(info: PairedPatientInfo): void {

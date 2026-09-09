@@ -17,6 +17,19 @@ function formatLockoutDuration(seconds: number): string {
   return `${mins} นาที`;
 }
 
+function maskPhone(raw: string): string {
+  const d = raw.replace(/\D/g, "");
+  if (d.length < 4) return d;
+  return `${d.slice(0, 3)}-xxx-xx${d.slice(-2)}`;
+}
+
+function maskEmail(raw: string): string {
+  const [user, domain] = raw.trim().split("@");
+  if (!domain) return raw.trim();
+  const head = user.slice(0, 2);
+  return `${head}${"•".repeat(Math.max(1, user.length - 2))}@${domain}`;
+}
+
 interface PinAuthViewProps {
   mode: PinMode;
   onSuccess: () => void;
@@ -50,10 +63,8 @@ export function PinAuthView({
   const [isShaking, setIsShaking] = useState<boolean>(false);
   const [lockoutSeconds, setLockoutSeconds] = useState<number>(() => getLockoutRemainingSeconds());
 
-  // State for Reset with Phone/Email OTP
+  // State for Reset with Phone/Email OTP — targets come from the registered account, not typed
   const [recoveryMethod, setRecoveryMethod] = useState<"phone" | "email">("phone");
-  const [resetPhone, setResetPhone] = useState<string>("");
-  const [resetEmail, setResetEmail] = useState<string>("");
   const [otpCode, setOtpCode] = useState<string>("");
   const [otpSent, setOtpSent] = useState<boolean>(false);
   const [otpCountdown, setOtpCountdown] = useState<number>(60);
@@ -61,7 +72,9 @@ export function PinAuthView({
   const [confirmingReset, setConfirmingReset] = useState<boolean>(false);
 
   // Paired patient details
-  const [pairedInfo, setPairedInfo] = useState<{ name: string; nationalId: string; maskedId?: string } | null>(null);
+  const [pairedInfo, setPairedInfo] = useState<{
+    name: string; nationalId: string; maskedId?: string; phone?: string; email?: string;
+  } | null>(null);
 
   useEffect(() => {
     setCurrentMode(initialMode);
@@ -71,6 +84,9 @@ export function PinAuthView({
     setLockoutSeconds(getLockoutRemainingSeconds());
     const paired = readPairedPatient();
     setPairedInfo(paired);
+    if (initialMode === "reset") {
+      setRecoveryMethod(paired?.phone ? "phone" : "email");
+    }
   }, [initialMode]);
 
   useEffect(() => {
@@ -110,6 +126,11 @@ export function PinAuthView({
     nationalId?.trim() ||
     pairedInfo?.nationalId ||
     (typeof window !== "undefined" ? window.localStorage.getItem("patient_national_id") || "" : "");
+
+  // PIN recovery targets — the phone/email registered on the account, never re-typed here.
+  const registeredPhone = (pairedInfo?.phone || "").replace(/\D/g, "");
+  const registeredEmail = (pairedInfo?.email || "").trim();
+  const recoveryTarget = recoveryMethod === "phone" ? registeredPhone : registeredEmail;
 
   function triggerError(msg: string) {
     setErrorMessage(msg);
@@ -247,23 +268,14 @@ export function PinAuthView({
     e.preventDefault();
     if (sendingOtp) return;
 
-    let target = "";
-    if (recoveryMethod === "phone") {
-      const cleanPhone = resetPhone.replace(/\D/g, "");
-      if (!cleanPhone || cleanPhone.length < 9) {
-        setErrorMessage("กรุณาระบุเบอร์โทรศัพท์ที่ถูกต้อง (10 หลัก)");
-        return;
-      }
-      target = cleanPhone;
-    } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!resetEmail || !emailRegex.test(resetEmail.trim())) {
-        setErrorMessage("กรุณาระบุอีเมลที่ถูกต้อง (เช่น patient@example.com)");
-        return;
-      }
-      target = resetEmail.trim();
+    if (!recoveryTarget) {
+      setErrorMessage(
+        recoveryMethod === "phone"
+          ? "ไม่พบเบอร์โทรศัพท์ที่ลงทะเบียนไว้ กรุณาเข้าสู่ระบบด้วยเลขบัตรประชาชน"
+          : "ไม่พบอีเมลที่ลงทะเบียนไว้ กรุณาเข้าสู่ระบบด้วยเลขบัตรประชาชน",
+      );
+      return;
     }
-
     if (!resetNationalId) {
       setErrorMessage("ไม่พบเลขบัตรประชาชนสำหรับการกู้คืนรหัส กรุณาเข้าสู่ระบบด้วยเลขบัตรประชาชนก่อน");
       return;
@@ -272,7 +284,11 @@ export function PinAuthView({
     setErrorMessage("");
     setSendingOtp(true);
     try {
-      await patientApi.requestPinReset({ national_id: resetNationalId, channel: recoveryMethod, target });
+      await patientApi.requestPinReset({
+        national_id: resetNationalId,
+        channel: recoveryMethod,
+        target: recoveryTarget,
+      });
       setOtpSent(true);
       setOtpCountdown(60);
       setStep(2);
@@ -343,11 +359,12 @@ export function PinAuthView({
       if (step === 1) {
         return {
           title: "กู้คืนรหัส PIN ผ่านเบอร์โทร / อีเมล",
-          subtitle: "ระบุเบอร์โทรศัพท์หรืออีเมลที่ลงทะเบียนไว้เพื่อรับรหัสยืนยัน OTP",
+          subtitle: "เลือกช่องทางรับรหัสยืนยัน OTP ระบบจะส่งไปยังเบอร์โทรหรืออีเมลที่ลงทะเบียนไว้",
         };
       }
       if (step === 2) {
-        const targetDesc = recoveryMethod === "phone" ? `เบอร์โทรศัพท์ ${resetPhone}` : `อีเมล ${resetEmail}`;
+        const targetDesc =
+          recoveryMethod === "phone" ? `เบอร์โทรศัพท์ ${maskPhone(registeredPhone)}` : `อีเมล ${maskEmail(registeredEmail)}`;
         return {
           title: "ยืนยันรหัส OTP",
           subtitle: `กรอกรหัส OTP 6 หลักที่ส่งไปยัง ${targetDesc}`,
@@ -410,73 +427,65 @@ export function PinAuthView({
           </div>
         )}
 
-        {/* Reset Mode Step 1: Input Phone or Email */}
+        {/* Reset Mode Step 1: choose channel — targets are the registered phone / email */}
         {currentMode === "reset" && step === 1 && (
           <form onSubmit={handleSendOtp} className="reset-pin-form">
-            <div className="recovery-method-tabs" role="tablist" aria-label="ช่องทางรับรหัสยืนยัน">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={recoveryMethod === "phone"}
-                className={`recovery-tab-btn ${recoveryMethod === "phone" ? "active" : ""}`}
-                onClick={() => {
-                  setRecoveryMethod("phone");
-                  setErrorMessage("");
-                }}
-              >
-                <span>📱 เบอร์โทรศัพท์ (SMS)</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={recoveryMethod === "email"}
-                className={`recovery-tab-btn ${recoveryMethod === "email" ? "active" : ""}`}
-                onClick={() => {
-                  setRecoveryMethod("email");
-                  setErrorMessage("");
-                }}
-              >
-                <span>✉️ อีเมล (Email)</span>
-              </button>
-            </div>
-
-            {recoveryMethod === "phone" ? (
-              <label className="field">
-                <span>เบอร์โทรศัพท์ที่ลงทะเบียนไว้ <b>*</b></span>
-                <input
-                  type="tel"
-                  maxLength={10}
-                  required
-                  placeholder="08xxxxxxxx"
-                  value={resetPhone}
-                  onChange={(e) => setResetPhone(e.target.value.replace(/\D/g, ""))}
-                  autoFocus
-                />
-              </label>
+            {!registeredPhone && !registeredEmail ? (
+              <p className="pin-subtitle">
+                ไม่พบเบอร์โทรศัพท์หรืออีเมลที่ลงทะเบียนไว้บนอุปกรณ์นี้ กรุณาเข้าสู่ระบบด้วยเลขบัตรประชาชนเพื่อกู้คืนรหัส PIN
+              </p>
             ) : (
-              <label className="field">
-                <span>อีเมลที่ลงทะเบียนไว้ <b>*</b></span>
-                <input
-                  type="email"
-                  required
-                  placeholder="patient@example.com"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  autoFocus
-                />
-              </label>
-            )}
+              <>
+                {registeredPhone && registeredEmail && (
+                  <div className="recovery-method-tabs" role="tablist" aria-label="ช่องทางรับรหัสยืนยัน">
+                    <button
+                      type="button" role="tab" aria-selected={recoveryMethod === "phone"}
+                      className={`recovery-tab-btn ${recoveryMethod === "phone" ? "active" : ""}`}
+                      onClick={() => {
+                        setRecoveryMethod("phone");
+                        setErrorMessage("");
+                      }}
+                    >
+                      <span>📱 เบอร์โทรศัพท์ (SMS)</span>
+                    </button>
+                    <button
+                      type="button" role="tab" aria-selected={recoveryMethod === "email"}
+                      className={`recovery-tab-btn ${recoveryMethod === "email" ? "active" : ""}`}
+                      onClick={() => {
+                        setRecoveryMethod("email");
+                        setErrorMessage("");
+                      }}
+                    >
+                      <span>✉️ อีเมล (Email)</span>
+                    </button>
+                  </div>
+                )}
 
-            <button type="submit" className="primary-button full-width-btn" style={{ marginTop: "10px" }} disabled={sendingOtp}>
-              <span>
-                {sendingOtp
-                  ? "กำลังส่งรหัส..."
-                  : recoveryMethod === "phone"
-                    ? "ขอรหัส OTP ทาง SMS"
-                    : "ขอรหัสยืนยันทางอีเมล"}
-              </span>
-              <i aria-hidden="true">→</i>
-            </button>
+                <div className="recovery-target-box">
+                  <span className="recovery-target-label">
+                    {recoveryMethod === "phone" ? "ส่งรหัส OTP ไปยังเบอร์โทรศัพท์" : "ส่งรหัส OTP ไปยังอีเมล"}
+                  </span>
+                  <strong className="recovery-target-value">
+                    {recoveryMethod === "phone" ? maskPhone(registeredPhone) : maskEmail(registeredEmail)}
+                  </strong>
+                  <small>หากข้อมูลติดต่อไม่ถูกต้อง สามารถแก้ไขได้ที่หน้าข้อมูลของฉัน หลังเข้าสู่ระบบ</small>
+                </div>
+
+                <button
+                  type="submit" className="primary-button full-width-btn"
+                  style={{ marginTop: "10px" }} disabled={sendingOtp}
+                >
+                  <span>
+                    {sendingOtp
+                      ? "กำลังส่งรหัส..."
+                      : recoveryMethod === "phone"
+                        ? "ขอรหัส OTP ทาง SMS"
+                        : "ขอรหัสยืนยันทางอีเมล"}
+                  </span>
+                  <i aria-hidden="true">→</i>
+                </button>
+              </>
+            )}
           </form>
         )}
 
@@ -485,7 +494,9 @@ export function PinAuthView({
           <form onSubmit={handleVerifyOtp} className="reset-pin-form">
             <div className="otp-info-badge">
               <span>
-                ระบบได้ส่งรหัส OTP 6 หลักไปยัง {recoveryMethod === "phone" ? `เบอร์ ${resetPhone}` : `อีเมล ${resetEmail}`} แล้ว กรุณากรอกรหัสภายในเวลาที่กำหนด
+                ระบบได้ส่งรหัส OTP 6 หลักไปยัง{" "}
+                {recoveryMethod === "phone" ? `เบอร์ ${maskPhone(registeredPhone)}` : `อีเมล ${maskEmail(registeredEmail)}`}{" "}
+                แล้ว กรุณากรอกรหัสภายในเวลาที่กำหนด
               </span>
             </div>
             <label className="field">
@@ -597,6 +608,8 @@ export function PinAuthView({
                 onClick={() => {
                   setCurrentMode("reset");
                   setStep(1);
+                  setRecoveryMethod(registeredPhone ? "phone" : "email");
+                  setErrorMessage("");
                 }}
               >
                 ลืมรหัส PIN? กู้คืนรหัสผ่านอีเมล / เบอร์โทรศัพท์ (OTP)

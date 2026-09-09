@@ -2,7 +2,12 @@ import { createElement } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PinAuthView } from "./PinAuthView";
-import { clearPin, savePin } from "@/shared/auth/pin-storage";
+import { clearPin, savePairedPatient, savePin } from "@/shared/auth/pin-storage";
+
+const okFetch = () =>
+  vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } }),
+  );
 
 describe("PinAuthView", () => {
   beforeEach(() => {
@@ -118,45 +123,54 @@ describe("PinAuthView", () => {
     expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 
-  it("recovers PIN via phone number OTP", async () => {
+  it("recovers PIN via OTP to the registered phone (no re-typing)", async () => {
     window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } })
-    ));
+    vi.stubGlobal("fetch", okFetch());
+    savePairedPatient({
+      name: "กิตติ มีสุข", nationalId: "1101700230708",
+      phone: "0812345678", email: "kitti@example.com",
+    });
     render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess: vi.fn() }));
 
     expect(screen.getByText("กู้คืนรหัส PIN ผ่านเบอร์โทร / อีเมล")).toBeInTheDocument();
-    const phoneInput = screen.getByPlaceholderText("08xxxxxxxx");
-    fireEvent.change(phoneInput, { target: { value: "0812345678" } });
+    // Masked registered phone is shown; there is no free-text input.
+    expect(screen.getByText("081-xxx-xx78")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("08xxxxxxxx")).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: /ขอรหัส OTP ทาง SMS/ }));
-
     expect(await screen.findByRole("heading", { name: "ยืนยันรหัส OTP" })).toBeInTheDocument();
-    const otpInput = screen.getByPlaceholderText("123456");
-    fireEvent.change(otpInput, { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: /ยืนยันรหัส OTP/ }));
 
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toMatchObject({ channel: "phone", target: "0812345678" });
+
+    fireEvent.change(screen.getByPlaceholderText("123456"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /ยืนยันรหัส OTP/ }));
     expect(screen.getByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
   });
 
-  it("recovers PIN via email OTP", async () => {
+  it("recovers PIN via OTP to the registered email", async () => {
     window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } })
-    ));
+    vi.stubGlobal("fetch", okFetch());
+    savePairedPatient({
+      name: "กิตติ มีสุข", nationalId: "1101700230708",
+      phone: "0812345678", email: "kitti@example.com",
+    });
     render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess: vi.fn() }));
 
-    const emailTab = screen.getByRole("tab", { name: /อีเมล/ });
-    fireEvent.click(emailTab);
+    fireEvent.click(screen.getByRole("tab", { name: /อีเมล/ }));
+    expect(screen.getByText("ki•••@example.com")).toBeInTheDocument();
 
-    const emailInput = screen.getByPlaceholderText("patient@example.com");
-    fireEvent.change(emailInput, { target: { value: "user@hospital.com" } });
     fireEvent.click(screen.getByRole("button", { name: /ขอรหัสยืนยันทางอีเมล/ }));
-
     expect(await screen.findByRole("heading", { name: "ยืนยันรหัส OTP" })).toBeInTheDocument();
-    const otpInput = screen.getByPlaceholderText("123456");
-    fireEvent.change(otpInput, { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: /ยืนยันรหัส OTP/ }));
 
+    fireEvent.change(screen.getByPlaceholderText("123456"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /ยืนยันรหัส OTP/ }));
     expect(screen.getByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
+  });
+
+  it("blocks PIN recovery when no contact is stored", () => {
+    render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess: vi.fn() }));
+    expect(screen.getByText(/ไม่พบเบอร์โทรศัพท์หรืออีเมลที่ลงทะเบียนไว้/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ขอรหัส OTP/ })).toBeNull();
   });
 });
