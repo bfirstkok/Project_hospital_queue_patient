@@ -284,6 +284,11 @@ Logic:
 
 - ตอบ `{ "ok": true }` เสมอ (กัน enumerate). Rate-limit เหมือน `otp/request`.
 
+> **สถานะ ณ ตอนนี้:** backend (`Project_hospital_queue`, Django) ยังไม่มี `pin/reset/*` และ `pin/*`
+> ทั้งหมด. เมื่อ frontend เรียก `requestPinReset` แล้วเจอ 404/หา endpoint ไม่เจอ จะ **degrade อัตโนมัติ**:
+> ยืนยันตัวตนด้วย `POST /api/patient/login/` (national_id ที่มีอยู่จริง) แล้วให้ตั้ง PIN ใหม่ใน localStorage.
+> เมื่อ backend ทำ `pin/reset/request` + `pin/reset/confirm` ขึ้นมา flow OTP จะทำงานเองโดยไม่ต้องแก้ frontend.
+
 #### `POST /api/patient/pin/reset/confirm/`   — ยืนยัน OTP + ตั้ง PIN ใหม่
 ไม่ต้อง auth.
 

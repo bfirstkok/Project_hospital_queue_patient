@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PinAuthView } from "./PinAuthView";
 import { clearPin, savePairedPatient, savePin } from "@/shared/auth/pin-storage";
@@ -168,9 +168,43 @@ describe("PinAuthView", () => {
     expect(screen.getByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
   });
 
-  it("blocks PIN recovery when no contact is stored", () => {
-    render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess: vi.fn() }));
-    expect(screen.getByText(/ไม่พบเบอร์โทรศัพท์หรืออีเมลที่ลงทะเบียนไว้/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /ขอรหัส OTP/ })).toBeNull();
+  it("falls back to national-ID verification when the OTP endpoint is unavailable", async () => {
+    window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/pin/reset/request/")) return new Response("Not Found", { status: 404 });
+        if (url.includes("/api/patient/login/")) {
+          return new Response(JSON.stringify({ ok: true, access_token: "t" }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+      }),
+    );
+    savePairedPatient({
+      name: "กิตติ มีสุข", nationalId: "1101700230708",
+      phone: "0812345678", email: "kitti@example.com",
+    });
+    const onSuccess = vi.fn();
+    render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess }));
+
+    fireEvent.click(screen.getByRole("button", { name: /ขอรหัส OTP ทาง SMS/ }));
+
+    // OTP request 404s -> identity verified via /login/ -> straight to "set new PIN"
+    expect(await screen.findByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
+
+    const enter = (d: string[]) => d.forEach((n) => fireEvent.click(screen.getByRole("button", { name: n })));
+    enter(["9", "8", "7", "6", "5", "4"]); // new PIN
+    enter(["9", "8", "7", "6", "5", "4"]); // confirm
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  it("blocks recovery only when the national ID is also missing", () => {
+    render(createElement(PinAuthView, { mode: "reset", onSuccess: vi.fn() }));
+    fireEvent.click(screen.getByRole("button", { name: /ยืนยันตัวตนด้วยเลขบัตรประชาชน/ }));
+    expect(screen.getByText(/ไม่พบเลขบัตรประชาชนสำหรับการกู้คืนรหัส/)).toBeInTheDocument();
   });
 });
