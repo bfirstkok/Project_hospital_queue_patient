@@ -365,6 +365,7 @@ export default function Page() {
           onCancel={() => setView(hasSavedAccount ? "status" : "login")}
           onSuccess={registrationSuccess}
           onUnauthorized={expireSession}
+          onDuplicateQueue={(existingToken, natId) => loginSuccess(existingToken, natId || undefined)}
         />
       )}
 

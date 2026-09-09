@@ -16,6 +16,28 @@ interface RegistrationViewProps {
   onCancel?: () => void;
   onSuccess: (token: string, result: RegistrationResult) => void;
   onUnauthorized?: () => void;
+  /** Called instead of registering when the national ID already has an active queue. */
+  onDuplicateQueue?: (token: string, nationalId: string) => void;
+}
+
+/** Token for an existing patient with this national ID, or "" if not found / lookup failed. */
+async function probeExistingToken(nationalId: string): Promise<string> {
+  try {
+    const res = await patientApi.login(nationalId);
+    return res.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
+/** Whether the token's patient currently has an active (not-finished) queue. */
+async function probeActiveQueue(token: string): Promise<boolean> {
+  try {
+    const q = await patientApi.queue(token);
+    return Boolean(q && q.queue_number);
+  } catch {
+    return false; // 404 / no queue today
+  }
 }
 
 const numericFields = new Set(["age", "height_cm", "weight_kg"]);
@@ -89,6 +111,7 @@ export function RegistrationView({
   onCancel,
   onSuccess,
   onUnauthorized,
+  onDuplicateQueue,
 }: RegistrationViewProps) {
   const isUserLoggedIn = Boolean(token || hasToken);
   const formRef = useRef<HTMLFormElement>(null);
@@ -148,9 +171,25 @@ export function RegistrationView({
     }
 
     const payload = collectRegistrationPayload(form);
+    const nationalId = payload.national_id || "";
 
     setLoading(true);
     try {
+      // Duplicate-queue guard: the backend does not reject re-registering a
+      // national ID that already has an active queue — it creates a second one
+      // and both break. Detect it here and route the patient to their queue.
+      const probeToken = token || (nationalId ? await probeExistingToken(nationalId) : "");
+      if (probeToken && (await probeActiveQueue(probeToken))) {
+        setLoading(false);
+        setMessage("เลขบัตรประชาชนนี้มีคิวที่กำลังรับบริการอยู่แล้ว ระบบจะพาไปที่หน้าสถานะคิวของคุณ");
+        if (onDuplicateQueue) {
+          onDuplicateQueue(probeToken, nationalId);
+        } else {
+          onLogin();
+        }
+        return;
+      }
+
       const result = await patientApi.register(payload);
       if (!result.access_token) throw new ApiError("เว็บหลักไม่ได้ส่ง access token กลับมา");
       try {
