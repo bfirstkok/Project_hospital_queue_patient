@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { RegistrationPayload, RegistrationResult } from "@/shared/api/types";
-import { ALL_77_PROVINCES, getDistricts, getPostalCode, getSubdistricts } from "@/shared/data/thai-address";
+import {
+  PatientProfileForm,
+  PROFILE_DRAFT_KEY,
+  type PatientProfileFormHandle,
+} from "@/features/patient-profile/PatientProfileForm";
 import { PdpaConsentGate } from "./PdpaConsentModal";
-import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 interface RegistrationViewProps {
   token?: string;
@@ -13,6 +16,28 @@ interface RegistrationViewProps {
   onCancel?: () => void;
   onSuccess: (token: string, result: RegistrationResult) => void;
   onUnauthorized?: () => void;
+  /** Called instead of registering when the national ID already has an active queue. */
+  onDuplicateQueue?: (token: string, nationalId: string) => void;
+}
+
+/** Token for an existing patient with this national ID, or "" if not found / lookup failed. */
+async function probeExistingToken(nationalId: string): Promise<string> {
+  try {
+    const res = await patientApi.login(nationalId);
+    return res.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
+/** Whether the token's patient currently has an active (not-finished) queue. */
+async function probeActiveQueue(token: string): Promise<boolean> {
+  try {
+    const q = await patientApi.queue(token);
+    return Boolean(q && q.queue_number);
+  } catch {
+    return false; // 404 / no queue today
+  }
 }
 
 const numericFields = new Set(["age", "height_cm", "weight_kg"]);
@@ -24,12 +49,12 @@ function valueOrNull(value: FormDataEntryValue | null): string | null {
 
 export function collectRegistrationPayload(form: HTMLFormElement): RegistrationPayload {
   const data = new FormData(form);
-  const payload = Object.fromEntries([...data.entries()].map(([key, value]) => [key, valueOrNull(value)])) as Record<string, string | null>;
-  
-  // Single personal phone
+  const payload = Object.fromEntries(
+    [...data.entries()].map(([key, value]) => [key, valueOrNull(value)]),
+  ) as Record<string, string | null>;
+
   payload.phone = valueOrNull(data.get("phone"));
 
-  // Handle multiple emergency contacts (Max 3)
   const emergencyNames = [data.get("emergency_name_1"), data.get("emergency_name_2"), data.get("emergency_name_3"), data.get("emergency_name")]
     .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
   const emergencyPhones = [data.get("emergency_phone_1"), data.get("emergency_phone_2"), data.get("emergency_phone_3"), data.get("emergency_phone")]
@@ -45,7 +70,6 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
     payload[field] = payload[field] === null ? null : String(Number(payload[field]));
   }
 
-  // Normalize national_id to numeric only
   if (payload.national_id) {
     let cleanId = payload.national_id.replace(/\D/g, "");
     if (cleanId.length !== 13) {
@@ -79,38 +103,6 @@ const SYMPTOM_OPTIONS = [
   "ตาแดง / ระคายเคืองตา",
 ];
 
-const CHRONIC_OPTIONS = [
-  "ไม่มีโรคประจำตัว",
-  "ความดันโลหิตสูง",
-  "เบาหวาน",
-  "โรคหัวใจ",
-  "โรคไต",
-  "หอบหืด / ภูมิแพ้",
-  "ไขมันในเลือดสูง",
-];
-
-const ALLERGY_OPTIONS = [
-  "ไม่มีประวัติแพ้ยา",
-  "แพ้ยากลุ่มเพนิซิลลิน (Penicillin)",
-  "แพ้ยาแก้ปวด (NSAIDs / แอสไพริน)",
-  "แพ้ยาซัลฟา (Sulfa)",
-  "แพ้อาหารทะเล",
-];
-
-const MEDICATION_OPTIONS = [
-  "ไม่มียาที่ใช้ประจำ",
-  "ยาลดความดันโลหิต",
-  "ยารักษาโรคเบาหวาน",
-  "ยาลดไขมันในเลือด",
-  "ยาโรคหัวใจ",
-  "ยาละลายลิ่มเลือด / ต้านเกล็ดเลือด",
-  "ยาพ่นหอบหืด / ยาภูมิแพ้",
-  "ยาลดกรด / ยาโรคกระเพาะ",
-  "ยาไทรอยด์",
-];
-
-const STORAGE_KEY = "opd_patient_registration_draft_v1";
-
 export function RegistrationView({
   token,
   hasToken,
@@ -119,504 +111,50 @@ export function RegistrationView({
   onCancel,
   onSuccess,
   onUnauthorized,
+  onDuplicateQueue,
 }: RegistrationViewProps) {
   const isUserLoggedIn = Boolean(token || hasToken);
   const formRef = useRef<HTMLFormElement>(null);
+  const profileRef = useRef<PatientProfileFormHandle>(null);
+
   const [isPdpaAccepted, setIsPdpaAccepted] = useState<boolean>(initialPdpaAccepted || isUserLoggedIn);
-  const [showPdpaReview, setShowPdpaReview] = useState<boolean>(false);
-  const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
+  const [showPdpaReview, setShowPdpaReview] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [message, setMessage] = useState("");
   const [invalidField, setInvalidField] = useState("");
   const [loading, setLoading] = useState(false);
-  const [profileLoading, setProfileLoading] = useState<boolean>(Boolean(token));
-  const [hasLoadedProfile, setHasLoadedProfile] = useState<boolean>(false);
+  const [profileDirty, setProfileDirty] = useState(false);
 
-  // Local Draft status
-  const [hasRestoredDraft, setHasRestoredDraft] = useState<boolean>(false);
-  const [draftSavedTime, setDraftSavedTime] = useState<string>("");
-
-  // Block 1 Form states
-  const [firstName, setFirstName] = useState<string>("");
-  const [lastName, setLastName] = useState<string>("");
-  const [nationalId, setNationalId] = useState<string>("");
-  const [gender, setGender] = useState<string>("UNKNOWN");
-  const [phone, setPhone] = useState<string>("");
-  const [birthDate, setBirthDate] = useState<string>("");
-  const [calculatedAgeText, setCalculatedAgeText] = useState<string>("");
-  const [ageYears, setAgeYears] = useState<number | string>("");
-
-  // Block 2: Symptom state
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
-  const [customSymptom, setCustomSymptom] = useState<string>("");
+  const [customSymptom, setCustomSymptom] = useState("");
 
-  // Block 3: Health state
-  const [bloodType, setBloodType] = useState<string>("UNKNOWN");
-  const [heightCm, setHeightCm] = useState<string>("");
-  const [weightKg, setWeightKg] = useState<string>("");
-  const [selectedDiseases, setSelectedDiseases] = useState<string[]>([]);
-  const [customDisease, setCustomDisease] = useState<string>("");
-  const [selectedAllergies, setSelectedAllergies] = useState<string[]>([]);
-  const [customAllergy, setCustomAllergy] = useState<string>("");
-  const [selectedMedications, setSelectedMedications] = useState<string[]>([]);
-  const [customMedication, setCustomMedication] = useState<string>("");
-
-  // Block 4: Address Dropdown states (77 provinces cascading)
-  const [province, setProvince] = useState<string>("");
-  const [district, setDistrict] = useState<string>("");
-  const [subdistrict, setSubdistrict] = useState<string>("");
-  const [postalCode, setPostalCode] = useState<string>("");
-
-  // Block 5: Emergency contact list state (Max 3 items with stable IDs)
-  const [emergencyContacts, setEmergencyContacts] = useState<Array<{ id: string; name: string; relationship: string; phone: string }>>([
-    { id: "em-initial-1", name: "", relationship: "", phone: "" },
-  ]);
-
-  function calculateAge(val: string) {
-    if (!val) {
-      setCalculatedAgeText("");
-      setAgeYears("");
-      return;
-    }
-    const birth = new Date(val);
-    const now = new Date();
-    if (isNaN(birth.getTime()) || birth > now) return;
-
-    let years = now.getFullYear() - birth.getFullYear();
-    let months = now.getMonth() - birth.getMonth();
-    let days = now.getDate() - birth.getDate();
-
-    if (days < 0) {
-      months -= 1;
-      const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-      days += prevMonth.getDate();
-    }
-    if (months < 0) {
-      years -= 1;
-      months += 12;
-    }
-
-    setAgeYears(years);
-    setCalculatedAgeText(`อายุ: ${years} ปี ${months} เดือน ${days} วัน`);
-  }
-
-  // Load existing profile when logged in (booking queue mode)
-  useEffect(() => {
-    if (!token) {
-      setProfileLoading(false);
-      return;
-    }
-    let active = true;
-    setProfileLoading(true);
-    patientApi
-      .account(token)
-      .then((data) => {
-        if (!active || !data.profile) return;
-        const p = data.profile;
-        if (p.first_name) setFirstName(p.first_name);
-        if (p.last_name) setLastName(p.last_name);
-        
-        // National ID resolution
-        let savedRawId = "";
-        try {
-          savedRawId = sessionStorage.getItem("patient_national_id") || localStorage.getItem("patient_national_id") || "";
-        } catch {
-          // ignore
-        }
-        const cleanSaved = savedRawId.replace(/\D/g, "");
-        const cleanP = p.national_id ? p.national_id.replace(/\D/g, "") : "";
-
-        if (cleanP.length === 13) {
-          setNationalId(cleanP);
-          try {
-            sessionStorage.setItem("patient_national_id", cleanP);
-            localStorage.setItem("patient_national_id", cleanP);
-          } catch {
-            // ignore
-          }
-        } else if (cleanSaved.length === 13) {
-          setNationalId(cleanSaved);
-        } else {
-          setNationalId("");
-        }
-
-        if (p.gender) setGender(p.gender);
-        if (p.phone) setPhone(p.phone);
-        if (p.birth_date) {
-          setBirthDate(p.birth_date);
-          calculateAge(p.birth_date);
-        } else if (p.age) {
-          setAgeYears(p.age);
-          setCalculatedAgeText(`อายุ: ${p.age} ปี`);
-        }
-        if (p.blood_type) setBloodType(p.blood_type);
-        if (p.height_cm) setHeightCm(String(p.height_cm));
-        if (p.weight_kg) setWeightKg(String(p.weight_kg));
-
-        // Chronic diseases
-        if (p.chronic_diseases) {
-          const items = p.chronic_diseases.split(",").map((s) => s.trim()).filter(Boolean);
-          const matched = items.filter((item) => CHRONIC_OPTIONS.includes(item));
-          const unmatched = items.filter((item) => !CHRONIC_OPTIONS.includes(item));
-          if (matched.length > 0) setSelectedDiseases(matched);
-          if (unmatched.length > 0) setCustomDisease(unmatched.join(", "));
-        }
-
-        // Allergies
-        if (p.allergies) {
-          const items = p.allergies.split(",").map((s) => s.trim()).filter(Boolean);
-          const matched = items.filter((item) => ALLERGY_OPTIONS.includes(item));
-          const unmatched = items.filter((item) => !ALLERGY_OPTIONS.includes(item));
-          if (matched.length > 0) setSelectedAllergies(matched);
-          if (unmatched.length > 0) setCustomAllergy(unmatched.join(", "));
-        }
-
-        // Medications
-        if (p.medications) {
-          const items = p.medications.split(",").map((s) => s.trim()).filter(Boolean);
-          const matched = items.filter((item) => MEDICATION_OPTIONS.includes(item));
-          const unmatched = items.filter((item) => !MEDICATION_OPTIONS.includes(item));
-          if (matched.length > 0) setSelectedMedications(matched);
-          if (unmatched.length > 0) setCustomMedication(unmatched.join(", "));
-        }
-
-        // Address
-        const prov = (p as any).province || (p.address ? ALL_77_PROVINCES.find((pv) => p.address?.includes(pv)) : "");
-        if (prov) {
-          setProvince(prov);
-          const dist = (p as any).district || (p.address ? getDistricts(prov).find((d) => p.address?.includes(d)) : "");
-          if (dist) {
-            setDistrict(dist);
-            const sub = (p as any).subdistrict || (p.address ? getSubdistricts(prov, dist).find((s) => p.address?.includes(s)) : "");
-            if (sub) {
-              setSubdistrict(sub);
-              const post = (p as any).postal_code || (p.address ? getPostalCode(prov, dist, sub) : "");
-              if (post) setPostalCode(post);
-            }
-          }
-        }
-
-        // Emergency contacts
-        if (p.emergency_contacts && p.emergency_contacts.length > 0) {
-          setEmergencyContacts(
-            p.emergency_contacts.map((c, i) => ({
-              id: c.id || `em-prof-${i}`,
-              name: c.name || "",
-              relationship: c.relationship || "",
-              phone: c.phone || "",
-            }))
-          );
-        } else if (p.emergency_name || p.emergency_phone) {
-          setEmergencyContacts([
-            {
-              id: "em-initial-1",
-              name: p.emergency_name || "",
-              relationship: (p as any).emergency_relationship || "",
-              phone: p.emergency_phone || "",
-            },
-          ]);
-        }
-        setHasLoadedProfile(true);
-      })
-      .catch((err) => {
-        if (!active) return;
-        const apiErr = err instanceof ApiError ? err : new ApiError(err instanceof Error ? err.message : "");
-        if (apiErr.status === 401 && onUnauthorized) {
-          onUnauthorized();
-        }
-      })
-      .finally(() => {
-        if (active) setProfileLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [token, onUnauthorized]);
-
-  // Load saved draft on initial mount (for guest new registrations)
-  useEffect(() => {
-    if (token) return;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (draft && typeof draft === "object") {
-        if (draft.firstName) setFirstName(draft.firstName);
-        if (draft.lastName) setLastName(draft.lastName);
-        if (draft.nationalId) setNationalId(draft.nationalId);
-        if (draft.gender) setGender(draft.gender);
-        if (draft.phone) setPhone(draft.phone);
-        if (draft.birthDate) setBirthDate(draft.birthDate);
-        if (draft.ageYears !== undefined && draft.ageYears !== "") setAgeYears(draft.ageYears);
-        if (draft.calculatedAgeText) setCalculatedAgeText(draft.calculatedAgeText);
-        if (Array.isArray(draft.selectedSymptoms)) setSelectedSymptoms(draft.selectedSymptoms);
-        if (draft.customSymptom) setCustomSymptom(draft.customSymptom);
-        if (draft.bloodType) setBloodType(draft.bloodType);
-        if (draft.heightCm) setHeightCm(draft.heightCm);
-        if (draft.weightKg) setWeightKg(draft.weightKg);
-        if (Array.isArray(draft.selectedDiseases)) setSelectedDiseases(draft.selectedDiseases);
-        if (draft.customDisease) setCustomDisease(draft.customDisease);
-        if (Array.isArray(draft.selectedAllergies)) setSelectedAllergies(draft.selectedAllergies);
-        if (draft.customAllergy) setCustomAllergy(draft.customAllergy);
-        if (Array.isArray(draft.selectedMedications)) setSelectedMedications(draft.selectedMedications);
-        if (draft.customMedication) setCustomMedication(draft.customMedication);
-        else if (draft.medications && !Array.isArray(draft.selectedMedications)) setCustomMedication(draft.medications);
-        if (draft.province) setProvince(draft.province);
-        if (draft.district) setDistrict(draft.district);
-        if (draft.subdistrict) setSubdistrict(draft.subdistrict);
-        if (draft.postalCode) setPostalCode(draft.postalCode);
-        if (Array.isArray(draft.emergencyContacts) && draft.emergencyContacts.length > 0) {
-          setEmergencyContacts(draft.emergencyContacts);
-        }
-        if (draft.isPdpaAccepted) setIsPdpaAccepted(true);
-        if (draft.savedAt) setDraftSavedTime(draft.savedAt);
-        setHasRestoredDraft(true);
-      }
-    } catch {
-      // Ignore localStorage errors
-    }
-  }, [token]);
-
-  // Autosave draft when user modifies any input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const hasContent =
-        firstName ||
-        lastName ||
-        nationalId ||
-        phone ||
-        birthDate ||
-        customSymptom ||
-        selectedSymptoms.length > 0 ||
-        heightCm ||
-        weightKg ||
-        customMedication ||
-        selectedMedications.length > 0 ||
-        province ||
-        emergencyContacts.some((c) => c.name || c.phone);
-
-      if (hasContent) {
-        const now = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
-        const draftData = {
-          firstName,
-          lastName,
-          nationalId,
-          gender,
-          phone,
-          birthDate,
-          ageYears,
-          calculatedAgeText,
-          selectedSymptoms,
-          customSymptom,
-          bloodType,
-          heightCm,
-          weightKg,
-          selectedDiseases,
-          customDisease,
-          selectedAllergies,
-          customAllergy,
-          selectedMedications,
-          customMedication,
-          province,
-          district,
-          subdistrict,
-          postalCode,
-          emergencyContacts,
-          isPdpaAccepted,
-          savedAt: now,
-        };
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(draftData));
-          setDraftSavedTime(now);
-        } catch {
-          // Ignore quota errors
-        }
-      }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [
-    firstName,
-    lastName,
-    nationalId,
-    gender,
-    phone,
-    birthDate,
-    ageYears,
-    calculatedAgeText,
-    selectedSymptoms,
-    customSymptom,
-    bloodType,
-    heightCm,
-    weightKg,
-    selectedDiseases,
-    customDisease,
-    selectedAllergies,
-    customAllergy,
-    selectedMedications,
-    customMedication,
-    province,
-    district,
-    subdistrict,
-    postalCode,
-    emergencyContacts,
-    isPdpaAccepted,
-  ]);
-
-  const clearDraft = () => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
-    setFirstName("");
-    setLastName("");
-    setNationalId("");
-    setGender("UNKNOWN");
-    setPhone("");
-    setBirthDate("");
-    setAgeYears("");
-    setCalculatedAgeText("");
-    setSelectedSymptoms([]);
-    setCustomSymptom("");
-    setBloodType("UNKNOWN");
-    setHeightCm("");
-    setWeightKg("");
-    setSelectedDiseases([]);
-    setCustomDisease("");
-    setSelectedAllergies([]);
-    setCustomAllergy("");
-    setSelectedMedications([]);
-    setCustomMedication("");
-    setProvince("");
-    setDistrict("");
-    setSubdistrict("");
-    setPostalCode("");
-    setEmergencyContacts([{ id: "em-initial-1", name: "", relationship: "", phone: "" }]);
-    setHasRestoredDraft(false);
-    setDraftSavedTime("");
-  };
-
-  const addEmergencyContact = () => {
-    if (emergencyContacts.length < 3) {
-      setEmergencyContacts((prev) => [
-        ...prev,
-        {
-          id: `em-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          name: "",
-          relationship: "",
-          phone: "",
-        },
-      ]);
-    }
-  };
-
-  const removeEmergencyContact = (idToRemove: string) => {
-    setEmergencyContacts((prev) => prev.filter((item) => item.id !== idToRemove));
-  };
-
-  const updateEmergencyContact = (
-    id: string,
-    field: "name" | "relationship" | "phone",
-    value: string
-  ) => {
-    setEmergencyContacts((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
-    );
-  };
-
-  function handleBirthDateChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value;
-    setBirthDate(val);
-    calculateAge(val);
-  }
+  const symptomDirty = customSymptom.trim().length > 0 || selectedSymptoms.length > 0;
+  const isFormDirty = profileDirty || symptomDirty;
 
   function toggleSymptom(item: string) {
-    setSelectedSymptoms((prev) =>
-      prev.includes(item) ? prev.filter((s) => s !== item) : [...prev, item]
-    );
+    setSelectedSymptoms((prev) => (prev.includes(item) ? prev.filter((s) => s !== item) : [...prev, item]));
   }
 
-  function toggleDisease(item: string) {
-    if (item === "ไม่มีโรคประจำตัว") {
-      setSelectedDiseases(["ไม่มีโรคประจำตัว"]);
-      return;
-    }
-    setSelectedDiseases((prev) => {
-      const filtered = prev.filter((d) => d !== "ไม่มีโรคประจำตัว");
-      return filtered.includes(item) ? filtered.filter((d) => d !== item) : [...filtered, item];
-    });
+  function resetForm() {
+    profileRef.current?.clearDraft();
+    setSelectedSymptoms([]);
+    setCustomSymptom("");
   }
 
-  function toggleAllergy(item: string) {
-    if (item === "ไม่มีประวัติแพ้ยา") {
-      setSelectedAllergies(["ไม่มีประวัติแพ้ยา"]);
-      return;
-    }
-    setSelectedAllergies((prev) => {
-      const filtered = prev.filter((a) => a !== "ไม่มีประวัติแพ้ยา");
-      return filtered.includes(item) ? filtered.filter((a) => a !== item) : [...filtered, item];
-    });
-  }
-
-  function toggleMedication(item: string) {
-    if (item === "ไม่มียาที่ใช้ประจำ") {
-      setSelectedMedications(["ไม่มียาที่ใช้ประจำ"]);
-      return;
-    }
-    setSelectedMedications((prev) => {
-      const filtered = prev.filter((m) => m !== "ไม่มียาที่ใช้ประจำ");
-      return filtered.includes(item) ? filtered.filter((m) => m !== item) : [...filtered, item];
-    });
-  }
-
-  const finalDiseases = [...selectedDiseases, customDisease.trim()].filter(Boolean).join(", ");
-  const finalAllergies = [...selectedAllergies, customAllergy.trim()].filter(Boolean).join(", ");
-  const finalMedications = [...selectedMedications, customMedication.trim()].filter(Boolean).join(", ");
-  const isFormDirty = Boolean(
-    firstName.trim() ||
-    lastName.trim() ||
-    nationalId.trim() ||
-    phone.trim() ||
-    birthDate.trim() ||
-    customSymptom.trim() ||
-    selectedSymptoms.length > 0 ||
-    heightCm.trim() ||
-    weightKg.trim() ||
-    selectedDiseases.length > 0 ||
-    customDisease.trim() ||
-    selectedAllergies.length > 0 ||
-    customAllergy.trim() ||
-    selectedMedications.length > 0 ||
-    customMedication.trim() ||
-    province.trim() ||
-    district.trim() ||
-    subdistrict.trim() ||
-    postalCode.trim() ||
-    emergencyContacts.some((c) => c.name.trim() || c.phone.trim())
-  );
-
-  const handleCancelClick = () => {
+  function handleCancelClick() {
     if (isFormDirty) {
       setShowCancelConfirm(true);
-    } else {
-      clearDraft();
-      if (onCancel) {
-        onCancel();
-      } else {
-        onLogin();
-      }
+      return;
     }
-  };
+    resetForm();
+    (onCancel ?? onLogin)();
+  }
 
-  const handleConfirmCancel = () => {
+  function handleConfirmCancel() {
     setShowCancelConfirm(false);
-    clearDraft();
-    if (onCancel) {
-      onCancel();
-    } else {
-      onLogin();
-    }
-  };
+    resetForm();
+    (onCancel ?? onLogin)();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -625,45 +163,37 @@ export function RegistrationView({
     setInvalidField("");
     if (!form.reportValidity()) return;
 
+    const profileError = profileRef.current?.validate();
+    if (profileError) {
+      setInvalidField(profileError.field);
+      setMessage(profileError.message);
+      return;
+    }
+
     const payload = collectRegistrationPayload(form);
-    if (!payload.national_id || payload.national_id.length !== 13) {
-      setInvalidField("national_id");
-      setMessage("กรุณาระบุเลขประจำตัวประชาชนให้ถูกต้องและครบ 13 หลัก");
-      const input = form.elements.namedItem("national_id");
-      if (input instanceof HTMLElement) input.focus();
-      return;
-    }
-
-    if (!finalDiseases) {
-      setInvalidField("chronic_diseases");
-      setMessage("กรุณาระบุข้อมูลโรคประจำตัว หรือเลือก 'ไม่มีโรคประจำตัว'");
-      const el = document.getElementById("field-group-chronic");
-      el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
-      return;
-    }
-
-    if (!finalAllergies) {
-      setInvalidField("allergies");
-      setMessage("กรุณาระบุประวัติแพ้ยาและอาหาร หรือเลือก 'ไม่มีประวัติแพ้ยา'");
-      const el = document.getElementById("field-group-allergies");
-      el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
-      return;
-    }
-
-    if (!finalMedications) {
-      setInvalidField("medications");
-      setMessage("กรุณาระบุข้อมูลยาที่ใช้ประจำ หรือเลือก 'ไม่มียาที่ใช้ประจำ'");
-      const el = document.getElementById("field-group-medications");
-      el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
-      return;
-    }
+    const nationalId = payload.national_id || "";
 
     setLoading(true);
     try {
+      // Duplicate-queue guard: the backend does not reject re-registering a
+      // national ID that already has an active queue — it creates a second one
+      // and both break. Detect it here and route the patient to their queue.
+      const probeToken = token || (nationalId ? await probeExistingToken(nationalId) : "");
+      if (probeToken && (await probeActiveQueue(probeToken))) {
+        setLoading(false);
+        setMessage("เลขบัตรประชาชนนี้มีคิวที่กำลังรับบริการอยู่แล้ว ระบบจะพาไปที่หน้าสถานะคิวของคุณ");
+        if (onDuplicateQueue) {
+          onDuplicateQueue(probeToken, nationalId);
+        } else {
+          onLogin();
+        }
+        return;
+      }
+
       const result = await patientApi.register(payload);
       if (!result.access_token) throw new ApiError("เว็บหลักไม่ได้ส่ง access token กลับมา");
       try {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(PROFILE_DRAFT_KEY);
         sessionStorage.removeItem("opd_cancelled_queue_number");
         if (payload.national_id) {
           sessionStorage.setItem("patient_national_id", payload.national_id);
@@ -680,60 +210,16 @@ export function RegistrationView({
       const input = field ? form.elements.namedItem(field) : null;
       if (input instanceof HTMLElement) input.focus();
       const detail = Array.isArray(errors) ? errors[0] : errors;
-      setMessage(apiError.message === "Failed to fetch" ? "เชื่อมต่อเว็บหลักไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตหรือติดต่อเจ้าหน้าที่" : detail || apiError.message);
+      setMessage(
+        apiError.message === "Failed to fetch"
+          ? "เชื่อมต่อเว็บหลักไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตหรือติดต่อเจ้าหน้าที่"
+          : detail || apiError.message,
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  // Cascading Address Handlers
-  const handleProvinceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setProvince(val);
-    setDistrict("");
-    setSubdistrict("");
-    setPostalCode("");
-  };
-
-  const handleDistrictChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setDistrict(val);
-    setSubdistrict("");
-    setPostalCode("");
-  };
-
-  const handleSubdistrictChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setSubdistrict(val);
-    if (val && province && district) {
-      const code = getPostalCode(province, district, val);
-      if (code) {
-        setPostalCode(code);
-      }
-    }
-  };
-
-  const districtOptions = province ? getDistricts(province) : [];
-  const subdistrictOptions = province && district ? getSubdistricts(province, district) : [];
-
-  const normalizeNationalId = (event: FormEvent<HTMLInputElement>) => {
-    event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 13);
-  };
-  const fieldClass = (name: string) => invalidField === name ? "invalid" : "";
-
-  // Profile Loading Screen when fetching existing user data
-  if (profileLoading) {
-    return (
-      <section id="registrationView" className="page-shell">
-        <LoadingScreen
-          title="กำลังดึงข้อมูลผู้ป่วย"
-          subtitle="กรุณารอสักครู่ ระบบกำลังโหลดประวัติส่วนบุคคลเพื่อความสะดวกในการจองคิว"
-        />
-      </section>
-    );
-  }
-
-  // PDPA Consent Gate Screen before entering registration form
   if (!isPdpaAccepted) {
     return (
       <section id="registrationView" className="page-shell">
@@ -755,10 +241,7 @@ export function RegistrationView({
           <li><span>3</span>รอเรียกคิว</li>
         </ol>
 
-        <PdpaConsentGate
-          onAccept={() => setIsPdpaAccepted(true)}
-          onDecline={onLogin}
-        />
+        <PdpaConsentGate onAccept={() => setIsPdpaAccepted(true)} onDecline={onLogin} />
       </section>
     );
   }
@@ -768,10 +251,7 @@ export function RegistrationView({
       {showPdpaReview && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="หน้านโยบาย PDPA">
           <div className="modal-inner">
-            <PdpaConsentGate
-              onAccept={() => setShowPdpaReview(false)}
-              onDecline={() => setShowPdpaReview(false)}
-            />
+            <PdpaConsentGate onAccept={() => setShowPdpaReview(false)} onDecline={() => setShowPdpaReview(false)} />
           </div>
         </div>
       )}
@@ -787,17 +267,11 @@ export function RegistrationView({
               คุณได้กรอกข้อมูลบางส่วนไว้แล้ว หากยกเลิก ข้อมูลที่กรอกไว้จะไม่ถูกบันทึกและระบบจะพากลับไปยังหน้าเดิม
             </p>
             <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ flex: 1 }}
-                onClick={() => setShowCancelConfirm(false)}
-              >
+              <button type="button" className="secondary-button" style={{ flex: 1 }} onClick={() => setShowCancelConfirm(false)}>
                 กรอกข้อมูลต่อ
               </button>
               <button
-                type="button"
-                className="primary-button"
+                type="button" className="primary-button"
                 style={{ flex: 1, backgroundColor: "#dc2626", borderColor: "#dc2626" }}
                 onClick={handleConfirmCancel}
               >
@@ -830,547 +304,59 @@ export function RegistrationView({
         <li><span>3</span>รอเรียกคิว</li>
       </ol>
 
-      {hasToken && hasLoadedProfile && (
-        <div
-          className="profile-prefilled-banner"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)",
-            border: "1px solid #6ee7b7",
-            color: "#065f46",
-            padding: "14px 18px",
-            borderRadius: "var(--radius-md, 8px)",
-            marginBottom: "20px",
-            fontSize: "0.95rem",
-            boxShadow: "0 2px 8px rgba(5, 150, 105, 0.08)",
-          }}
-        >
-          <span style={{ fontSize: "1.5rem" }} aria-hidden="true">📋</span>
-          <div>
-            <strong style={{ display: "block", fontSize: "1rem", color: "#064e3b" }}>ดึงข้อมูลผู้ป่วยเดิมให้อัตโนมัติเรียบร้อยแล้ว</strong>
-            <span>คุณเพียงแค่ระบุ <u>อาการสำคัญที่มารับบริการ</u> ในข้อ 2 แล้วกดยืนยันเพื่อรับบัตรคิวได้ทันที</span>
-          </div>
-        </div>
-      )}
-
-      {hasRestoredDraft && (
-        <div className="draft-restore-banner" role="status">
-          <div className="draft-banner-text">
-            <span className="draft-icon" aria-hidden="true">💾</span>
-            <div>
-              <strong>กู้คืนข้อมูลร่างที่คุณเคยกรอกไว้ให้อัตโนมัติ</strong>
-              {draftSavedTime && <small> (บันทึกล่าสุดเมื่อ {draftSavedTime} น.)</small>}
-            </div>
-          </div>
-          <button type="button" className="draft-clear-button" onClick={clearDraft}>
-            ล้างข้อมูลเพื่อเริ่มใหม่
-          </button>
-        </div>
-      )}
-
       {message && <div className="alert" role="alert">{message}</div>}
 
       <form ref={formRef} className="form-card" autoComplete="on" onSubmit={submit}>
         <input name="website" className="honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" />
-        
-        {/* Block 1: ข้อมูลระบุตัวตนผู้ป่วย */}
-        <fieldset>
-          <legend>
-            <span className="section-number">1</span>
-            <span>ข้อมูลส่วนบุคคล<small>ระบุชื่อและข้อมูลสำหรับติดต่อ</small></span>
-          </legend>
-          <div className="form-grid">
-            <Field label="ชื่อ" required>
-              <input
-                name="first_name"
-                maxLength={100}
-                required
-                placeholder="เช่น สมชาย"
-                autoComplete="given-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className={fieldClass("first_name")}
-              />
-            </Field>
-            <Field label="นามสกุล" required>
-              <input
-                name="last_name"
-                maxLength={100}
-                required
-                placeholder="เช่น ใจดี"
-                autoComplete="family-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className={fieldClass("last_name")}
-              />
-            </Field>
-            <Field
-              label="เลขประจำตัวประชาชน"
-              required
-              wide
-              help={
-                hasToken && nationalId && nationalId.length === 13 && !nationalId.includes("x")
-                  ? "ดึงจากบัญชีผู้ป่วยของคุณอัตโนมัติ"
-                  : "กรอกตัวเลข 13 หลักโดยไม่ต้องใส่เครื่องหมายขีด"
-              }
-            >
-              <input
-                name="national_id"
-                maxLength={13}
-                minLength={13}
-                inputMode="numeric"
-                pattern="[0-9]{13}"
-                required
-                placeholder="ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"
-                value={nationalId}
-                readOnly={Boolean(hasToken && nationalId && nationalId.length === 13 && !nationalId.includes("x"))}
-                onInput={normalizeNationalId}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, "").slice(0, 13);
-                  setNationalId(val);
-                  if (val.length === 13) {
-                    try {
-                      sessionStorage.setItem("patient_national_id", val);
-                      localStorage.setItem("patient_national_id", val);
-                    } catch {
-                      // ignore
-                    }
-                  }
-                }}
-                className={`${fieldClass("national_id")} ${hasToken && nationalId && nationalId.length === 13 && !nationalId.includes("x") ? "readonly-field" : ""}`}
-              />
-            </Field>
-            <Field label="เพศ">
-              <select name="gender" value={gender} onChange={(e) => setGender(e.target.value)}>
-                <option value="UNKNOWN">ไม่ระบุ</option>
-                <option value="M">ชาย</option>
-                <option value="F">หญิง</option>
-                <option value="O">อื่น ๆ</option>
-              </select>
-            </Field>
-            <Field label="เบอร์โทรศัพท์">
-              <input
-                name="phone"
-                maxLength={20}
-                inputMode="tel"
-                placeholder="08xxxxxxxx"
-                autoComplete="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </Field>
 
-            {/* Row 4: Birth date and Age side by side, aligned */}
-            <Field label="วัน/เดือน/ปีเกิด">
-              <input
-                type="date"
-                name="birth_date"
-                value={birthDate}
-                onChange={handleBirthDateChange}
-                aria-label="วัน/เดือน/ปีเกิด"
-                max={new Date().toISOString().split("T")[0]}
-              />
-            </Field>
+        <PatientProfileForm
+          ref={profileRef}
+          mode="register"
+          token={token}
+          hasToken={hasToken}
+          draftKey={token ? undefined : PROFILE_DRAFT_KEY}
+          onUnauthorized={onUnauthorized}
+          onDirtyChange={setProfileDirty}
+        >
+          {/* Block 2: อาการที่มารับบริการ */}
+          <fieldset>
+            <legend>
+              <span className="section-number">2</span>
+              <span>อาการสำคัญที่มารับบริการ <b>*</b><small>เลือกอาการเบื้องต้น หรือพิมพ์ระบุรายละเอียดเพิ่มเติม</small></span>
+            </legend>
 
-            <Field label="อายุ (ปี)">
-              <SuffixInput
-                name="age"
-                type="number"
-                min={0}
-                max={130}
-                inputMode="numeric"
-                placeholder="0"
-                suffix="ปี"
-                value={ageYears}
-                onChange={(e) => {
-                  setAgeYears(e.target.value);
-                  if (e.target.value) {
-                    const days = Number(e.target.value) * 365;
-                    setCalculatedAgeText(`อายุประมาณ ${e.target.value} ปี (ประมาณ ${days.toLocaleString()} วัน)`);
-                  } else {
-                    setCalculatedAgeText("");
-                  }
-                }}
-              />
-            </Field>
-
-            {calculatedAgeText && (
-              <div className="field-wide">
-                <div className="age-badge-notification" role="status">
-                  <span className="badge-icon">ℹ️</span>
-                  <span>{calculatedAgeText}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </fieldset>
-
-        {/* Block 2: อาการที่มารับบริการ (มีช้อยส์ติ๊กเลือก + พิมพ์เสริม) */}
-        <fieldset>
-          <legend>
-            <span className="section-number">2</span>
-            <span>อาการสำคัญที่มารับบริการ <b>*</b><small>เลือกอาการเบื้องต้น หรือพิมพ์ระบุรายละเอียดเพิ่มเติม</small></span>
-          </legend>
-          
-          <div className="choice-chips-group" role="group" aria-label="ตัวเลือกอาการยอดนิยม">
-            {SYMPTOM_OPTIONS.map((symptom) => {
-              const isSelected = selectedSymptoms.includes(symptom);
-              return (
+            <div className="choice-chips-group" role="group" aria-label="ตัวเลือกอาการยอดนิยม">
+              {SYMPTOM_OPTIONS.map((symptom) => (
                 <button
-                  type="button"
-                  key={symptom}
-                  className={`choice-chip ${isSelected ? "selected" : ""}`}
+                  type="button" key={symptom}
+                  className={`choice-chip ${selectedSymptoms.includes(symptom) ? "selected" : ""}`}
                   onClick={() => toggleSymptom(symptom)}
                 >
                   {symptom}
                 </button>
-              );
-            })}
-          </div>
-
-          <Field label="ระบุรายละเอียดอาการสำคัญ" required>
-            <textarea
-              name="note"
-              placeholder="เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"
-              value={customSymptom || (selectedSymptoms.length > 0 ? selectedSymptoms.join(", ") : "")}
-              onChange={(e) => setCustomSymptom(e.target.value)}
-              className={fieldClass("note")}
-              required
-            />
-          </Field>
-        </fieldset>
-
-        {/* Block 3: ข้อมูลสุขภาพเบื้องต้น & โรคประจำตัว / แพ้ยา (มีช้อยส์) */}
-        <fieldset>
-          <legend>
-            <span className="section-number">3</span>
-            <span>ข้อมูลสุขภาพและประวัติการแพ้<small>ข้อมูลเบื้องต้นเพื่อความปลอดภัยในการตรวจรักษา</small></span>
-          </legend>
-          <div className="info-strip">สัญญาณชีพ (ความดันโลหิต ชีพจร อุณหภูมิ) จะได้รับการตรวจวัด ณ จุดคัดกรอง</div>
-
-          <div className="form-grid three">
-            <Field label="หมู่เลือด">
-              <select name="blood_type" value={bloodType} onChange={(e) => setBloodType(e.target.value)}>
-                <option value="UNKNOWN">ไม่ทราบ</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="AB">AB</option>
-                <option value="O">O</option>
-              </select>
-            </Field>
-            <Field label="ส่วนสูง">
-              <SuffixInput
-                name="height_cm"
-                type="number"
-                min={30}
-                max={250}
-                step="0.1"
-                inputMode="decimal"
-                placeholder="170"
-                suffix="ซม."
-                value={heightCm}
-                onChange={(e) => setHeightCm(e.target.value)}
-              />
-            </Field>
-            <Field label="น้ำหนัก">
-              <SuffixInput
-                name="weight_kg"
-                type="number"
-                min={1}
-                max={400}
-                step="0.1"
-                inputMode="decimal"
-                placeholder="65"
-                suffix="กก."
-                value={weightKg}
-                onChange={(e) => setWeightKg(e.target.value)}
-              />
-            </Field>
-          </div>
-
-          {/* โรคประจำตัว ช้อยส์ */}
-          <div
-            id="field-group-chronic"
-            className={`field-group-spacing ${invalidField === "chronic_diseases" ? "field-group-invalid" : ""}`}
-          >
-            <span className="field-group-title">
-              โรคประจำตัว <b>*</b>
-              <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มีโรคประจำตัว&quot;)</small>
-            </span>
-            <div className="choice-chips-group">
-              {CHRONIC_OPTIONS.map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  className={`choice-chip ${selectedDiseases.includes(item) ? "selected" : ""}`}
-                  onClick={() => {
-                    toggleDisease(item);
-                    if (invalidField === "chronic_diseases") setInvalidField("");
-                  }}
-                >
-                  {item}
-                </button>
               ))}
             </div>
-            <input
-              placeholder="ระบุโรคประจำตัวอื่น ๆ (หากมี)"
-              value={customDisease}
-              onChange={(e) => {
-                setCustomDisease(e.target.value);
-                if (invalidField === "chronic_diseases") setInvalidField("");
-              }}
-            />
-            <input type="hidden" name="chronic_diseases" value={finalDiseases} />
-          </div>
 
-          {/* ประวัติแพ้ยา ช้อยส์ */}
-          <div
-            id="field-group-allergies"
-            className={`field-group-spacing ${invalidField === "allergies" ? "field-group-invalid" : ""}`}
-          >
-            <span className="field-group-title">
-              ประวัติแพ้ยาและอาหาร <b>*</b>
-              <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มีประวัติแพ้ยา&quot;)</small>
-            </span>
-            <div className="choice-chips-group">
-              {ALLERGY_OPTIONS.map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  className={`choice-chip ${selectedAllergies.includes(item) ? "selected" : ""}`}
-                  onClick={() => {
-                    toggleAllergy(item);
-                    if (invalidField === "allergies") setInvalidField("");
-                  }}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-            <input
-              placeholder="ระบุยาหรือสารที่แพ้อื่น ๆ (หากมี)"
-              value={customAllergy}
-              onChange={(e) => {
-                setCustomAllergy(e.target.value);
-                if (invalidField === "allergies") setInvalidField("");
-              }}
-            />
-            <input type="hidden" name="allergies" value={finalAllergies} />
-          </div>
-
-          {/* ยาที่ใช้ประจำ ช้อยส์ */}
-          <div
-            id="field-group-medications"
-            className={`field-group-spacing ${invalidField === "medications" ? "field-group-invalid" : ""}`}
-          >
-            <span className="field-group-title">
-              ยาที่ใช้ประจำ <b>*</b>
-              <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มียาที่ใช้ประจำ&quot;)</small>
-            </span>
-            <div className="choice-chips-group">
-              {MEDICATION_OPTIONS.map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  className={`choice-chip ${selectedMedications.includes(item) ? "selected" : ""}`}
-                  onClick={() => {
-                    toggleMedication(item);
-                    if (invalidField === "medications") setInvalidField("");
-                  }}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-            <input
-              placeholder="ระบุชื่อยาอื่น ๆ หรือรายละเอียดเพิ่มเติม (หากมี เช่น ขนาดยา วิธีรับประทาน)"
-              value={customMedication}
-              onChange={(e) => {
-                setCustomMedication(e.target.value);
-                if (invalidField === "medications") setInvalidField("");
-              }}
-            />
-            <input type="hidden" name="medications" value={finalMedications} />
-          </div>
-        </fieldset>
-
-        {/* Block 4: ที่อยู่ (Dropdown 77 จังหวัด และเชื่อมโยง อำเภอ/ตำบล/รหัสไปรษณีย์) */}
-        <fieldset>
-          <legend>
-            <span className="section-number">4</span>
-            <span>ที่อยู่ปัจจุบัน<small>ระบุที่อยู่เพื่อการติดต่อและบันทึกประวัติการรักษา</small></span>
-          </legend>
-          <div className="form-grid">
-            <Field label="จังหวัด">
-              <select
-                name="province"
-                value={province}
-                onChange={handleProvinceChange}
-                autoComplete="address-level1"
-                className={fieldClass("province")}
-              >
-                <option value="">-- เลือกจังหวัด (77 จังหวัด) --</option>
-                {ALL_77_PROVINCES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="อำเภอ / เขต">
-              <select
-                name="district"
-                value={district}
-                onChange={handleDistrictChange}
-                disabled={!province}
-                autoComplete="address-level2"
-                className={fieldClass("district")}
-              >
-                <option value="">
-                  {province ? "-- เลือกอำเภอ / เขต --" : "-- กรุณาเลือกจังหวัดก่อน --"}
-                </option>
-                {districtOptions.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="ตำบล / แขวง">
-              <select
-                name="subdistrict"
-                value={subdistrict}
-                onChange={handleSubdistrictChange}
-                disabled={!district}
-                autoComplete="address-level3"
-                className={fieldClass("subdistrict")}
-              >
-                <option value="">
-                  {district ? "-- เลือกตำบล / แขวง --" : "-- กรุณาเลือกอำเภอก่อน --"}
-                </option>
-                {subdistrictOptions.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="รหัสไปรษณีย์">
-              <input
-                name="postal_code"
-                maxLength={5}
-                inputMode="numeric"
-                pattern="[0-9]{5}"
-                autoComplete="postal-code"
-                placeholder="5 หลัก"
-                value={postalCode}
-                onChange={(e) => setPostalCode(e.target.value)}
-                className={fieldClass("postal_code")}
+            <label className="field">
+              <span>ระบุรายละเอียดอาการสำคัญ <b>*</b></span>
+              <textarea
+                name="note"
+                placeholder="เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"
+                value={customSymptom || (selectedSymptoms.length > 0 ? selectedSymptoms.join(", ") : "")}
+                onChange={(e) => setCustomSymptom(e.target.value)}
+                className={invalidField === "note" ? "invalid" : ""}
+                required
               />
-            </Field>
-          </div>
-        </fieldset>
+            </label>
+          </fieldset>
+        </PatientProfileForm>
 
-        {/* Block 5: ผู้ติดต่อฉุกเฉิน (เพิ่มได้สูงสุด 3 คน/เบอร์) */}
-        <fieldset>
-          <legend>
-            <span className="section-number">5</span>
-            <span>ผู้ติดต่อฉุกเฉิน<small>ข้อมูลบุคคลที่สามารถติดต่อได้ในกรณีจำเป็นเร่งด่วน (สูงสุด 3 ท่าน)</small></span>
-          </legend>
-          
-          <div className="emergency-contacts-wrapper">
-            {emergencyContacts.map((contact, index) => (
-              <div key={contact.id} className="emergency-entry-card">
-                <div className="entry-header">
-                  <span className="entry-tag">
-                    ผู้ติดต่อฉุกเฉินท่านที่ {index + 1} {index === 0 ? "(หลัก)" : ""}
-                  </span>
-                  {index > 0 && (
-                    <button
-                      type="button"
-                      className="remove-entry-btn"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        removeEmergencyContact(contact.id);
-                      }}
-                    >
-                      ลบรายการ
-                    </button>
-                  )}
-                </div>
-                <div className="form-grid three">
-                  <Field label="ชื่อผู้ติดต่อ">
-                    <input
-                      name={`emergency_name_${index + 1}`}
-                      maxLength={120}
-                      autoComplete={index === 0 ? "name" : undefined}
-                      placeholder="ชื่อ-นามสกุล"
-                      value={contact.name}
-                      onChange={(e) => updateEmergencyContact(contact.id, "name", e.target.value)}
-                    />
-                  </Field>
-                  <Field label="ความสัมพันธ์">
-                    <select
-                      name={`emergency_relationship_${index + 1}`}
-                      value={contact.relationship}
-                      onChange={(e) => updateEmergencyContact(contact.id, "relationship", e.target.value)}
-                    >
-                      <option value="">-- เลือก --</option>
-                      <option value="FATHER">บิดา</option>
-                      <option value="MOTHER">มารดา</option>
-                      <option value="SPOUSE">คู่สมรส</option>
-                      <option value="CHILD">บุตร</option>
-                      <option value="SIBLING">พี่น้อง</option>
-                      <option value="RELATIVE">ญาติ</option>
-                      <option value="FRIEND">เพื่อน</option>
-                      <option value="CAREGIVER">ผู้ดูแล</option>
-                      <option value="OTHER">อื่น ๆ</option>
-                    </select>
-                  </Field>
-                  <Field label="เบอร์โทรศัพท์">
-                    <input
-                      name={`emergency_phone_${index + 1}`}
-                      maxLength={20}
-                      inputMode="tel"
-                      autoComplete={index === 0 ? "tel" : undefined}
-                      placeholder="08xxxxxxxx"
-                      value={contact.phone}
-                      onChange={(e) => updateEmergencyContact(contact.id, "phone", e.target.value)}
-                    />
-                  </Field>
-                </div>
-              </div>
-            ))}
-
-            {emergencyContacts.length < 3 && (
-              <button
-                type="button"
-                className="add-emergency-btn"
-                onClick={addEmergencyContact}
-              >
-                + เพิ่มผู้ติดต่อฉุกเฉิน ({emergencyContacts.length}/3)
-              </button>
-            )}
-          </div>
-        </fieldset>
-
-        {/* PDPA Verified status and Consent */}
         <div className="pdpa-verified-box">
           <div className="pdpa-verified-badge">
             <span className="pdpa-check-icon">✓</span>
             <span>ยินยอมตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA) แล้ว</span>
           </div>
-          <button
-            type="button"
-            className="pdpa-review-link"
-            onClick={() => setShowPdpaReview(true)}
-          >
+          <button type="button" className="pdpa-review-link" onClick={() => setShowPdpaReview(true)}>
             อ่านนโยบายความเป็นส่วนตัว (PDPA) อีกครั้ง
           </button>
         </div>
@@ -1391,26 +377,5 @@ export function RegistrationView({
         <p className="privacy-note">ระบบจะไม่แสดงชื่อ อาการ หรือข้อมูลส่วนบุคคลบนจอแสดงสถานะคิวสาธารณะ</p>
       </form>
     </section>
-  );
-}
-
-function Field({ label, required, wide, help, children }: { label: string; required?: boolean; wide?: boolean; help?: string; children: React.ReactNode }) {
-  return (
-    <label className={`field${wide ? " field-wide" : ""}`}>
-      <span>{label} {required && <b>*</b>}</span>
-      {children}
-      {help && <small>{help}</small>}
-    </label>
-  );
-}
-
-function SuffixInput(props: React.InputHTMLAttributes<HTMLInputElement> & { name: string; suffix: string }) {
-  const { suffix, ...inputProps } = props;
-  const labels: Record<string, string> = { age: "อายุ", height_cm: "ส่วนสูง", weight_kg: "น้ำหนัก" };
-  return (
-    <div className="input-suffix">
-      <input aria-label={labels[inputProps.name]} {...inputProps} />
-      <em>{suffix}</em>
-    </div>
   );
 }

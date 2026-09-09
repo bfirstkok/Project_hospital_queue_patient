@@ -76,6 +76,26 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             self._send_json(200, response_data)
             return
 
+        # 6. PIN Reset - request OTP (always ok, does not leak which IDs exist)
+        if path == "/api/patient/pin/reset/request/":
+            self._send_json(200, {"ok": True})
+            return
+
+        # 7. PIN Reset - confirm OTP + set new PIN
+        if path == "/api/patient/pin/reset/confirm/":
+            self._send_json(200, {"ok": True, "access_token": "mock_patient_token_12345"})
+            return
+
+        self._send_json(404, {"ok": False, "error": "Not Found"})
+
+    def do_PATCH(self):
+        path = self.path.rstrip("/") + "/"
+
+        # Patient profile update
+        if path == "/api/patient/me/":
+            self.do_GET()  # echo back the same /me payload as the updated account
+            return
+
         self._send_json(404, {"ok": False, "error": "Not Found"})
 
     def do_GET(self):
@@ -105,6 +125,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
                     "national_id": "1234567890123",
                     "hn": "HN-67001",
                     "phone": "081-234-5678",
+                    "email": "somchai@example.com",
                     "gender": "ชาย",
                     "age": 35,
                     "blood_type": "O",

@@ -1,6 +1,4 @@
-import { useState, useEffect } from "react";
 import type { FontSize } from "@/shared/ui/SiteShell";
-import { hasPin, isPinEnabled, setPinEnabled } from "@/shared/auth/pin-storage";
 
 interface SettingsViewProps {
   fontSize: FontSize;

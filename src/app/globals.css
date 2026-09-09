@@ -64,6 +64,14 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Thai text has no word spaces — let long strings wrap instead of overflowing on narrow screens. */
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+img, video, canvas {
+  max-width: 100%;
+  height: auto;
 }
 
 button, input, select, textarea {
@@ -658,6 +666,21 @@ legend small {
 
 .form-grid.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Day / month / year birth-date selects (easier than a native date picker for old dates) */
+.dob-select-row {
+  display: flex;
+  gap: 8px;
+}
+
+.dob-select-row select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dob-select-row select:nth-child(2) {
+  flex: 1.5 1 0;
 }
 
 .field {
@@ -1352,7 +1375,7 @@ input:disabled {
 }
 
 /* ==========================================================================
-   Auth / Login View (ThaID & National ID Tabs)
+   Auth / Login View (National ID)
    ========================================================================== */
 .auth-view {
   max-width: 520px;
@@ -1384,33 +1407,6 @@ input:disabled {
   line-height: 1.6;
 }
 
-/* Login Method Tabs */
-.auth-method-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  background: var(--surface-alt);
-  padding: 6px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  margin-bottom: 22px;
-}
-
-.auth-tab {
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--muted);
-  transition: all 0.2s ease;
-}
-
-.auth-tab.active {
-  background: var(--surface);
-  color: var(--primary-hover);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-}
-
 .auth-card .alert {
   text-align: left;
 }
@@ -1423,34 +1419,6 @@ input:disabled {
 
 .auth-card form .primary-button {
   margin-top: 6px;
-}
-
-/* ThaID Box */
-.thaid-login-box {
-  display: grid;
-  gap: 18px;
-  text-align: center;
-}
-
-.thaid-badge {
-  padding: 22px;
-  background: var(--primary-light);
-  border: 1.5px solid var(--primary-border);
-  border-radius: var(--radius-md);
-  text-align: center;
-}
-
-.thaid-badge strong {
-  display: block;
-  color: var(--primary-hover);
-  font-size: 1.1rem;
-}
-
-.thaid-badge p {
-  margin: 6px 0 0;
-  color: var(--ink-secondary);
-  font-size: 0.9rem;
-  line-height: 1.5;
 }
 
 /* ==========================================================================
@@ -1887,6 +1855,8 @@ footer {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* clip (not hidden/auto) so no accidental horizontal scroll, without breaking the sticky header */
+  overflow-x: clip;
 }
 
 .main-content {
@@ -2046,6 +2016,29 @@ footer {
 
   .mobile-bottom-nav {
     display: none;
+  }
+}
+
+/* Offline connectivity banner — pinned bottom, above the mobile bottom nav */
+.offline-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1001;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--danger);
+  color: #ffffff;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  body:has(.mobile-bottom-nav) .offline-banner {
+    bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: 10px;
   }
 }
 
@@ -2551,180 +2544,6 @@ footer {
   font-size: 1.2rem;
   color: var(--primary);
   font-weight: 700;
-}
-
-/* ==========================================================================
-   ThaID D.DOPA Digital ID Gateway
-   ========================================================================== */
-.thaid-gateway-card {
-  max-width: 540px;
-  margin: 20px auto 40px;
-  background: #ffffff;
-  border-radius: var(--radius-lg);
-  border: 1.5px solid #005aa9;
-  box-shadow: 0 12px 36px rgba(0, 90, 169, 0.12);
-  overflow: hidden;
-}
-
-.thaid-gateway-header {
-  background: linear-gradient(135deg, #003366 0%, #005aa9 100%);
-  color: #ffffff;
-  padding: 20px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.dopa-badge {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.dopa-emblem {
-  font-size: 2rem;
-}
-
-.dopa-badge strong {
-  display: block;
-  font-size: 1.15rem;
-  letter-spacing: 0.5px;
-}
-
-.dopa-badge small {
-  display: block;
-  font-size: 0.78rem;
-  opacity: 0.88;
-}
-
-.ial-tag {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  padding: 4px 10px;
-  border-radius: 99px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.thaid-gateway-body {
-  padding: 28px 24px;
-}
-
-.thaid-gateway-body h1 {
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: #003366;
-  margin: 0 0 12px;
-}
-
-.requesting-app-text {
-  font-size: 0.95rem;
-  color: var(--ink-secondary);
-  line-height: 1.5;
-  margin-bottom: 20px;
-}
-
-.scope-box {
-  background: #f4f8fc;
-  border: 1px solid #cce2f4;
-  border-radius: var(--radius-md);
-  padding: 16px 18px;
-  margin-bottom: 20px;
-}
-
-.scope-box h3 {
-  font-size: 0.95rem;
-  color: #004080;
-  margin: 0 0 12px;
-}
-
-.scope-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.scope-list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.scope-check {
-  color: #005aa9;
-  font-weight: 800;
-  font-size: 1.1rem;
-  margin-top: 1px;
-}
-
-.scope-list strong {
-  display: block;
-  font-size: 0.92rem;
-  color: var(--ink);
-}
-
-.scope-list small {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.thaid-security-notice {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #e6f4ea;
-  border: 1px solid #a8dab5;
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  margin-bottom: 24px;
-}
-
-.thaid-security-notice span {
-  font-size: 1.2rem;
-}
-
-.thaid-security-notice p {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #137333;
-}
-
-.gateway-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.thaid-confirm-btn {
-  background: #005aa9 !important;
-  color: #ffffff !important;
-}
-
-.thaid-confirm-btn:hover {
-  background: #004080 !important;
-}
-
-.thaid-gateway-footer {
-  background: #edf3f8;
-  padding: 12px 24px;
-  text-align: center;
-  border-top: 1px solid #d5e4f0;
-  color: #557086;
-  font-size: 0.78rem;
-}
-
-.thaid-btn {
-  background: #005aa9 !important;
-}
-
-.thaid-logo-circle {
-  font-size: 1.8rem;
 }
 
 /* Register Redirect Box in Login View */
@@ -3369,6 +3188,36 @@ input:checked + .toggle-slider:before {
   gap: 16px;
   margin-top: 12px;
   text-align: left;
+}
+
+/* Registered contact the OTP will be sent to (read-only, not typed) */
+.recovery-target-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--primary-border);
+  background: var(--primary-light);
+  border-radius: var(--radius-md);
+}
+
+.recovery-target-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.recovery-target-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--primary-hover);
+  letter-spacing: 0.5px;
+}
+
+.recovery-target-box small {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 /* Recovery Method Tabs (Email / Phone) */

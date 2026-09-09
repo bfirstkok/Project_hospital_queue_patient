@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
+import { isValidThaiNationalId } from "@/shared/data/thai-id";
 
 interface LoginViewProps {
   onRegister: () => void;
   onSuccess: (token: string, nationalId?: string) => void;
-  onUnlockWithPin?: () => void;
 }
 
 export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
@@ -20,6 +20,11 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
     try {
       const nationalId = new FormData(form).get("national_id");
       const rawId = typeof nationalId === "string" ? nationalId.replace(/\D/g, "") : "";
+      if (!isValidThaiNationalId(rawId)) {
+        setMessage("เลขบัตรประจำตัวประชาชนไม่ถูกต้อง กรุณาตรวจสอบตัวเลข 13 หลักอีกครั้ง");
+        setLoading(false);
+        return;
+      }
       const result = await patientApi.login(rawId);
       if (!result.access_token) throw new ApiError("เว็บหลักไม่ได้ส่ง access token กลับมา");
       if (rawId) {

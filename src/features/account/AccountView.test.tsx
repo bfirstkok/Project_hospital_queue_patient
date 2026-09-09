@@ -45,7 +45,7 @@ describe("AccountView", () => {
   });
 
   it("opens edit modal and allows editing profile details and emergency contacts", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+    const body = JSON.stringify({
       ok: true,
       profile: {
         first_name: "สมชาย",
@@ -59,7 +59,11 @@ describe("AccountView", () => {
       active_queue: null,
       visits: [],
       appointments: [],
-    }), { headers: { "content-type": "application/json" } }));
+    });
+    // Fresh Response per call: the component reads /me, /queue, then PATCH /me.
+    vi.mocked(fetch).mockImplementation(async () =>
+      new Response(body, { headers: { "content-type": "application/json" } })
+    );
 
     render(createElement(AccountView, {
       token: "token",
@@ -72,7 +76,7 @@ describe("AccountView", () => {
     fireEvent.click(screen.getByRole("button", { name: /แก้ไขข้อมูล/ }));
     expect(screen.getByRole("heading", { name: "แก้ไขข้อมูลส่วนตัวและสุขภาพ" })).toBeInTheDocument();
 
-    const phoneInput = screen.getByPlaceholderText("08xxxxxxxx");
+    const phoneInput = screen.getAllByPlaceholderText("08xxxxxxxx")[0];
     fireEvent.change(phoneInput, { target: { value: "0899999999" } });
 
     // Add another emergency contact

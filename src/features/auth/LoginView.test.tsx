@@ -13,10 +13,10 @@ describe("LoginView", () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ ok: true, access_token: "token" }), { headers: { "content-type": "application/json" } }));
     const onSuccess = vi.fn();
     render(createElement(LoginView, { onRegister: vi.fn(), onSuccess }));
-    fireEvent.change(screen.getByLabelText("เลขบัตรประจำตัวประชาชน *"), { target: { value: "1234567890123" } });
+    fireEvent.change(screen.getByLabelText("เลขบัตรประจำตัวประชาชน *"), { target: { value: "1101700230708" } });
     fireEvent.click(screen.getByRole("button", { name: "เข้าสู่ระบบ" }));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("token", "1234567890123"));
-    expect(vi.mocked(fetch).mock.calls[0][1]?.body).toBe('{"national_id":"1234567890123"}');
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("token", "1101700230708"));
+    expect(vi.mocked(fetch).mock.calls[0][1]?.body).toBe('{"national_id":"1101700230708"}');
   });
 
   it("navigates to register view when register button clicked", () => {

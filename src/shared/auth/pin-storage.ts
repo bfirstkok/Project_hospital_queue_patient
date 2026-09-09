@@ -2,10 +2,24 @@ export const PIN_STORAGE_KEY = "hospital_patient_security_pin";
 export const PIN_ENABLED_KEY = "hospital_patient_pin_enabled";
 export const PIN_ATTEMPTS_KEY = "hospital_patient_pin_attempts";
 export const PIN_LOCKOUT_UNTIL_KEY = "hospital_patient_pin_lockout_until";
+export const PIN_LOCKOUT_LEVEL_KEY = "hospital_patient_pin_lockout_level";
 export const PAIRED_PATIENT_KEY = "hospital_patient_paired_info";
 
 export const MAX_FAILED_ATTEMPTS = 3;
-export const LOCKOUT_DURATION_SECONDS = 300; // 5 minutes
+/**
+ * Each run of MAX_FAILED_ATTEMPTS wrong PINs triggers the next tier: 1 min, then
+ * 5 min, then 30 min (last tier repeats). The escalation level survives clearPin
+ * (re-logging in with the national ID does NOT reset a lockout); only a correct
+ * PIN entry clears it.
+ *
+ * Note: this is a client-side deterrent only — the real gate is the server-side
+ * PIN store described in docs/BACKEND_HANDOFF.md §3 (pin/verify).
+ */
+export const LOCKOUT_TIERS_SECONDS = [60, 300, 1800];
+
+function lockoutSecondsForLevel(level: number): number {
+  return LOCKOUT_TIERS_SECONDS[Math.min(Math.max(level, 0), LOCKOUT_TIERS_SECONDS.length - 1)];
+}
 
 const SALT = "hospital_patient_pin_salt_v1:";
 
@@ -128,7 +142,7 @@ export function savePin(pin: string, nationalId?: string): void {
   }
   window.localStorage.setItem(PIN_STORAGE_KEY, hashed);
   window.localStorage.setItem(PIN_ENABLED_KEY, "true");
-  resetLockout();
+  clearActiveLockout();
 }
 
 export function hasPin(nationalId?: string): boolean {
@@ -157,6 +171,17 @@ export function getRemainingAttempts(): number {
   return Math.max(0, MAX_FAILED_ATTEMPTS - attempts);
 }
 
+export function getLockoutLevel(): number {
+  if (typeof window === "undefined") return 0;
+  const raw = window.localStorage.getItem(PIN_LOCKOUT_LEVEL_KEY);
+  return raw ? parseInt(raw, 10) || 0 : 0;
+}
+
+/** How long the NEXT lockout will last given the escalation reached so far. */
+export function getNextLockoutSeconds(): number {
+  return lockoutSecondsForLevel(getLockoutLevel());
+}
+
 export function getLockoutRemainingSeconds(): number {
   if (typeof window === "undefined") return 0;
   const lockoutUntil = window.localStorage.getItem(PIN_LOCKOUT_UNTIL_KEY);
@@ -164,7 +189,7 @@ export function getLockoutRemainingSeconds(): number {
   const until = parseInt(lockoutUntil, 10);
   const now = Date.now();
   if (now >= until) {
-    // Lockout expired, clean up
+    // Lockout window expired: reset the attempt counter but KEEP the escalation level.
     window.localStorage.removeItem(PIN_LOCKOUT_UNTIL_KEY);
     window.localStorage.setItem(PIN_ATTEMPTS_KEY, "0");
     return 0;
@@ -176,7 +201,16 @@ export function isLockedOut(): boolean {
   return getLockoutRemainingSeconds() > 0;
 }
 
+/** Full reset including the escalation level — only for a genuine success (correct PIN). */
 export function resetLockout(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(PIN_ATTEMPTS_KEY);
+  window.localStorage.removeItem(PIN_LOCKOUT_UNTIL_KEY);
+  window.localStorage.removeItem(PIN_LOCKOUT_LEVEL_KEY);
+}
+
+/** Clears the active lockout window but keeps the escalation level. */
+export function clearActiveLockout(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(PIN_ATTEMPTS_KEY);
   window.localStorage.removeItem(PIN_LOCKOUT_UNTIL_KEY);
@@ -187,8 +221,10 @@ export function recordFailedAttempt(): void {
   const current = getFailedAttempts() + 1;
   window.localStorage.setItem(PIN_ATTEMPTS_KEY, current.toString());
   if (current >= MAX_FAILED_ATTEMPTS) {
-    const until = Date.now() + LOCKOUT_DURATION_SECONDS * 1000;
+    const level = getLockoutLevel();
+    const until = Date.now() + lockoutSecondsForLevel(level) * 1000;
     window.localStorage.setItem(PIN_LOCKOUT_UNTIL_KEY, until.toString());
+    window.localStorage.setItem(PIN_LOCKOUT_LEVEL_KEY, String(level + 1));
   }
 }
 
@@ -224,7 +260,8 @@ export function clearPin(nationalId?: string): void {
   }
   window.localStorage.removeItem(PIN_STORAGE_KEY);
   window.localStorage.removeItem(PIN_ENABLED_KEY);
-  resetLockout();
+  // Intentionally NOT clearing the lockout: signing back in with the national ID
+  // must not let a locked-out user skip the wait.
 }
 
 export const hasPinForPatient = hasPin;
@@ -236,6 +273,9 @@ export interface PairedPatientInfo {
   name: string;
   nationalId: string;
   maskedId?: string;
+  /** Registered contact channels, cached from /me so PIN recovery can target them without re-typing. */
+  phone?: string;
+  email?: string;
 }
 
 export function savePairedPatient(info: PairedPatientInfo): void {

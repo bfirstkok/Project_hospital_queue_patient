@@ -12,7 +12,7 @@ import {
   clearPairedPatient,
   clearPin,
   hasPin,
-  isPinEnabled,
+  readPairedPatient,
   savePairedPatient,
 } from "@/shared/auth/pin-storage";
 import { patientApi } from "@/shared/api/patient-api";
@@ -186,11 +186,14 @@ export default function Page() {
             name: `${account.profile.first_name} ${account.profile.last_name}`.trim(),
             nationalId: natId,
             maskedId: masked,
+            phone: account.profile.phone || undefined,
+            email: account.profile.email || undefined,
           });
         }
       })
-      .catch(() => {
-        // Fallback gracefully if backend is offline
+      .catch((reason) => {
+        // Non-fatal: PIN greeting just won't show a name. Surface for debugging.
+        console.warn("Could not cache paired patient profile:", reason);
       });
   }
 
@@ -237,8 +240,10 @@ export default function Page() {
     if (activeTok) {
       try {
         await patientApi.setupPin(pin, activeTok);
-      } catch {
-        // Graceful fallback
+      } catch (reason) {
+        // ponytail: local PIN stays usable offline; once the backend PIN is
+        // authoritative this should hard-fail and roll back the local PIN.
+        console.warn("Could not sync PIN to backend:", reason);
       }
     }
   }
@@ -252,6 +257,10 @@ export default function Page() {
       // Ignore
     }
   }
+
+  // Same identity for every PIN view — whether entered from the unlock gate
+  // (pendingAuth set) or from Settings after login (pendingAuth null).
+  const pinNationalId = pendingAuth?.nationalId || readPairedPatient()?.nationalId || undefined;
 
   const isAuthGateView =
     !hasSavedAccount ||
@@ -286,7 +295,6 @@ export default function Page() {
         <LoginView
           onRegister={() => setView("registration")}
           onSuccess={loginSuccess}
-          onUnlockWithPin={undefined}
         />
       )}
 
@@ -294,10 +302,11 @@ export default function Page() {
       {view === "pin_unlock" && (
         <PinAuthView
           mode="unlock"
-          nationalId={pendingAuth?.nationalId}
+          nationalId={pinNationalId}
           onSuccess={() => finishPinFlow("status")}
           onForgotPin={handleForgotPin}
           onSwitchAccount={handleSwitchAccount}
+          onPinConfigured={persistPin}
           onCancel={() => {
             setPendingAuth(null);
             setView("login");
@@ -308,7 +317,7 @@ export default function Page() {
       {view === "pin_setup" && (
         <PinAuthView
           mode="setup"
-          nationalId={pendingAuth?.nationalId}
+          nationalId={pinNationalId}
           isMandatory={Boolean(pendingAuth)}
           onSuccess={() => finishPinFlow(pinSetupReturnView)}
           onCancel={() => {
@@ -322,6 +331,7 @@ export default function Page() {
       {view === "pin_change" && (
         <PinAuthView
           mode="change"
+          nationalId={pinNationalId}
           onSuccess={() => setView("settings")}
           onCancel={() => setView("settings")}
           onPinConfigured={persistPin}
@@ -331,8 +341,10 @@ export default function Page() {
       {view === "pin_reset" && (
         <PinAuthView
           mode="reset"
-          nationalId={pendingAuth?.nationalId}
+          nationalId={pinNationalId}
           onSuccess={() => finishPinFlow(hasSavedAccount && !pendingAuth ? "settings" : "status")}
+          onForgotPin={handleForgotPin}
+          onSwitchAccount={handleSwitchAccount}
           onCancel={() => {
             setPendingAuth(null);
             setView(hasSavedAccount && !pendingAuth ? "settings" : "login");
@@ -362,6 +374,7 @@ export default function Page() {
           onCancel={() => setView(hasSavedAccount ? "status" : "login")}
           onSuccess={registrationSuccess}
           onUnauthorized={expireSession}
+          onDuplicateQueue={(existingToken, natId) => loginSuccess(existingToken, natId || undefined)}
         />
       )}
 

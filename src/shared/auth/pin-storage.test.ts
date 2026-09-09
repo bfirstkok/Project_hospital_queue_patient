@@ -85,16 +85,53 @@ describe("pin-storage", () => {
     expect(verifyPin("123456")).toBe(true);
   });
 
-  it("clears PIN and lockout state", () => {
+  it("clears the PIN but keeps an active lockout so re-login cannot bypass it", () => {
     savePin("123456");
     verifyPin("000000");
-    expect(getFailedAttempts()).toBe(1);
+    verifyPin("000001");
+    verifyPin("000002");
+    expect(isLockedOut()).toBe(true);
 
     clearPin();
     expect(hasPin()).toBe(false);
     expect(isPinEnabled()).toBe(false);
-    expect(getFailedAttempts()).toBe(0);
-    expect(isLockedOut()).toBe(false);
+    // Signing back in with the national ID must NOT reset the lockout timer.
+    expect(isLockedOut()).toBe(true);
+    expect(getLockoutRemainingSeconds()).toBeGreaterThan(0);
+  });
+
+  it("escalates the lockout duration on each repeated run of failed attempts", () => {
+    savePin("123456");
+    const failMax = () => {
+      for (let i = 0; i < MAX_FAILED_ATTEMPTS; i++) verifyPin("000000");
+    };
+    const expireCurrentWindow = () => {
+      window.localStorage.setItem("hospital_patient_pin_lockout_until", String(Date.now() - 1000));
+      expect(isLockedOut()).toBe(false); // triggers cleanup, keeps the escalation level
+    };
+
+    failMax();
+    const first = getLockoutRemainingSeconds();
+    expect(first).toBeGreaterThan(0);
+    expect(first).toBeLessThanOrEqual(60);
+
+    expireCurrentWindow();
+    failMax();
+    const second = getLockoutRemainingSeconds();
+    expect(second).toBeGreaterThan(60);
+    expect(second).toBeLessThanOrEqual(300);
+
+    expireCurrentWindow();
+    failMax();
+    const third = getLockoutRemainingSeconds();
+    expect(third).toBeGreaterThan(300);
+    expect(third).toBeLessThanOrEqual(1800);
+
+    // A correct PIN clears the escalation entirely.
+    expireCurrentWindow();
+    expect(verifyPin("123456")).toBe(true);
+    failMax();
+    expect(getLockoutRemainingSeconds()).toBeLessThanOrEqual(60);
   });
 
   it("saves and reads paired patient information", () => {

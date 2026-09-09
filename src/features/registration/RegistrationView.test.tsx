@@ -37,11 +37,12 @@ describe("RegistrationView", () => {
   it("calculates age automatically when birth date is selected", async () => {
     render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess: vi.fn() }));
 
-    const birthDateInput = screen.getByLabelText("วัน/เดือน/ปีเกิด") as HTMLInputElement;
     const ageInput = screen.getByLabelText("อายุ") as HTMLInputElement;
 
-    // Pick a birthdate (e.g. 2000-01-01)
-    fireEvent.change(birthDateInput, { target: { value: "2000-01-01" } });
+    // Pick a birthdate via the day / month / year selects (e.g. 1 Jan 2000)
+    fireEvent.change(screen.getByLabelText("วันเกิด"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("เดือนเกิด"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("ปีเกิด (พ.ศ.)"), { target: { value: "2000" } });
 
     // Age should be automatically populated
     expect(Number(ageInput.value)).toBeGreaterThan(20);
@@ -124,17 +125,27 @@ describe("RegistrationView", () => {
   });
 
   it("converts numeric values and moves to queue status after successful registration", async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, access_token: "token", queue_number: "Q-1" }), {
+    // Fresh national ID: the pre-register lookup (login) 404s -> registration proceeds.
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      if (url.includes("/api/patient/login/")) {
+        return new Response(JSON.stringify({ ok: false, error: "ไม่พบผู้ป่วย" }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, access_token: "token", queue_number: "Q-1" }), {
         headers: { "content-type": "application/json" },
-      })
-    );
+      });
+    });
     const onSuccess = vi.fn();
     render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess }));
     
     fireEvent.change(screen.getByLabelText("ชื่อ *"), { target: { value: "สมชาย" } });
     fireEvent.change(screen.getByLabelText("นามสกุล *"), { target: { value: "ใจดี" } });
-    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1234567890123" } });
+    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1101700230708" } });
+    fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[0], { target: { value: "0812345678" } });
+    fireEvent.change(screen.getByPlaceholderText("patient@example.com"), { target: { value: "somchai@example.com" } });
     fireEvent.change(screen.getByLabelText("อายุ"), { target: { value: "30" } });
     fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
     
@@ -152,7 +163,8 @@ describe("RegistrationView", () => {
     fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
     
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("token", expect.objectContaining({ queue_number: "Q-1" })));
-    const fetchBody = vi.mocked(fetch).mock.calls[0][1]?.body as string;
+    const registerCall = vi.mocked(fetch).mock.calls.find(([u]) => String(u).includes("/api/patient/register/"));
+    const fetchBody = registerCall?.[1]?.body as string;
     expect(fetchBody).toContain('"age":30');
     expect(fetchBody).toContain('"province":"ขอนแก่น"');
     expect(fetchBody).toContain('"district":"เมืองขอนแก่น"');
@@ -163,12 +175,53 @@ describe("RegistrationView", () => {
     expect(fetchBody).toContain('"medications":"ไม่มียาที่ใช้ประจำ"');
   });
 
+  it("does not re-register a national ID that already has an active queue", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      if (url.includes("/api/patient/login/")) {
+        return new Response(JSON.stringify({ ok: true, access_token: "existing-token" }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/api/patient/queue/")) {
+        return new Response(JSON.stringify({ ok: true, queue_number: "A005", status_label: "รอตรวจ" }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, access_token: "new", queue_number: "X" }), {
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const onSuccess = vi.fn();
+    const onDuplicateQueue = vi.fn();
+    render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess, onDuplicateQueue }));
+
+    fireEvent.change(screen.getByLabelText("ชื่อ *"), { target: { value: "สมชาย" } });
+    fireEvent.change(screen.getByLabelText("นามสกุล *"), { target: { value: "ใจดี" } });
+    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1101700230708" } });
+    fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[0], { target: { value: "0812345678" } });
+    fireEvent.change(screen.getByPlaceholderText("patient@example.com"), { target: { value: "somchai@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
+    fireEvent.click(screen.getByRole("button", { name: "ไม่มีโรคประจำตัว" }));
+    fireEvent.click(screen.getByRole("button", { name: "ไม่มีประวัติแพ้ยา" }));
+    fireEvent.click(screen.getByRole("button", { name: "ไม่มียาที่ใช้ประจำ" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
+
+    await waitFor(() => expect(onDuplicateQueue).toHaveBeenCalledWith("existing-token", "1101700230708"));
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(screen.getByText(/มีคิวที่กำลังรับบริการอยู่แล้ว/)).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes("/api/patient/register/"))).toBe(false);
+  });
+
   it("requires mandatory sensitive health information before submission", async () => {
     render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess: vi.fn() }));
 
     fireEvent.change(screen.getByLabelText("ชื่อ *"), { target: { value: "สมชาย" } });
     fireEvent.change(screen.getByLabelText("นามสกุล *"), { target: { value: "ใจดี" } });
-    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1234567890123" } });
+    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1101700230708" } });
+    fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[0], { target: { value: "0812345678" } });
+    fireEvent.change(screen.getByPlaceholderText("patient@example.com"), { target: { value: "somchai@example.com" } });
     fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
 
     // Try submit without selecting chronic diseases
@@ -267,7 +320,7 @@ describe("RegistrationView", () => {
     expect((screen.getByLabelText("ชื่อ *") as HTMLInputElement).value).toBe("กิตติ");
     expect((screen.getByLabelText("นามสกุล *") as HTMLInputElement).value).toBe("มีสุข");
     expect((screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด") as HTMLInputElement).value).toBe("1100200300401");
-    expect((screen.getAllByLabelText("เบอร์โทรศัพท์")[0] as HTMLInputElement).value).toBe("0891234567");
+    expect((screen.getAllByPlaceholderText("08xxxxxxxx")[0] as HTMLInputElement).value).toBe("0891234567");
     expect((screen.getByLabelText("ส่วนสูง") as HTMLInputElement).value).toBe("175");
     expect((screen.getByLabelText("น้ำหนัก") as HTMLInputElement).value).toBe("70");
 
