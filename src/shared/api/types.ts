@@ -15,6 +15,7 @@ export interface RegistrationPayload {
   gender: string | null;
   age: number | null;
   phone: string | null;
+  email: string | null;
   blood_type: string | null;
   height_cm: number | null;
   weight_kg: number | null;
@@ -47,6 +48,7 @@ export interface PatientProfile {
   national_id?: string | null;
   hn?: string | null;
   phone?: string | null;
+  email?: string | null;
   gender?: string | null;
   birth_date?: string | null;
   age?: number | null;
@@ -93,6 +95,44 @@ export interface AccountData extends ApiEnvelope {
   active_queue: QueueData | null;
   visits: Visit[];
   appointments: Appointment[];
+}
+
+/** Patient-editable subset of the profile, sent to PATCH /api/patient/me/. */
+export interface ProfileUpdatePayload {
+  first_name?: string | null;
+  last_name?: string | null;
+  gender?: string | null;
+  birth_date?: string | null;
+  age?: number | null;
+  phone?: string | null;
+  email?: string | null;
+  blood_type?: string | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  address?: string | null;
+  province?: string | null;
+  district?: string | null;
+  subdistrict?: string | null;
+  postal_code?: string | null;
+  chronic_diseases?: string | null;
+  allergies?: string | null;
+  medications?: string | null;
+  emergency_name?: string | null;
+  emergency_relationship?: string | null;
+  emergency_phone?: string | null;
+  emergency_contacts?: Array<{ id?: string; name: string; relationship?: string; phone: string }> | null;
+}
+
+export interface PinResetRequestPayload {
+  national_id: string;
+  channel: "phone" | "email";
+  target: string;
+}
+
+export interface PinResetConfirmPayload {
+  national_id: string;
+  otp: string;
+  pin: string;
 }
 
 export interface RegistrationResult extends QueueData {

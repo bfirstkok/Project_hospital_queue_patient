@@ -37,11 +37,12 @@ describe("RegistrationView", () => {
   it("calculates age automatically when birth date is selected", async () => {
     render(createElement(RegistrationView, { initialPdpaAccepted: true, onLogin: vi.fn(), onSuccess: vi.fn() }));
 
-    const birthDateInput = screen.getByLabelText("วัน/เดือน/ปีเกิด") as HTMLInputElement;
     const ageInput = screen.getByLabelText("อายุ") as HTMLInputElement;
 
-    // Pick a birthdate (e.g. 2000-01-01)
-    fireEvent.change(birthDateInput, { target: { value: "2000-01-01" } });
+    // Pick a birthdate via the day / month / year selects (e.g. 1 Jan 2000)
+    fireEvent.change(screen.getByLabelText("วันเกิด"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("เดือนเกิด"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("ปีเกิด (พ.ศ.)"), { target: { value: "2000" } });
 
     // Age should be automatically populated
     expect(Number(ageInput.value)).toBeGreaterThan(20);
@@ -134,7 +135,9 @@ describe("RegistrationView", () => {
     
     fireEvent.change(screen.getByLabelText("ชื่อ *"), { target: { value: "สมชาย" } });
     fireEvent.change(screen.getByLabelText("นามสกุล *"), { target: { value: "ใจดี" } });
-    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1234567890123" } });
+    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1101700230708" } });
+    fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[0], { target: { value: "0812345678" } });
+    fireEvent.change(screen.getByPlaceholderText("patient@example.com"), { target: { value: "somchai@example.com" } });
     fireEvent.change(screen.getByLabelText("อายุ"), { target: { value: "30" } });
     fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
     
@@ -168,7 +171,9 @@ describe("RegistrationView", () => {
 
     fireEvent.change(screen.getByLabelText("ชื่อ *"), { target: { value: "สมชาย" } });
     fireEvent.change(screen.getByLabelText("นามสกุล *"), { target: { value: "ใจดี" } });
-    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1234567890123" } });
+    fireEvent.change(screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด"), { target: { value: "1101700230708" } });
+    fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[0], { target: { value: "0812345678" } });
+    fireEvent.change(screen.getByPlaceholderText("patient@example.com"), { target: { value: "somchai@example.com" } });
     fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
 
     // Try submit without selecting chronic diseases
@@ -267,7 +272,7 @@ describe("RegistrationView", () => {
     expect((screen.getByLabelText("ชื่อ *") as HTMLInputElement).value).toBe("กิตติ");
     expect((screen.getByLabelText("นามสกุล *") as HTMLInputElement).value).toBe("มีสุข");
     expect((screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด") as HTMLInputElement).value).toBe("1100200300401");
-    expect((screen.getAllByLabelText("เบอร์โทรศัพท์")[0] as HTMLInputElement).value).toBe("0891234567");
+    expect((screen.getAllByPlaceholderText("08xxxxxxxx")[0] as HTMLInputElement).value).toBe("0891234567");
     expect((screen.getByLabelText("ส่วนสูง") as HTMLInputElement).value).toBe("175");
     expect((screen.getByLabelText("น้ำหนัก") as HTMLInputElement).value).toBe("70");
 

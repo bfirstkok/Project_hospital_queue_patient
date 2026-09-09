@@ -16,7 +16,7 @@ describe("patientApi", () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, access_token: "token", queue_number: "Q-1" }));
     await patientApi.register({
       website: null, first_name: "สมชาย", last_name: "ใจดี", national_id: "1234567890123", gender: "M",
-      age: 30, phone: null, blood_type: "A", height_cm: 170, weight_kg: 65, chronic_diseases: null,
+      age: 30, phone: "0812345678", email: "somchai@example.com", blood_type: "A", height_cm: 170, weight_kg: 65, chronic_diseases: null,
       allergies: null, medications: null, note: "ปวดหัว", province: null, district: null, subdistrict: null,
       postal_code: null, emergency_name: null, emergency_relationship: null, emergency_phone: null, consent: true,
     });

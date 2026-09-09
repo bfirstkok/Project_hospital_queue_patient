@@ -12,7 +12,6 @@ import {
   clearPairedPatient,
   clearPin,
   hasPin,
-  isPinEnabled,
   savePairedPatient,
 } from "@/shared/auth/pin-storage";
 import { patientApi } from "@/shared/api/patient-api";
@@ -189,8 +188,9 @@ export default function Page() {
           });
         }
       })
-      .catch(() => {
-        // Fallback gracefully if backend is offline
+      .catch((reason) => {
+        // Non-fatal: PIN greeting just won't show a name. Surface for debugging.
+        console.warn("Could not cache paired patient profile:", reason);
       });
   }
 
@@ -237,8 +237,10 @@ export default function Page() {
     if (activeTok) {
       try {
         await patientApi.setupPin(pin, activeTok);
-      } catch {
-        // Graceful fallback
+      } catch (reason) {
+        // ponytail: local PIN stays usable offline; once the backend PIN is
+        // authoritative this should hard-fail and roll back the local PIN.
+        console.warn("Could not sync PIN to backend:", reason);
       }
     }
   }
@@ -286,7 +288,6 @@ export default function Page() {
         <LoginView
           onRegister={() => setView("registration")}
           onSuccess={loginSuccess}
-          onUnlockWithPin={undefined}
         />
       )}
 

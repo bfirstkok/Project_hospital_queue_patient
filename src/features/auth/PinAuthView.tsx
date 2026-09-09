@@ -1,15 +1,21 @@
 import { useEffect, useState } from "react";
+import { ApiError, patientApi } from "@/shared/api/patient-api";
 import {
   getLockoutRemainingSeconds,
   getRemainingAttempts,
   isLockedOut,
+  MAX_FAILED_ATTEMPTS,
   readPairedPatient,
-  resetLockout,
   savePin,
   verifyPin,
 } from "@/shared/auth/pin-storage";
 
 export type PinMode = "unlock" | "setup" | "change" | "reset";
+
+function formatLockoutDuration(seconds: number): string {
+  const mins = Math.max(1, Math.round(seconds / 60));
+  return `${mins} นาที`;
+}
 
 interface PinAuthViewProps {
   mode: PinMode;
@@ -51,6 +57,8 @@ export function PinAuthView({
   const [otpCode, setOtpCode] = useState<string>("");
   const [otpSent, setOtpSent] = useState<boolean>(false);
   const [otpCountdown, setOtpCountdown] = useState<number>(60);
+  const [sendingOtp, setSendingOtp] = useState<boolean>(false);
+  const [confirmingReset, setConfirmingReset] = useState<boolean>(false);
 
   // Paired patient details
   const [pairedInfo, setPairedInfo] = useState<{ name: string; nationalId: string; maskedId?: string } | null>(null);
@@ -77,7 +85,8 @@ export function PinAuthView({
       timer = setInterval(() => {
         setLockoutSeconds((prev) => {
           if (prev <= 1) {
-            resetLockout();
+            // Clears the expired window + attempt counter, keeps the escalation level.
+            getLockoutRemainingSeconds();
             setErrorMessage("");
             return 0;
           }
@@ -96,6 +105,11 @@ export function PinAuthView({
     }
     return () => clearInterval(timer);
   }, [otpSent, otpCountdown]);
+
+  const resetNationalId =
+    nationalId?.trim() ||
+    pairedInfo?.nationalId ||
+    (typeof window !== "undefined" ? window.localStorage.getItem("patient_national_id") || "" : "");
 
   function triggerError(msg: string) {
     setErrorMessage(msg);
@@ -133,7 +147,7 @@ export function PinAuthView({
     setErrorMessage("");
   }
 
-  function handleComplete(pin: string) {
+  async function handleComplete(pin: string) {
     if (currentMode === "unlock") {
       if (lockoutSeconds > 0) {
         triggerError(`ระบบระงับชั่วคราว กรุณารอ ${lockoutSeconds} วินาที`);
@@ -146,7 +160,9 @@ export function PinAuthView({
         if (isLockedOut()) {
           const remaining = getLockoutRemainingSeconds();
           setLockoutSeconds(remaining);
-          triggerError("คุณใส่รหัสผิดเกิน 3 ครั้ง ระบบถูกระงับชั่วคราว 5 นาที");
+          triggerError(
+            `คุณใส่รหัสผิดเกิน ${MAX_FAILED_ATTEMPTS} ครั้ง ระบบถูกระงับชั่วคราว ${formatLockoutDuration(remaining)}`,
+          );
         } else {
           const attemptsLeft = getRemainingAttempts();
           triggerError(`รหัส PIN ไม่ถูกต้อง (เหลือโอกาสอีก ${attemptsLeft} ครั้ง)`);
@@ -191,44 +207,87 @@ export function PinAuthView({
         }
       }
     } else if (currentMode === "reset") {
-      // Step 3: Enter new PIN, Step 4: Confirm new PIN
+      // Step 3: Enter new PIN, Step 4: Confirm new PIN + verify OTP with backend
       if (step === 3) {
         setTempPin(pin);
         setStep(4);
       } else if (step === 4) {
-        if (pin === tempPin) {
+        if (pin !== tempPin) {
+          triggerError("รหัส PIN ยืนยันไม่ตรงกัน");
+          setTimeout(() => setStep(3), 700);
+          return;
+        }
+        if (confirmingReset) return;
+        setConfirmingReset(true);
+        try {
+          await patientApi.confirmPinReset({ national_id: resetNationalId, otp: otpCode, pin });
           savePin(pin, nationalId);
           if (onPinConfigured) {
             void onPinConfigured(pin);
           }
           onSuccess();
-        } else {
-          triggerError("รหัส PIN ยืนยันไม่ตรงกัน");
-          setTimeout(() => setStep(3), 700);
+        } catch (reason) {
+          const apiError = reason instanceof ApiError
+            ? reason
+            : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถตั้งรหัส PIN ใหม่ได้");
+          triggerError(
+            apiError.message === "Failed to fetch"
+              ? "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง"
+              : apiError.message,
+          );
+          setTimeout(() => setStep(2), 700); // OTP may be wrong/expired — re-enter it
+        } finally {
+          setConfirmingReset(false);
         }
       }
     }
   }
 
-  function handleSendOtp(e: React.FormEvent) {
+  async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
+    if (sendingOtp) return;
+
+    let target = "";
     if (recoveryMethod === "phone") {
       const cleanPhone = resetPhone.replace(/\D/g, "");
       if (!cleanPhone || cleanPhone.length < 9) {
         setErrorMessage("กรุณาระบุเบอร์โทรศัพท์ที่ถูกต้อง (10 หลัก)");
         return;
       }
+      target = cleanPhone;
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!resetEmail || !emailRegex.test(resetEmail.trim())) {
         setErrorMessage("กรุณาระบุอีเมลที่ถูกต้อง (เช่น patient@example.com)");
         return;
       }
+      target = resetEmail.trim();
     }
+
+    if (!resetNationalId) {
+      setErrorMessage("ไม่พบเลขบัตรประชาชนสำหรับการกู้คืนรหัส กรุณาเข้าสู่ระบบด้วยเลขบัตรประชาชนก่อน");
+      return;
+    }
+
     setErrorMessage("");
-    setOtpSent(true);
-    setOtpCountdown(60);
-    setStep(2);
+    setSendingOtp(true);
+    try {
+      await patientApi.requestPinReset({ national_id: resetNationalId, channel: recoveryMethod, target });
+      setOtpSent(true);
+      setOtpCountdown(60);
+      setStep(2);
+    } catch (reason) {
+      const apiError = reason instanceof ApiError
+        ? reason
+        : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถส่งรหัส OTP ได้");
+      setErrorMessage(
+        apiError.message === "Failed to fetch"
+          ? "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง"
+          : apiError.message,
+      );
+    } finally {
+      setSendingOtp(false);
+    }
   }
 
   function handleVerifyOtp(e: React.FormEvent) {
@@ -237,7 +296,8 @@ export function PinAuthView({
       setErrorMessage("กรุณากรอกรหัส OTP 6 หลัก");
       return;
     }
-    // Simulation: accept any 6 digit OTP or 123456
+    // OTP is verified together with the new PIN at the confirm step
+    // (patientApi.confirmPinReset), so here we only advance the wizard.
     setErrorMessage("");
     setStep(3); // Proceed to setting new PIN
   }
@@ -334,20 +394,13 @@ export function PinAuthView({
         {lockoutSeconds > 0 && (
           <div className="pin-lockout-box" role="alert">
             <strong>⚠️ ระบบถูกระงับชั่วคราว</strong>
-            <p>เนื่องจากกรอกรหัส PIN ไม่ถูกต้องติดต่อกัน 3 ครั้ง กรุณารอ</p>
+            <p>เนื่องจากกรอกรหัส PIN ไม่ถูกต้องติดต่อกัน {MAX_FAILED_ATTEMPTS} ครั้ง กรุณารอ</p>
             <div className="pin-lockout-timer">
               {Math.floor(lockoutSeconds / 60)}:{(lockoutSeconds % 60).toString().padStart(2, "0")} นาที
             </div>
-            {onForgotPin && (
-              <button
-                type="button"
-                className="text-button"
-                style={{ marginTop: "8px", textDecoration: "underline" }}
-                onClick={onForgotPin}
-              >
-                เข้าสู่ระบบด้วยเลขบัตรประชาชนใหม่ทันที
-              </button>
-            )}
+            <p style={{ marginTop: "8px", fontSize: "0.82rem", opacity: 0.85 }}>
+              การเข้าสู่ระบบใหม่จะไม่ลดเวลารอ และหากยังกรอกผิดซ้ำ ระยะเวลาระงับครั้งถัดไปจะนานขึ้น
+            </p>
           </div>
         )}
 
@@ -414,8 +467,14 @@ export function PinAuthView({
               </label>
             )}
 
-            <button type="submit" className="primary-button full-width-btn" style={{ marginTop: "10px" }}>
-              <span>{recoveryMethod === "phone" ? "ขอรหัส OTP ทาง SMS" : "ขอรหัสยืนยันทางอีเมล"}</span>
+            <button type="submit" className="primary-button full-width-btn" style={{ marginTop: "10px" }} disabled={sendingOtp}>
+              <span>
+                {sendingOtp
+                  ? "กำลังส่งรหัส..."
+                  : recoveryMethod === "phone"
+                    ? "ขอรหัส OTP ทาง SMS"
+                    : "ขอรหัสยืนยันทางอีเมล"}
+              </span>
               <i aria-hidden="true">→</i>
             </button>
           </form>
@@ -426,7 +485,7 @@ export function PinAuthView({
           <form onSubmit={handleVerifyOtp} className="reset-pin-form">
             <div className="otp-info-badge">
               <span>
-                รหัสทดสอบ OTP สำหรับ {recoveryMethod === "phone" ? `เบอร์ ${resetPhone}` : `อีเมล ${resetEmail}`} คือ: <strong>123456</strong>
+                ระบบได้ส่งรหัส OTP 6 หลักไปยัง {recoveryMethod === "phone" ? `เบอร์ ${resetPhone}` : `อีเมล ${resetEmail}`} แล้ว กรุณากรอกรหัสภายในเวลาที่กำหนด
               </span>
             </div>
             <label className="field">

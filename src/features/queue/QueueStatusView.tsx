@@ -11,7 +11,6 @@ interface QueueStatusViewProps {
   initialQueue?: Partial<QueueData> | null;
   onBookQueue?: () => void;
   onLogin?: () => void;
-  onMedical?: () => void;
   onAccount: () => void;
   onUnauthorized: () => void;
   onQueueStateChange?: (hasActiveQueue: boolean) => void;
@@ -34,7 +33,6 @@ export function QueueStatusView({
   initialQueue,
   onBookQueue,
   onLogin,
-  onMedical,
   onAccount,
   onUnauthorized,
   onQueueStateChange,
@@ -78,6 +76,11 @@ export function QueueStatusView({
     setCancelMessage("");
     try {
       await patientApi.cancelQueue(token);
+      try {
+        sessionStorage.setItem("opd_cancelled_queue_number", queue?.queue_number || "");
+      } catch {
+        // Ignore storage errors
+      }
       clearActiveQueue();
       setShowCancelModal(false);
       setCancelSuccess(true);
@@ -396,7 +399,7 @@ export function QueueStatusView({
             <button className="hero-secondary-btn" type="button" onClick={onLogin}>
               <div className="hero-btn-icon">👤</div>
               <div>
-                <strong>เข้าสู่ระบบด้วยเลขบัตรประชาชน / ThaID</strong>
+                <strong>เข้าสู่ระบบด้วยเลขบัตรประชาชน</strong>
                 <small>ค้นหาคิวเดิม ตรวจสอบประวัติการรักษา และรายการนัดหมาย</small>
               </div>
               <span>→</span>

@@ -2,18 +2,24 @@
 
 ## Start here
 
-The application is a single patient portal implemented with Next.js App Router. `src/app/page.tsx` owns navigation between four client-side views without changing the URL used by the hospital QR code.
+The application is a single patient portal implemented with Next.js App Router. `src/app/page.tsx` owns navigation between the client-side views without changing the URL used by the hospital QR code.
 
 ```text
 src/app/page.tsx
-├─ registration → src/features/registration/
-├─ login/PIN    → src/features/auth/
-├─ queue        → src/features/queue/
-├─ account      → src/features/account/
-└─ settings     → src/features/settings/
+├─ registration    → src/features/registration/      (today's symptom + book a queue)
+├─ patient profile → src/features/patient-profile/   (name/health/address/emergency — shared form)
+├─ login/PIN       → src/features/auth/
+├─ queue           → src/features/queue/
+├─ account         → src/features/account/
+└─ settings        → src/features/settings/
 ```
 
-`src/features/medical-records/` and `src/features/auth/ThaidConnectView.tsx` exist but are not wired into `page.tsx` yet — treat them as in-progress, not dead code to delete without checking with whoever added them.
+`src/features/patient-profile/PatientProfileForm.tsx` is the single source of the patient
+intake fields. It is rendered both by `registration` (new patient) and by `account` (edit
+profile) — do not re-inline those fields anywhere else.
+
+Login is national-ID only today; the planned move to phone + SMS OTP + PIN is specified in
+[BACKEND_API_SPEC.md](BACKEND_API_SPEC.md). ThaID login was removed.
 
 ## Responsibilities
 
