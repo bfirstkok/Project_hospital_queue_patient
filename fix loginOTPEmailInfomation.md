@@ -20,15 +20,17 @@
 ## 2. แผนผังโครงสร้างฐานข้อมูล (Database Schema Changes)
 
 ### 2.1 ตารางผู้ใช้งานและบัญชี (`patient_accounts` หรือ `users`)
-ต้องเพิ่มฟิลด์สำหรับการยืนยันตัวตน และแยกส่วนข้อมูลสิทธิ์ออกจากข้อมูลเวชระเบียน:
+ต้องเพิ่มฟิลด์สำหรับการยืนยันตัวตน, จัดการเซสชัน, และแยกส่วนข้อมูลสิทธิ์ออกจากข้อมูลเวชระเบียน:
 
 | Column Name | Data Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | UUID / BIGINT | PRIMARY KEY, AUTO_INCREMENT | Patient Account ID |
 | `username` | VARCHAR(50) | UNIQUE, NULLABLE (or Required) | ชื่อผู้ใช้งาน (สำหรับ Login) |
 | `email` | VARCHAR(191) | UNIQUE, NOT NULL, INDEX | อีเมลของผู้ป่วย (ใช้ Login / กู้คืนรหัส) |
-| `phone` | VARCHAR(20) | INDEX, NOT NULL | เบอร์โทรศัพท์มือถือ (รับ SMS OTP) |
-| `password_hash` | VARCHAR(255) | NULLABLE (ถ้าสมัครผ่าน Google) | เก็บรหัสผ่านที่ Hash ด้วย Argon2id หรือ bcrypt |
+| `phone` | VARCHAR(20) | NOT NULL | เบอร์โทรศัพท์มือถือที่แสดงผล |
+| `phone_normalized`| VARCHAR(20) | INDEX, NOT NULL | เบอร์โทรในรูปแบบ E.164 (เช่น +66812345678) เพื่อตรวจจับซ้ำและ Rate Limit |
+| `password_hash` | VARCHAR(255) | NULLABLE (ถ้าสมัครผ่าน Google) | เก็บรหัสผ่านที่ Hash ด้วย Argon2id หรือ bcrypt (cost >= 12) |
+| `token_version` | INT | DEFAULT 1, NOT NULL | หมายเลขเวอร์ชันของ Token สำหรับ Revoke Session ทั่วโลกเมื่อเปลี่ยนรหัสผ่าน |
 | `google_id` | VARCHAR(100) | UNIQUE, NULLABLE, INDEX | Google Sub ID (เมื่อเชื่อมต่อ Google OAuth) |
 | `national_id` | VARCHAR(13) | UNIQUE, NOT NULL, INDEX | เลขประจำตัวประชาชน 13 หลัก (ผูกกับ HIS) |
 | `hn` | VARCHAR(50) | UNIQUE, NULLABLE, INDEX | หมายเลขประจำตัวผู้ป่วยของโรงพยาบาล |
@@ -37,21 +39,42 @@
 | `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | วันที่สร้างบัญชี |
 | `updated_at` | TIMESTAMP | ON UPDATE CURRENT_TIMESTAMP | วันที่แก้ไขล่าสุด |
 
+> **⚠️ Security Guard สำหรับ Google Accounts:**  
+> หากผู้ใช้ลงทะเบียนผ่าน Google บัญชีจะมี `password_hash = NULL` API Login ด้วยรหัสผ่าน (`/api/patient/login/`) จะต้องมี Guard ป้องกันอย่างชัดเจน: หากพบว่า `password_hash IS NULL` ต้องปฏิเสธคำขอทันที ไม่ให้เทียบค่ากับ string ว่างเด็ดขาด
+
+---
+
 ### 2.2 ตารางรหัส OTP และการกู้คืนรหัสผ่าน (`password_resets_otp`)
-สำหรับจัดเก็บ OTP ที่มีอายุจำกัดและสกัดกั้นการสุ่มรหัส:
+สำหรับจัดเก็บ OTP ที่มีอายุจำกัดและสกัดกั้นการสุ่มรหัสตามมาตรฐาน OWASP Password Reset:
 
 | Column Name | Data Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | UUID / BIGINT | PRIMARY KEY | Record ID |
-| `patient_id` | BIGINT / UUID | FOREIGN KEY -> `patient_accounts.id` | บัญชีผู้ขอรหัส |
-| `otp_code_hash`| VARCHAR(255) | NOT NULL | OTP 6 หลักที่ Hash ไว้ (ไม่เก็บ Plain Text) |
+| `patient_id` | BIGINT / UUID | FOREIGN KEY -> `patient_accounts.id` ON DELETE CASCADE | บัญชีผู้ขอรหัส (ลบตามบัญชีหลักหากมีการลบข้อมูล) |
+| `otp_code_hash`| VARCHAR(255) | NOT NULL | OTP 6 หลักที่ Hash ด้วย Salt/Pepper (ห้ามใช้ Unsalted SHA-256 เนื่องจากมีเพียง 10^6 รูปแบบ) |
 | `channel` | ENUM('email', 'sms') | NOT NULL | ช่องทางที่ส่งรหัส |
 | `target` | VARCHAR(191) | NOT NULL | อีเมลหรือเบอร์โทรที่ส่งไป |
-| `reset_token` | VARCHAR(255) | UNIQUE, NULLABLE, INDEX | Token ชั่วคราวหลังยืนยัน OTP สำเร็จ (อายุ 15 นาที) |
-| `attempts` | INT | DEFAULT 0 | จำนวนครั้งที่ใส่รหัสผิด (สูงสุดไม่เกิน 5 ครั้ง) |
-| `expires_at` | TIMESTAMP | NOT NULL | วันหมดอายุของรหัส OTP (แนะนำ 5 - 10 นาที) |
+| `reset_token_hash`| VARCHAR(64) | UNIQUE, NULLABLE, INDEX | ค่า SHA-256 Hash ของ Reset Token (ส่ง Raw Token ให้ Client แต่เก็บเฉพาะ Hash ใน DB) |
+| `attempts` | INT | DEFAULT 0 | จำนวนครั้งที่ใส่รหัสผิด (สูงสุดไม่เกิน 5 ครั้ง) ป้องกัน Brute-force |
+| `expires_at` | TIMESTAMP | NOT NULL | วันหมดอายุของรหัส OTP (แนะนำ 5 นาที) |
+| `reset_token_expires_at`| TIMESTAMP | NULLABLE | วันหมดอายุของ Reset Token หลังยืนยัน OTP ผ่าน (แนะนำ 15 นาที) |
 | `is_used` | BOOLEAN | DEFAULT FALSE | ถูกใช้งานแล้วหรือไม่ |
 | `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | วันเวลาที่ขอ |
+
+---
+
+### 2.3 ตารางความปลอดภัยรหัส PIN บนคลาวด์ (`patient_pins`)
+เพื่อรองรับสถาปัตยกรรม **Zero-Local-Storage & Cloud-First Security** แทนที่การเก็บ PIN hash และ lockout ไว้บนเบราว์เซอร์:
+
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `patient_id` | BIGINT / UUID | PRIMARY KEY, FOREIGN KEY -> `patient_accounts.id` ON DELETE CASCADE | รหัสบัญชีผู้ป่วย |
+| `pin_hash` | VARCHAR(255) | NOT NULL | รหัส PIN 6 หลักที่ผ่านการ Hash ด้วย Argon2id หรือ bcrypt |
+| `is_enabled` | BOOLEAN | DEFAULT TRUE | เปิดใช้งาน PIN สำหรับปลดล็อกด่วนหรือไม่ |
+| `failed_attempts` | INT | DEFAULT 0 | จำนวนครั้งที่กรอก PIN ผิดติดต่อกัน |
+| `locked_until`| TIMESTAMP | NULLABLE | เวลาที่ถูกระงับชั่วคราว (หากกรอกผิดครบกำหนด) |
+| `lockout_level`| INT | DEFAULT 0 | ลำดับขั้นการระงับ (Level 0: 1 นาที, Level 1: 5 นาที, Level 2: 30 นาที) |
+| `updated_at` | TIMESTAMP | ON UPDATE CURRENT_TIMESTAMP | วันเวลาที่อัปเดตล่าสุด |
 
 ---
 
@@ -297,6 +320,7 @@
 - **เงื่อนไขและการป้องกันความปลอดภัย (Anti-Enumeration & Rate Limiting):**
   - **Rate Limit:** ห้ามขอ OTP ซ้ำภายใน 60 วินาที และจำกัดไม่เกิน 3 ครั้งต่อ 1 ชั่วโมงสำหรับ 1 บัญชี/IP
   - **Anti-Account Harvesting:** ไม่ว่าจะมีผู้ใช้นี้ในระบบหรือไม่ ให้ตอบกลับ HTTP 200 เหมือนกัน เพื่อป้องกันการสแกนหาอีเมล/เบอร์โทรในระบบ
+  - **Automatic Invalidation:** เมื่อมีการขอ OTP ใหม่สำเร็จ ให้ Invalidate รหัส OTP เดิมที่ยังไม่ถูกใช้งานทั้งหมดของผู้ใช้นั้นทันที (`UPDATE password_resets_otp SET is_used = TRUE WHERE patient_id = :id AND is_used = FALSE`)
 - **Response Success (200 OK):**
 ```json
 {
@@ -319,9 +343,11 @@
   "otp": "482910"
 }
 ```
-- **เงื่อนไข:**
-  - รหัส OTP ต้องไม่หมดอายุ (`expires_at > NOW()`)
-  - ตรวจสอบจำนวนครั้งที่กรอกผิด (`attempts < 5`) หากเกิน 5 ครั้ง ให้ทำการ Invalidate รหัส OTP นั้นทันที
+- **เงื่อนไขและความปลอดภัย (Atomic Updates & Hashed Tokens):**
+  - รหัส OTP ต้องไม่หมดอายุ (`expires_at > NOW()`) และยังไม่ถูกใช้ (`is_used = FALSE`)
+  - **Concurrency & Brute-Force Guard:** ใช้ Atomic Increment ใน Database ในการนับครั้งที่กรอกผิด (`UPDATE password_resets_otp SET attempts = attempts + 1 WHERE id = :id`) เพื่อป้องกัน Race condition จากการส่งคำขอยิงเดารหัสพร้อมกัน
+  - หาก `attempts >= 5` ให้ Invalidate รหัส OTP นั้นทันที
+  - **Token Generation (Hashed Storage Pattern):** สร้างโทเค็นแบบ Cryptographically secure random (32 bytes hex) ส่งตัวเต็มกลับให้ Client แต่บันทึกค่า SHA-256 Hash ลงในคอลัมน์ `reset_token_hash` พร้อมตั้ง `reset_token_expires_at = NOW() + 15 นาที`
 - **Response Success (200 OK):**
 ```json
 {
@@ -351,12 +377,12 @@
 }
 ```
 - **Backend Flow:**
-  1. ค้นหา `reset_token` ที่ยังไม่ถูกใช้ (`is_used = FALSE`) และยังไม่หมดอายุ
-  2. ตรวจสอบเงื่อนไขความปลอดภัยของรหัสผ่านใหม่ (เช่น อย่างน้อย 8 ตัวอักษร มีตัวพิมพ์เล็ก พิมพ์ใหญ่ และตัวเลข)
+  1. นำ `reset_token` ไปทำ SHA-256 Hash แล้วค้นหาในตาราง `password_resets_otp` ด้วยคอลัมน์ `reset_token_hash` โดยตรวจว่า `is_used = FALSE` และ `reset_token_expires_at > NOW()`
+  2. ตรวจสอบเงื่อนไขความปลอดภัยของรหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร มีตัวพิมพ์เล็ก พิมพ์ใหญ่ และตัวเลข)
   3. Hash รหัสผ่านใหม่ด้วย **Argon2id** หรือ **bcrypt** (Cost factor >= 12)
   4. อัปเดต `password_hash` ใน `patient_accounts`
-  5. มาร์ก `is_used = TRUE` ในตาราง `password_resets_otp`
-  6. **Security Invalidation:** ยกเลิก Token/Session เดิมทั้งหมดของผู้ใช้ (Logout all devices) เพื่อป้องกันผู้ไม่ประสงค์ดี
+  5. มาร์ก `is_used = TRUE` ในตาราง `password_resets_otp` ทันทีเพื่อป้องกัน Token Replay
+  6. **Global Session Revocation:** อัปเดต `token_version = token_version + 1` ในตาราง `patient_accounts` เพื่อให้ JWT Token เดิมทั้งหมดในทุกอุปกรณ์ถูกตัดสิทธิ์และบังคับ Logout ทันที
 - **Response Success (200 OK):**
 ```json
 {
