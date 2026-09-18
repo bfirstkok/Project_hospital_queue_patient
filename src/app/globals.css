@@ -3713,3 +3713,133 @@ input:checked + .toggle-slider:before {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* Authentication & Password Recovery Styles */
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.forgot-link {
+  font-size: 0.85rem;
+  color: var(--primary, #0d8a7d);
+  text-decoration: underline;
+  padding: 0;
+  cursor: pointer;
+}
+
+.forgot-link:hover {
+  color: var(--primary-dark, #065f46);
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrapper input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.toggle-password-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 1.1rem;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-password-btn:hover {
+  opacity: 1;
+}
+
+.google-sign-in-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1.5px solid var(--line, #cbd5e1);
+  border-radius: var(--radius-md, 8px);
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.98rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.google-sign-in-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.google-sign-in-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.google-icon {
+  flex-shrink: 0;
+}
+
+.forgot-password-modal {
+  max-width: 480px;
+  width: 95%;
+}
+
+.forgot-desc {
+  color: var(--ink-secondary, #475569);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.channel-select-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.channel-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1.5px solid var(--line, #cbd5e1);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  background: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.channel-pill.active {
+  border-color: var(--primary, #0d8a7d);
+  background: #f0fdf4;
+  color: #065f46;
+  font-weight: 600;
+}
+
+.channel-pill input[type="radio"] {
+  accent-color: var(--primary, #0d8a7d);
+  width: 18px;
+  height: 18px;
+}
+

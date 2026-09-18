@@ -278,16 +278,26 @@ export interface PairedPatientInfo {
   email?: string;
 }
 
+let inMemoryPairedPatient: PairedPatientInfo | null = null;
+
 export function savePairedPatient(info: PairedPatientInfo): void {
+  inMemoryPairedPatient = info;
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(PAIRED_PATIENT_KEY, JSON.stringify(info));
+  try {
+    // Security: Do not persist PII in permanent disk localStorage. Keep session-scoped.
+    window.sessionStorage.setItem(PAIRED_PATIENT_KEY, JSON.stringify(info));
+    window.localStorage.removeItem(PAIRED_PATIENT_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export function readPairedPatient(): PairedPatientInfo | null {
+  if (inMemoryPairedPatient) return inMemoryPairedPatient;
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(PAIRED_PATIENT_KEY);
-  if (!raw) return null;
   try {
+    const raw = window.sessionStorage.getItem(PAIRED_PATIENT_KEY) || window.localStorage.getItem(PAIRED_PATIENT_KEY);
+    if (!raw) return null;
     return JSON.parse(raw) as PairedPatientInfo;
   } catch {
     return null;
@@ -295,6 +305,12 @@ export function readPairedPatient(): PairedPatientInfo | null {
 }
 
 export function clearPairedPatient(): void {
+  inMemoryPairedPatient = null;
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(PAIRED_PATIENT_KEY);
+  try {
+    window.sessionStorage.removeItem(PAIRED_PATIENT_KEY);
+    window.localStorage.removeItem(PAIRED_PATIENT_KEY);
+  } catch {
+    // ignore
+  }
 }

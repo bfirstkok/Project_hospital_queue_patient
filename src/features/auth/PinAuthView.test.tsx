@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PinAuthView } from "./PinAuthView";
-import { clearPin, savePairedPatient, savePin } from "@/shared/auth/pin-storage";
+import { clearPin, clearPairedPatient, savePairedPatient, savePin } from "@/shared/auth/pin-storage";
 
 const okFetch = () =>
   vi.fn().mockResolvedValue(
@@ -12,7 +12,9 @@ const okFetch = () =>
 describe("PinAuthView", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
     clearPin();
+    clearPairedPatient();
   });
 
   it("unlocks when correct 6-digit PIN is entered", async () => {

@@ -6,3 +6,6 @@ node_modules/
 *.tsbuildinfo
 out/
 dist/
+.ua/
+__pycache__/
+*.pyc

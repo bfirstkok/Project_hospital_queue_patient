@@ -3,7 +3,15 @@ import type {
   AccountData,
   ApiEnvelope,
   FieldErrors,
+  GoogleAuthResult,
+  LoginCredentials,
   LoginResult,
+  PasswordResetConfirmPayload,
+  PasswordResetConfirmResult,
+  PasswordResetRequestPayload,
+  PasswordResetRequestResult,
+  PasswordResetVerifyPayload,
+  PasswordResetVerifyResult,
   PinResetConfirmPayload,
   PinResetRequestPayload,
   PinSetupResult,
@@ -57,10 +65,46 @@ export const patientApi = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   }),
-  login: (nationalId: string) => request<LoginResult>("/api/patient/login/", {
+  login: (identifierOrCredentials: string | LoginCredentials, password?: string) => {
+    let bodyPayload: Record<string, unknown>;
+    if (typeof identifierOrCredentials === "string") {
+      const trimmed = identifierOrCredentials.trim();
+      bodyPayload = password
+        ? { identifier: trimmed, national_id: trimmed, password }
+        : { national_id: trimmed };
+    } else {
+      const id = identifierOrCredentials.identifier.trim();
+      bodyPayload = {
+        identifier: id,
+        national_id: id,
+        ...(identifierOrCredentials.password ? { password: identifierOrCredentials.password } : {}),
+      };
+    }
+    return request<LoginResult>("/api/patient/login/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(bodyPayload),
+    });
+  },
+  loginWithGoogle: (credential: string) => request<GoogleAuthResult>("/api/patient/auth/google/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ national_id: nationalId.trim() }),
+    body: JSON.stringify({ credential }),
+  }),
+  requestPasswordReset: (payload: PasswordResetRequestPayload) => request<PasswordResetRequestResult>("/api/patient/password/reset/request/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }),
+  verifyPasswordResetOtp: (payload: PasswordResetVerifyPayload) => request<PasswordResetVerifyResult>("/api/patient/password/reset/verify-otp/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }),
+  confirmPasswordReset: (payload: PasswordResetConfirmPayload) => request<PasswordResetConfirmResult>("/api/patient/password/reset/confirm/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   }),
   setupPin: (pin: string, token: string) => request<PinSetupResult>("/api/patient/pin/setup/", {
     method: "POST",

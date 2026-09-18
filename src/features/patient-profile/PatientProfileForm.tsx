@@ -10,7 +10,6 @@ import {
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { PatientProfile, ProfileUpdatePayload } from "@/shared/api/types";
 import { ALL_77_PROVINCES, getDistricts, getPostalCode, getSubdistricts } from "@/shared/data/thai-address";
-import { isValidThaiNationalId } from "@/shared/data/thai-id";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 export const CHRONIC_OPTIONS = [
@@ -63,9 +62,10 @@ function daysInMonth(month: string, year: string): number {
 
 type EmergencyContact = { id: string; name: string; relationship: string; phone: string };
 
-/** Payload the form collects — a superset of ProfileUpdatePayload plus national_id. */
 export interface PatientProfilePayload extends ProfileUpdatePayload {
   national_id: string;
+  username?: string | null;
+  password?: string | null;
 }
 
 export interface PatientProfileFormHandle {
@@ -112,7 +112,10 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
     const [draftSavedTime, setDraftSavedTime] = useState("");
 
-    // Block 1 — personal
+    // Block 1 — personal & credentials
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
     const [nationalId, setNationalId] = useState("");
@@ -198,27 +201,19 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     }
 
     function applyProfile(p: PatientProfile) {
+      if (p.username) setUsername(p.username);
       if (p.first_name) setFirstName(p.first_name);
       if (p.last_name) setLastName(p.last_name);
 
-      let savedRawId = "";
-      try {
-        savedRawId = sessionStorage.getItem("patient_national_id") || localStorage.getItem("patient_national_id") || "";
-      } catch {
-        // ignore
-      }
-      const cleanSaved = savedRawId.replace(/\D/g, "");
       const cleanP = p.national_id ? p.national_id.replace(/\D/g, "") : "";
       if (cleanP.length === 13) {
         setNationalId(cleanP);
-        try {
-          sessionStorage.setItem("patient_national_id", cleanP);
-          localStorage.setItem("patient_national_id", cleanP);
-        } catch {
-          // ignore
-        }
-      } else if (cleanSaved.length === 13) {
-        setNationalId(cleanSaved);
+      }
+      try {
+        sessionStorage.removeItem("patient_national_id");
+        localStorage.removeItem("patient_national_id");
+      } catch {
+        // ignore
       }
 
       if (p.gender) setGender(p.gender);
@@ -451,6 +446,8 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       const primary = contacts[0];
       const addressText = [subdistrict, district, province, postalCode].filter(Boolean).join(" ") || null;
       return {
+        username: username.trim() || null,
+        password: password || null,
         first_name: firstName.trim() || null,
         last_name: lastName.trim() || null,
         national_id: nationalId.replace(/\D/g, ""),
@@ -502,10 +499,22 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
         }
         return null;
       }
-      if (!isValidThaiNationalId(nationalId.replace(/\D/g, ""))) {
+      if (mode === "register" && !hasToken) {
+        if (username.trim() && username.trim().length < 3) {
+          setInvalidField("username");
+          focusName("username");
+          return { field: "username", message: "ชื่อผู้ใช้ (Username) ต้องมีความยาวอย่างน้อย 3 ตัวอักษร" };
+        }
+        if (password && password.length < 8) {
+          setInvalidField("password");
+          focusName("password");
+          return { field: "password", message: "รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร" };
+        }
+      }
+      if (nationalId.replace(/\D/g, "").length !== 13) {
         setInvalidField("national_id");
         focusName("national_id");
-        return { field: "national_id", message: "กรุณาระบุเลขประจำตัวประชาชนให้ถูกต้องและครบ 13 หลัก" };
+        return { field: "national_id", message: "กรุณาระบุเลขประจำตัวประชาชนให้ครบ 13 หลัก" };
       }
       if (phone.replace(/\D/g, "").length < 9) {
         setInvalidField("phone");
@@ -619,6 +628,49 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
             <span>ข้อมูลส่วนบุคคล<small>ระบุชื่อและข้อมูลสำหรับติดต่อ</small></span>
           </legend>
           <div className="form-grid">
+            {mode === "register" && !hasToken && (
+              <>
+                <Field label="ชื่อผู้ใช้ (Username)" help="ตั้งชื่อสำหรับเข้าสู่ระบบ (อย่างน้อย 3 ตัวอักษร)">
+                  <input
+                    name="username"
+                    maxLength={50}
+                    placeholder="เช่น somchai99"
+                    autoComplete="username"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      if (invalidField === "username") setInvalidField("");
+                    }}
+                    className={fieldClass("username")}
+                  />
+                </Field>
+                <Field label="รหัสผ่าน (Password)" help="ตั้งรหัสผ่านความปลอดภัย (อย่างน้อย 8 ตัวอักษร)">
+                  <div className="password-input-wrapper">
+                    <input
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      minLength={8}
+                      placeholder="อย่างน้อย 8 ตัวอักษร"
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (invalidField === "password") setInvalidField("");
+                      }}
+                      className={fieldClass("password")}
+                    />
+                    <button
+                      type="button"
+                      className="toggle-password-btn"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                    >
+                      {showPassword ? "🙈" : "👁️"}
+                    </button>
+                  </div>
+                </Field>
+              </>
+            )}
             <Field label="ชื่อ" required>
               <input
                 name="first_name" maxLength={100} required placeholder="เช่น สมชาย" autoComplete="given-name"
@@ -645,14 +697,6 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
                   const val = e.target.value.replace(/\D/g, "").slice(0, 13);
                   setNationalId(val);
                   if (invalidField === "national_id") setInvalidField("");
-                  if (val.length === 13) {
-                    try {
-                      sessionStorage.setItem("patient_national_id", val);
-                      localStorage.setItem("patient_national_id", val);
-                    } catch {
-                      // ignore
-                    }
-                  }
                 }}
                 className={`${fieldClass("national_id")} ${idLocked ? "readonly-field" : ""}`}
               />

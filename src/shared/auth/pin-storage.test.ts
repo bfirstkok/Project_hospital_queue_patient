@@ -20,6 +20,8 @@ import {
 describe("pin-storage", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
+    clearPairedPatient();
   });
 
   it("hashes and verifies PIN successfully", () => {

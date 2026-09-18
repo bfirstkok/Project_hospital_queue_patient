@@ -4,10 +4,48 @@ from datetime import datetime
 
 PORT = 8000
 
+MOCK_PATIENT_PROFILE = {
+    "username": "somchai99",
+    "first_name": "สมชาย",
+    "last_name": "ใจดี",
+    "national_id": "1234567890123",
+    "hn": "HN-67001",
+    "phone": "081-234-5678",
+    "email": "somchai@example.com",
+    "gender": "ชาย",
+    "age": 35,
+    "blood_type": "O",
+    "height_cm": 175,
+    "weight_kg": 70,
+    "address": "123/45 ถนนพหลโยธิน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ 10900",
+    "province": "กรุงเทพมหานคร",
+    "district": "เขตจตุจักร",
+    "subdistrict": "แขวงลาดยาว",
+    "postal_code": "10900",
+    "chronic_diseases": "ไม่มี",
+    "allergies": "ไม่มีประวัติแพ้ยา",
+    "medications": "ไม่มี",
+    "emergency_name": "สมศรี ใจดี",
+    "emergency_phone": "089-876-5432",
+    "emergency_contacts": [
+        {
+            "id": "em-mock-1",
+            "name": "สมศรี ใจดี",
+            "relationship": "SPOUSE",
+            "phone": "089-876-5432"
+        }
+    ]
+}
+
+MOCK_DATABASE_SECURITY = {
+    "pins": {},
+    "attempts": {}
+}
+
 class MockBackendHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def do_OPTIONS(self):
@@ -22,20 +60,54 @@ class MockBackendHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
+    def _read_json(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        if content_length > 0:
+            raw = self.rfile.read(content_length).decode("utf-8")
+            try:
+                return json.loads(raw)
+            except Exception:
+                return {}
+        return {}
+
     def do_POST(self):
         path = self.path.rstrip("/") + "/"
+        body = self._read_json()
         
         # 1. Login Endpoint
         if path == "/api/patient/login/":
+            identifier = body.get("identifier") or body.get("national_id") or "user"
             response_data = {
                 "ok": True,
-                "access_token": "mock_patient_token_12345"
+                "access_token": "mock_patient_token_12345",
+                "message": f"เข้าสู่ระบบสำเร็จในชื่อ {identifier}"
             }
             self._send_json(200, response_data)
             return
 
-        # 2. Register Endpoint
+        # 2. Google OAuth Login Endpoint
+        if path == "/api/patient/auth/google/":
+            response_data = {
+                "ok": True,
+                "access_token": "mock_patient_token_google_12345",
+                "message": "เข้าสู่ระบบด้วย Google สำเร็จ"
+            }
+            self._send_json(200, response_data)
+            return
+
+        # 3. Register Endpoint
         if path == "/api/patient/register/":
+            if body.get("first_name"):
+                MOCK_PATIENT_PROFILE["first_name"] = body.get("first_name")
+            if body.get("last_name"):
+                MOCK_PATIENT_PROFILE["last_name"] = body.get("last_name")
+            if body.get("username"):
+                MOCK_PATIENT_PROFILE["username"] = body.get("username")
+            if body.get("email"):
+                MOCK_PATIENT_PROFILE["email"] = body.get("email")
+            if body.get("phone"):
+                MOCK_PATIENT_PROFILE["phone"] = body.get("phone")
+
             response_data = {
                 "ok": True,
                 "access_token": "mock_patient_token_12345",
@@ -49,7 +121,48 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             self._send_json(200, response_data)
             return
 
-        # 3. Cancel Queue Endpoint
+        # 4. Password Recovery - Request OTP
+        if path == "/api/patient/password/reset/request/":
+            channel = body.get("channel", "email")
+            identifier = body.get("identifier", "")
+            response_data = {
+                "ok": True,
+                "message": f"ระบบได้ส่งรหัส OTP 6 หลักไปยัง {channel} เรียบร้อยแล้ว (รหัสทดสอบ: 123456)",
+                "cooldown_seconds": 60,
+                "expires_in_seconds": 300,
+                "masked_target": identifier[:3] + "•••" if len(identifier) > 3 else "user•••"
+            }
+            self._send_json(200, response_data)
+            return
+
+        # 5. Password Recovery - Verify OTP
+        if path == "/api/patient/password/reset/verify-otp/":
+            otp = str(body.get("otp", "")).strip()
+            if len(otp) == 6:
+                response_data = {
+                    "ok": True,
+                    "reset_token": "mock_reset_token_valid_998877",
+                    "message": "ยืนยันรหัส OTP ถูกต้อง กรุณาตั้งรหัสผ่านใหม่"
+                }
+                self._send_json(200, response_data)
+            else:
+                self._send_json(400, {"ok": False, "error": "รหัส OTP ต้องมี 6 หลัก"})
+            return
+
+        # 6. Password Recovery - Confirm New Password
+        if path == "/api/patient/password/reset/confirm/":
+            new_password = body.get("new_password", "")
+            if len(new_password) >= 8:
+                response_data = {
+                    "ok": True,
+                    "message": "เปลี่ยนรหัสผ่านใหม่เรียบร้อยแล้ว กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่"
+                }
+                self._send_json(200, response_data)
+            else:
+                self._send_json(400, {"ok": False, "error": "รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 8 ตัวอักษร"})
+            return
+
+        # 7. Cancel Queue Endpoint
         if path == "/api/patient/queue/cancel/":
             response_data = {
                 "ok": True,
@@ -58,31 +171,52 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             self._send_json(200, response_data)
             return
 
-        # 4. PIN Setup Endpoint
+        # 8. Server-Authoritative Database PIN Setup Endpoint
         if path == "/api/patient/pin/setup/":
-            response_data = {
-                "ok": True,
-                "message": "ตั้งรหัส PIN สำเร็จ"
-            }
-            self._send_json(200, response_data)
+            pin = str(body.get("pin", "")).strip()
+            if len(pin) == 6:
+                MOCK_DATABASE_SECURITY["pins"]["default"] = pin
+                MOCK_DATABASE_SECURITY["attempts"]["default"] = 0
+                response_data = {
+                    "ok": True,
+                    "message": "บันทึกรหัสความปลอดภัย PIN บนระบบคลาวด์/ฐานข้อมูลสำเร็จ"
+                }
+                self._send_json(200, response_data)
+            else:
+                self._send_json(400, {"ok": False, "error": "รหัส PIN ต้องมี 6 หลัก"})
             return
 
-        # 5. PIN Verify/Login Endpoint
+        # 9. Server-Authoritative Database PIN Verify/Login Endpoint
         if path == "/api/patient/pin/verify/":
-            response_data = {
-                "ok": True,
-                "access_token": "mock_patient_token_12345"
-            }
-            self._send_json(200, response_data)
+            pin = str(body.get("pin", "")).strip()
+            stored_pin = MOCK_DATABASE_SECURITY["pins"].get("default")
+            if not stored_pin or pin == stored_pin or pin == "123456":
+                MOCK_DATABASE_SECURITY["attempts"]["default"] = 0
+                response_data = {
+                    "ok": True,
+                    "access_token": "mock_patient_token_12345"
+                }
+                self._send_json(200, response_data)
+            else:
+                attempts = MOCK_DATABASE_SECURITY["attempts"].get("default", 0) + 1
+                MOCK_DATABASE_SECURITY["attempts"]["default"] = attempts
+                if attempts >= 3:
+                    self._send_json(423, {"ok": False, "error": "รหัส PIN ไม่ถูกต้องเกินกำหนด ระบบฐานข้อมูลระงับชั่วคราว"})
+                else:
+                    self._send_json(401, {"ok": False, "error": f"รหัส PIN ไม่ถูกต้อง (เหลือโอกาสอีก {3 - attempts} ครั้ง)"})
             return
 
-        # 6. PIN Reset - request OTP (always ok, does not leak which IDs exist)
+        # 10. PIN Reset - request OTP
         if path == "/api/patient/pin/reset/request/":
-            self._send_json(200, {"ok": True})
+            self._send_json(200, {"ok": True, "message": "ส่งรหัส OTP กู้คืน PIN ผ่านระบบคลาวด์แล้ว"})
             return
 
-        # 7. PIN Reset - confirm OTP + set new PIN
+        # 11. PIN Reset - confirm OTP + set new PIN
         if path == "/api/patient/pin/reset/confirm/":
+            pin = str(body.get("pin", "")).strip()
+            if len(pin) == 6:
+                MOCK_DATABASE_SECURITY["pins"]["default"] = pin
+                MOCK_DATABASE_SECURITY["attempts"]["default"] = 0
             self._send_json(200, {"ok": True, "access_token": "mock_patient_token_12345"})
             return
 
@@ -93,7 +227,21 @@ class MockBackendHandler(BaseHTTPRequestHandler):
 
         # Patient profile update
         if path == "/api/patient/me/":
-            self.do_GET()  # echo back the same /me payload as the updated account
+            body = self._read_json()
+            for key, val in body.items():
+                # Guard: Do not allow modifying national_id and hn
+                if key not in ("national_id", "hn"):
+                    MOCK_PATIENT_PROFILE[key] = val
+
+            response_data = {
+                "ok": True,
+                "message": "บันทึกการแก้ไขข้อมูลเรียบร้อยแล้ว",
+                "profile": MOCK_PATIENT_PROFILE,
+                "active_queue": None,
+                "visits": [],
+                "appointments": []
+            }
+            self._send_json(200, response_data)
             return
 
         self._send_json(404, {"ok": False, "error": "Not Found"})
@@ -101,7 +249,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.rstrip("/") + "/"
 
-        # 3. Queue Status Endpoint
+        # Queue Status Endpoint
         if path == "/api/patient/queue/":
             response_data = {
                 "ok": True,
@@ -115,29 +263,11 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             self._send_json(200, response_data)
             return
 
-        # 4. Patient Account & History Endpoint
+        # Patient Account & History Endpoint
         if path == "/api/patient/me/":
             response_data = {
                 "ok": True,
-                "profile": {
-                    "first_name": "สมชาย",
-                    "last_name": "ใจดี",
-                    "national_id": "1234567890123",
-                    "hn": "HN-67001",
-                    "phone": "081-234-5678",
-                    "email": "somchai@example.com",
-                    "gender": "ชาย",
-                    "age": 35,
-                    "blood_type": "O",
-                    "height_cm": 175,
-                    "weight_kg": 70,
-                    "address": "123/45 ถนนพหลโยธิน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ",
-                    "chronic_diseases": "ไม่มี",
-                    "allergies": "ไม่มีประวัติแพ้ยา",
-                    "medications": "ไม่มี",
-                    "emergency_name": "สมศรี ใจดี",
-                    "emergency_phone": "089-876-5432"
-                },
+                "profile": MOCK_PATIENT_PROFILE,
                 "active_queue": {
                     "ok": True,
                     "queue_number": "A012",

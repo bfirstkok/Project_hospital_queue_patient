@@ -9,14 +9,23 @@ describe("LoginView", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
-  it("sends the existing national ID login payload", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ ok: true, access_token: "token" }), { headers: { "content-type": "application/json" } }));
+  it("sends username and password login payload", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, access_token: "token" }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
     const onSuccess = vi.fn();
     render(createElement(LoginView, { onRegister: vi.fn(), onSuccess }));
-    fireEvent.change(screen.getByLabelText("เลขบัตรประจำตัวประชาชน *"), { target: { value: "1101700230708" } });
+    fireEvent.change(screen.getByLabelText("ชื่อผู้ใช้ หรือ อีเมล *"), {
+      target: { value: "somchai99" },
+    });
+    fireEvent.change(screen.getByLabelText("รหัสผ่าน *"), {
+      target: { value: "password123" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "เข้าสู่ระบบ" }));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("token", "1101700230708"));
-    expect(vi.mocked(fetch).mock.calls[0][1]?.body).toBe('{"national_id":"1101700230708"}');
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("token", undefined));
+    expect(vi.mocked(fetch).mock.calls[0][1]?.body).toContain('"identifier":"somchai99"');
   });
 
   it("navigates to register view when register button clicked", () => {
@@ -24,5 +33,24 @@ describe("LoginView", () => {
     render(createElement(LoginView, { onRegister, onSuccess: vi.fn() }));
     fireEvent.click(screen.getByRole("button", { name: /ลงทะเบียนผู้ป่วยใหม่/ }));
     expect(onRegister).toHaveBeenCalledTimes(1);
+  });
+
+  it("triggers google sign-in when Google button is clicked", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, access_token: "google_token" }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const onSuccess = vi.fn();
+    render(createElement(LoginView, { onRegister: vi.fn(), onSuccess }));
+    fireEvent.click(screen.getByRole("button", { name: /เข้าสู่ระบบด้วย Google/ }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("google_token"));
+    expect(vi.mocked(fetch).mock.calls[0][0]).toContain("/api/patient/auth/google/");
+  });
+
+  it("opens forgot password modal when forgot password link is clicked", () => {
+    render(createElement(LoginView, { onRegister: vi.fn(), onSuccess: vi.fn() }));
+    fireEvent.click(screen.getByRole("button", { name: /ลืมรหัสผ่าน\?/ }));
+    expect(screen.getByRole("heading", { name: /ลืมรหัสผ่าน \/ กู้คืนบัญชี/ })).toBeDefined();
   });
 });

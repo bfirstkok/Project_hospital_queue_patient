@@ -8,6 +8,8 @@ export interface ApiEnvelope {
 }
 
 export interface RegistrationPayload {
+  username?: string | null;
+  password?: string | null;
   website: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -43,6 +45,7 @@ export interface QueueData extends ApiEnvelope {
 }
 
 export interface PatientProfile {
+  username?: string | null;
   first_name: string;
   last_name: string;
   national_id?: string | null;
@@ -150,3 +153,58 @@ export interface PinSetupResult extends ApiEnvelope {
 export interface PinVerifyResult extends ApiEnvelope {
   access_token: string;
 }
+
+export interface LoginCredentials {
+  identifier: string;
+  password?: string;
+}
+
+export interface GoogleAuthPayload {
+  credential: string;
+}
+
+export interface GoogleAuthResult extends ApiEnvelope {
+  access_token?: string;
+  is_new_user?: boolean;
+  temp_token?: string;
+  suggested_profile?: {
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+  };
+}
+
+export interface PasswordResetRequestPayload {
+  identifier: string;
+  channel: "email" | "sms";
+}
+
+export interface PasswordResetRequestResult extends ApiEnvelope {
+  cooldown_seconds?: number;
+  expires_in_seconds?: number;
+  masked_target?: string;
+  message?: string;
+}
+
+export interface PasswordResetVerifyPayload {
+  identifier: string;
+  otp: string;
+}
+
+export interface PasswordResetVerifyResult extends ApiEnvelope {
+  reset_token?: string;
+  message?: string;
+}
+
+export interface PasswordResetConfirmPayload {
+  reset_token?: string;
+  identifier?: string;
+  otp?: string;
+  new_password: string;
+  confirm_password?: string;
+}
+
+export interface PasswordResetConfirmResult extends ApiEnvelope {
+  message?: string;
+}
+

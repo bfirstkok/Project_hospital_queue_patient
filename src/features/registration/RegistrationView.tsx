@@ -195,10 +195,8 @@ export function RegistrationView({
       try {
         localStorage.removeItem(PROFILE_DRAFT_KEY);
         sessionStorage.removeItem("opd_cancelled_queue_number");
-        if (payload.national_id) {
-          sessionStorage.setItem("patient_national_id", payload.national_id);
-          localStorage.setItem("patient_national_id", payload.national_id);
-        }
+        sessionStorage.removeItem("patient_national_id");
+        localStorage.removeItem("patient_national_id");
       } catch {
         // ignore
       }

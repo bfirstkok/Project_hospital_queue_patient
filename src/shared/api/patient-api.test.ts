@@ -82,4 +82,37 @@ describe("patientApi", () => {
       message: "ข้อมูลไม่ถูกต้อง", status: 400, errors: { note: ["กรุณาระบุอาการ"] },
     });
   });
+
+  it("calls loginWithGoogle with credential payload", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, access_token: "google-token" }));
+    const result = await patientApi.loginWithGoogle("google-cred-123");
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/auth/google/", expect.objectContaining({
+      method: "POST",
+      body: '{"credential":"google-cred-123"}',
+    }));
+    expect(result.access_token).toBe("google-token");
+  });
+
+  it("calls password reset endpoints with expected contracts", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, cooldown_seconds: 60 }));
+    await patientApi.requestPasswordReset({ identifier: "somchai@example.com", channel: "email" });
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/password/reset/request/", expect.objectContaining({
+      method: "POST",
+      body: '{"identifier":"somchai@example.com","channel":"email"}',
+    }));
+
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, reset_token: "rst-token" }));
+    await patientApi.verifyPasswordResetOtp({ identifier: "somchai@example.com", otp: "123456" });
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/password/reset/verify-otp/", expect.objectContaining({
+      method: "POST",
+      body: '{"identifier":"somchai@example.com","otp":"123456"}',
+    }));
+
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, message: "เปลี่ยนรหัสผ่านสำเร็จ" }));
+    await patientApi.confirmPasswordReset({ reset_token: "rst-token", new_password: "newPassword123" });
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/password/reset/confirm/", expect.objectContaining({
+      method: "POST",
+      body: '{"reset_token":"rst-token","new_password":"newPassword123"}',
+    }));
+  });
 });
