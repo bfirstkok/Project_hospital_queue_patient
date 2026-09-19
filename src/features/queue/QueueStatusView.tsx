@@ -56,9 +56,18 @@ export function QueueStatusView({
     }
   }, [initialLoading, onQueueStateChange, queue?.queue_number]);
 
-  const updatedAt = queue?.updated_at
-    ? new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(queue.updated_at))
-    : "กำลังอัปเดต...";
+  const updatedAt = (() => {
+    if (!queue?.updated_at) return "กำลังอัปเดต...";
+    try {
+      const d = new Date(queue.updated_at);
+      if (isNaN(d.getTime())) {
+        return queue.updated_at;
+      }
+      return new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(d);
+    } catch {
+      return queue.updated_at || "กำลังอัปเดต...";
+    }
+  })();
 
   const position = queue?.queue_position;
   const statusLabel = queue?.status_label || "";

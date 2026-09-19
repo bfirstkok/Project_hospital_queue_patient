@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
+import { EyeIcon, EyeOffIcon } from "@/shared/ui/Icons";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
 
 interface LoginViewProps {
@@ -132,7 +133,7 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
               >
-                {showPassword ? "🙈" : "👁️"}
+                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
               </button>
             </div>
           </div>

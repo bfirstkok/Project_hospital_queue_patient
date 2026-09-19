@@ -320,7 +320,7 @@ export function RegistrationView({
           <fieldset>
             <legend>
               <span className="section-number">2</span>
-              <span>อาการสำคัญที่มารับบริการ <b>*</b><small>เลือกอาการเบื้องต้น หรือพิมพ์ระบุรายละเอียดเพิ่มเติม</small></span>
+              <span>📋 อาการสำคัญที่มารับบริการ <b>*</b><small>เลือกอาการเบื้องต้น หรือพิมพ์ระบุรายละเอียดเพิ่มเติม</small></span>
             </legend>
 
             <div className="choice-chips-group" role="group" aria-label="ตัวเลือกอาการยอดนิยม">

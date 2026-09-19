@@ -42,6 +42,16 @@ MOCK_DATABASE_SECURITY = {
     "attempts": {}
 }
 
+MOCK_ACTIVE_QUEUE = {
+    "ok": True,
+    "queue_number": "A012",
+    "status_label": "รอตรวจ",
+    "instruction": "กรุณารอเรียกคิวที่ห้องตรวจ 2",
+    "queue_position": 3,
+    "room": "ห้องตรวจ 2",
+    "updated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+}
+
 class MockBackendHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -76,11 +86,44 @@ class MockBackendHandler(BaseHTTPRequestHandler):
         
         # 1. Login Endpoint
         if path == "/api/patient/login/":
-            identifier = body.get("identifier") or body.get("national_id") or "user"
+            identifier = body.get("identifier") or body.get("national_id") or ""
+            password = body.get("password")
+
+            # Probing national_id without password (used by registration duplicate guard)
+            if not password and "national_id" in body and not body.get("identifier"):
+                if identifier in ["1234567890123", "somchai99"]:
+                    MOCK_ACTIVE_QUEUE["queue_number"] = "A012"
+                    MOCK_ACTIVE_QUEUE["status_label"] = "รอตรวจ"
+                    MOCK_ACTIVE_QUEUE["instruction"] = "กรุณารอเรียกคิวที่ห้องตรวจ 2"
+                    MOCK_ACTIVE_QUEUE["queue_position"] = 3
+                    MOCK_ACTIVE_QUEUE["room"] = "ห้องตรวจ 2"
+                    response_data = {
+                        "ok": True,
+                        "access_token": "mock_patient_token_12345",
+                        "message": f"พบบัญชีผู้ป่วย {identifier}"
+                    }
+                    self._send_json(200, response_data)
+                    return
+                else:
+                    self._send_json(404, {"ok": False, "error": "ไม่พบบัญชีผู้ป่วยเดิมในระบบ"})
+                    return
+
+            # Normal Login
+            if password and password != "Password@2026":
+                self._send_json(401, {"ok": False, "error": "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"})
+                return
+
+            if identifier in ["somchai99", "1234567890123"]:
+                MOCK_ACTIVE_QUEUE["queue_number"] = "A012"
+                MOCK_ACTIVE_QUEUE["status_label"] = "รอตรวจ"
+                MOCK_ACTIVE_QUEUE["instruction"] = "กรุณารอเรียกคิวที่ห้องตรวจ 2"
+                MOCK_ACTIVE_QUEUE["queue_position"] = 3
+                MOCK_ACTIVE_QUEUE["room"] = "ห้องตรวจ 2"
+
             response_data = {
                 "ok": True,
                 "access_token": "mock_patient_token_12345",
-                "message": f"เข้าสู่ระบบสำเร็จในชื่อ {identifier}"
+                "message": f"เข้าสู่ระบบสำเร็จในชื่อ {identifier or 'user'}"
             }
             self._send_json(200, response_data)
             return
@@ -97,26 +140,37 @@ class MockBackendHandler(BaseHTTPRequestHandler):
 
         # 3. Register Endpoint
         if path == "/api/patient/register/":
-            if body.get("first_name"):
-                MOCK_PATIENT_PROFILE["first_name"] = body.get("first_name")
-            if body.get("last_name"):
-                MOCK_PATIENT_PROFILE["last_name"] = body.get("last_name")
-            if body.get("username"):
-                MOCK_PATIENT_PROFILE["username"] = body.get("username")
-            if body.get("email"):
-                MOCK_PATIENT_PROFILE["email"] = body.get("email")
-            if body.get("phone"):
-                MOCK_PATIENT_PROFILE["phone"] = body.get("phone")
+            first_name = body.get("first_name") or "สมหญิง"
+            last_name = body.get("last_name") or "รักดี"
+            username = body.get("username") or ""
+            national_id = body.get("national_id") or "1103702111111"
+            email = body.get("email") or ""
+            phone = body.get("phone") or ""
+
+            MOCK_PATIENT_PROFILE["first_name"] = first_name
+            MOCK_PATIENT_PROFILE["last_name"] = last_name
+            MOCK_PATIENT_PROFILE["username"] = username
+            MOCK_PATIENT_PROFILE["national_id"] = national_id
+            MOCK_PATIENT_PROFILE["email"] = email
+            MOCK_PATIENT_PROFILE["phone"] = phone
+            MOCK_PATIENT_PROFILE["hn"] = "HN-67002"
+
+            MOCK_ACTIVE_QUEUE["queue_number"] = "A015"
+            MOCK_ACTIVE_QUEUE["status_label"] = "รอตรวจ"
+            MOCK_ACTIVE_QUEUE["instruction"] = "กรุณารอเรียกคิวที่ห้องตรวจ 1"
+            MOCK_ACTIVE_QUEUE["queue_position"] = 4
+            MOCK_ACTIVE_QUEUE["room"] = "ห้องตรวจ 1"
+            MOCK_ACTIVE_QUEUE["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
             response_data = {
                 "ok": True,
-                "access_token": "mock_patient_token_12345",
-                "queue_number": "A012",
-                "status_label": "รอตรวจ",
-                "instruction": "กรุณารอเรียกคิวที่ห้องตรวจ 2",
-                "queue_position": 3,
-                "room": "ห้องตรวจ 2",
-                "updated_at": datetime.now().strftime("%H:%M:%S")
+                "access_token": f"mock_patient_token_{national_id}",
+                "queue_number": MOCK_ACTIVE_QUEUE["queue_number"],
+                "status_label": MOCK_ACTIVE_QUEUE["status_label"],
+                "instruction": MOCK_ACTIVE_QUEUE["instruction"],
+                "queue_position": MOCK_ACTIVE_QUEUE["queue_position"],
+                "room": MOCK_ACTIVE_QUEUE["room"],
+                "updated_at": MOCK_ACTIVE_QUEUE["updated_at"]
             }
             self._send_json(200, response_data)
             return
@@ -164,6 +218,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
 
         # 7. Cancel Queue Endpoint
         if path == "/api/patient/queue/cancel/":
+            MOCK_ACTIVE_QUEUE["queue_number"] = None
             response_data = {
                 "ok": True,
                 "message": "ยกเลิกคิวเรียบร้อยแล้ว"
@@ -251,32 +306,21 @@ class MockBackendHandler(BaseHTTPRequestHandler):
 
         # Queue Status Endpoint
         if path == "/api/patient/queue/":
-            response_data = {
-                "ok": True,
-                "queue_number": "A012",
-                "status_label": "รอตรวจ",
-                "instruction": "กรุณารอเรียกคิวที่ห้องตรวจ 2",
-                "queue_position": 3,
-                "room": "ห้องตรวจ 2",
-                "updated_at": datetime.now().strftime("%H:%M:%S")
-            }
-            self._send_json(200, response_data)
+            if MOCK_ACTIVE_QUEUE.get("queue_number"):
+                response_data = dict(MOCK_ACTIVE_QUEUE)
+                response_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                self._send_json(200, response_data)
+            else:
+                self._send_json(200, {"ok": True, "queue_number": None, "status_label": "ไม่มีคิว"})
             return
 
         # Patient Account & History Endpoint
         if path == "/api/patient/me/":
+            active_q = dict(MOCK_ACTIVE_QUEUE) if MOCK_ACTIVE_QUEUE.get("queue_number") else None
             response_data = {
                 "ok": True,
                 "profile": MOCK_PATIENT_PROFILE,
-                "active_queue": {
-                    "ok": True,
-                    "queue_number": "A012",
-                    "status_label": "รอตรวจ",
-                    "instruction": "กรุณารอเรียกคิวที่ห้องตรวจ 2",
-                    "queue_position": 3,
-                    "room": "ห้องตรวจ 2",
-                    "updated_at": datetime.now().strftime("%H:%M:%S")
-                },
+                "active_queue": active_q,
                 "visits": [
                     {
                         "queue_number": "A005",
@@ -312,7 +356,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     server_address = ("127.0.0.1", PORT)
     httpd = HTTPServer(server_address, MockBackendHandler)
-    print(f"🏥 Mock Hospital Backend is running at http://127.0.0.1:{PORT}")
+    print(f"[Mock Backend] Running at http://127.0.0.1:{PORT}")
     print("Press Ctrl+C to stop.")
     try:
         httpd.serve_forever()

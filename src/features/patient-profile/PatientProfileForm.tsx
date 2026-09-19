@@ -10,6 +10,7 @@ import {
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { PatientProfile, ProfileUpdatePayload } from "@/shared/api/types";
 import { ALL_77_PROVINCES, getDistricts, getPostalCode, getSubdistricts } from "@/shared/data/thai-address";
+import { EyeIcon, EyeOffIcon } from "@/shared/ui/Icons";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 export const CHRONIC_OPTIONS = [
@@ -625,7 +626,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
         <fieldset>
           <legend>
             <span className="section-number">1</span>
-            <span>ข้อมูลส่วนบุคคล<small>ระบุชื่อและข้อมูลสำหรับติดต่อ</small></span>
+            <span>👤 ข้อมูลส่วนบุคคล<small>ระบุชื่อและข้อมูลสำหรับติดต่อ</small></span>
           </legend>
           <div className="form-grid">
             {mode === "register" && !hasToken && (
@@ -665,7 +666,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
                       onClick={() => setShowPassword(!showPassword)}
                       aria-label={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
                     >
-                      {showPassword ? "🙈" : "👁️"}
+                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                     </button>
                   </div>
                 </Field>
@@ -803,7 +804,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
         <fieldset>
           <legend>
             <span className="section-number">3</span>
-            <span>ข้อมูลสุขภาพและประวัติการแพ้<small>ข้อมูลเบื้องต้นเพื่อความปลอดภัยในการตรวจรักษา</small></span>
+            <span>🩺 ข้อมูลสุขภาพและประวัติการแพ้<small>ข้อมูลเบื้องต้นเพื่อความปลอดภัยในการตรวจรักษา</small></span>
           </legend>
           <div className="info-strip">สัญญาณชีพ (ความดันโลหิต ชีพจร อุณหภูมิ) จะได้รับการตรวจวัด ณ จุดคัดกรอง</div>
 
@@ -833,7 +834,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
 
           <div id="field-group-chronic" className={`field-group-spacing ${invalidField === "chronic_diseases" ? "field-group-invalid" : ""}`}>
             <span className="field-group-title">
-              โรคประจำตัว <b>*</b>
+              🩺 โรคประจำตัว <b>*</b>
               <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มีโรคประจำตัว&quot;)</small>
             </span>
             <div className="choice-chips-group">
@@ -859,7 +860,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
 
           <div id="field-group-allergies" className={`field-group-spacing ${invalidField === "allergies" ? "field-group-invalid" : ""}`}>
             <span className="field-group-title">
-              ประวัติแพ้ยาและอาหาร <b>*</b>
+              ⚠️ ประวัติแพ้ยาและอาหาร <b>*</b>
               <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มีประวัติแพ้ยา&quot;)</small>
             </span>
             <div className="choice-chips-group">
@@ -885,7 +886,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
 
           <div id="field-group-medications" className={`field-group-spacing ${invalidField === "medications" ? "field-group-invalid" : ""}`}>
             <span className="field-group-title">
-              ยาที่ใช้ประจำ <b>*</b>
+              💊 ยาที่ใช้ประจำ <b>*</b>
               <small className="field-group-subtitle">กรุณาเลือกอย่างน้อย 1 รายการ หรือระบุเพิ่มเติม (หากไม่มี ให้เลือก &quot;ไม่มียาที่ใช้ประจำ&quot;)</small>
             </span>
             <div className="choice-chips-group">
@@ -914,7 +915,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
         <fieldset>
           <legend>
             <span className="section-number">4</span>
-            <span>ที่อยู่ปัจจุบัน<small>ระบุที่อยู่เพื่อการติดต่อและบันทึกประวัติการรักษา</small></span>
+            <span>📍 ที่อยู่ปัจจุบัน<small>ระบุที่อยู่เพื่อการติดต่อและบันทึกประวัติการรักษา</small></span>
           </legend>
           <div className="form-grid">
             <Field label="จังหวัด">
@@ -979,7 +980,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
         <fieldset>
           <legend>
             <span className="section-number">5</span>
-            <span>ผู้ติดต่อฉุกเฉิน<small>ข้อมูลบุคคลที่สามารถติดต่อได้ในกรณีจำเป็นเร่งด่วน (สูงสุด 3 ท่าน)</small></span>
+            <span>🚨 ผู้ติดต่อฉุกเฉิน<small>ข้อมูลบุคคลที่สามารถติดต่อได้ในกรณีจำเป็นเร่งด่วน (สูงสุด 3 ท่าน)</small></span>
           </legend>
           <div className="emergency-contacts-wrapper">
             {emergencyContacts.map((contact, index) => (

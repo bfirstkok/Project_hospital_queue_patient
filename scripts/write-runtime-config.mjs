@@ -1,8 +1,21 @@
-import { writeFile } from "node:fs/promises";
+import { writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const apiBaseUrl = String(process.env.PATIENT_API_BASE_URL || "https://hospital.bfirstkok.me").replace(/\/$/, "");
-const refreshMs = Number(process.env.PATIENT_STATUS_REFRESH_MS) || 10000;
+let envFileContent = "";
+try {
+  envFileContent = await readFile(resolve(".env"), "utf8");
+} catch {
+  // Ignore
+}
+
+function getEnvVal(key, fallback) {
+  if (process.env[key]) return process.env[key];
+  const match = envFileContent.match(new RegExp(`^${key}=(.*)$`, "m"));
+  return match ? match[1].trim() : fallback;
+}
+
+const apiBaseUrl = String(getEnvVal("PATIENT_API_BASE_URL", "http://127.0.0.1:8000")).replace(/\/$/, "");
+const refreshMs = Number(getEnvVal("PATIENT_STATUS_REFRESH_MS", "10000")) || 10000;
 const parsedUrl = new URL(apiBaseUrl);
 const localHosts = new Set(["localhost", "127.0.0.1"]);
 
