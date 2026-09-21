@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
-import type { RegistrationPayload, RegistrationResult } from "@/shared/api/types";
+import type { PatientProfile, RegistrationPayload, RegistrationResult } from "@/shared/api/types";
 import {
   PatientProfileForm,
   PROFILE_DRAFT_KEY,
@@ -12,6 +12,8 @@ interface RegistrationViewProps {
   token?: string;
   hasToken?: boolean;
   initialPdpaAccepted?: boolean;
+  googleTempToken?: string;
+  initialProfile?: PatientProfile | null;
   onLogin: () => void;
   onCancel?: () => void;
   onSuccess: (token: string, result: RegistrationResult) => void;
@@ -107,6 +109,8 @@ export function RegistrationView({
   token,
   hasToken,
   initialPdpaAccepted = false,
+  googleTempToken,
+  initialProfile,
   onLogin,
   onCancel,
   onSuccess,
@@ -171,6 +175,7 @@ export function RegistrationView({
     }
 
     const payload = collectRegistrationPayload(form);
+    if (googleTempToken) payload.temp_token = googleTempToken;
     const nationalId = payload.national_id || "";
 
     setLoading(true);
@@ -286,7 +291,9 @@ export function RegistrationView({
         <p>
           {hasToken
             ? "ระบบได้ดึงข้อมูลส่วนบุคคลของคุณมาให้อัตโนมัติแล้ว กรุณาเลือกหรือระบุอาการที่มารับบริการวันนี้"
-            : "กรุณากรอกข้อมูลส่วนบุคคลเพื่อบันทึกประวัติการรักษาและจัดลำดับคิวรับบริการ"}
+            : googleTempToken
+              ? "ยืนยันข้อมูลผู้ป่วยเพื่อเชื่อมบัญชี Google กับประวัติในโรงพยาบาล แล้วรับคิวบริการ"
+              : "กรุณากรอกข้อมูลส่วนบุคคลเพื่อบันทึกประวัติการรักษาและจัดลำดับคิวรับบริการ"}
         </p>
         {!hasToken && (
           <div className="login-prompt">
@@ -302,6 +309,13 @@ export function RegistrationView({
         <li><span>3</span>รอเรียกคิว</li>
       </ol>
 
+      {googleTempToken && (
+        <div className="profile-prefilled-banner" role="status">
+          <strong>เชื่อมบัญชี Google แล้ว</strong>
+          <span>ระบบเติมชื่อและอีเมลจาก Google ให้แล้ว กรุณาตรวจสอบข้อมูลและระบุเลขบัตรประชาชนก่อนลงทะเบียน</span>
+        </div>
+      )}
+
       {message && <div className="alert" role="alert">{message}</div>}
 
       <form ref={formRef} className="form-card" autoComplete="on" onSubmit={submit}>
@@ -312,7 +326,8 @@ export function RegistrationView({
           mode="register"
           token={token}
           hasToken={hasToken}
-          draftKey={token ? undefined : PROFILE_DRAFT_KEY}
+          initialProfile={initialProfile}
+          draftKey={token || googleTempToken ? undefined : PROFILE_DRAFT_KEY}
           onUnauthorized={onUnauthorized}
           onDirtyChange={setProfileDirty}
         >

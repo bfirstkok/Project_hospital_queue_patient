@@ -3,6 +3,7 @@ declare global {
     PATIENT_APP_ENV?: {
       API_BASE_URL?: string;
       STATUS_REFRESH_MS?: number | string;
+      GOOGLE_CLIENT_ID?: string;
     };
   }
 }
@@ -10,6 +11,7 @@ declare global {
 export interface RuntimeConfig {
   apiBaseUrl: string;
   statusRefreshMs: number;
+  googleClientId: string;
 }
 
 export function getRuntimeConfig(): RuntimeConfig {
@@ -18,5 +20,6 @@ export function getRuntimeConfig(): RuntimeConfig {
   return {
     apiBaseUrl: String(runtime?.API_BASE_URL || sameOriginApiBaseUrl).trim().replace(/\/$/, ""),
     statusRefreshMs: Number(runtime?.STATUS_REFRESH_MS) || 10000,
+    googleClientId: String(runtime?.GOOGLE_CLIENT_ID || "").trim(),
   };
 }

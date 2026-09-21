@@ -10,6 +10,7 @@ export interface ApiEnvelope {
 export interface RegistrationPayload {
   username?: string | null;
   password?: string | null;
+  temp_token?: string | null;
   website: string | null;
   first_name: string | null;
   last_name: string | null;
