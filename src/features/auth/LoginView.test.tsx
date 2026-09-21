@@ -5,8 +5,30 @@ import { LoginView } from "./LoginView";
 
 describe("LoginView", () => {
   beforeEach(() => {
-    window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
+    window.PATIENT_APP_ENV = {
+      API_BASE_URL: "https://hospital.example.com",
+      GOOGLE_CLIENT_ID: "google-client-id.apps.googleusercontent.com",
+    };
     vi.stubGlobal("fetch", vi.fn());
+
+    let credentialCallback: ((response: { credential?: string }) => void) | undefined;
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn((options) => {
+            credentialCallback = options.callback;
+          }),
+          renderButton: vi.fn((parent) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.setAttribute("aria-label", "เข้าสู่ระบบด้วย Google");
+            button.textContent = "Continue with Google";
+            button.addEventListener("click", () => credentialCallback?.({ credential: "google-credential" }));
+            parent.appendChild(button);
+          }),
+        },
+      },
+    };
   });
 
   it("sends username and password login payload", async () => {
@@ -16,7 +38,11 @@ describe("LoginView", () => {
       }),
     );
     const onSuccess = vi.fn();
-    render(createElement(LoginView, { onRegister: vi.fn(), onSuccess }));
+    render(createElement(LoginView, {
+      onRegister: vi.fn(),
+      onSuccess,
+      onGoogleRegister: vi.fn(),
+    }));
     fireEvent.change(screen.getByLabelText("ชื่อผู้ใช้ หรือ อีเมล *"), {
       target: { value: "somchai99" },
     });
@@ -30,26 +56,76 @@ describe("LoginView", () => {
 
   it("navigates to register view when register button clicked", () => {
     const onRegister = vi.fn();
-    render(createElement(LoginView, { onRegister, onSuccess: vi.fn() }));
+    render(createElement(LoginView, {
+      onRegister,
+      onSuccess: vi.fn(),
+      onGoogleRegister: vi.fn(),
+    }));
     fireEvent.click(screen.getByRole("button", { name: /ลงทะเบียนผู้ป่วยใหม่/ }));
     expect(onRegister).toHaveBeenCalledTimes(1);
   });
 
-  it("triggers google sign-in when Google button is clicked", async () => {
+  it("exchanges a real Google credential for an access token", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ ok: true, access_token: "google_token" }), {
         headers: { "content-type": "application/json" },
       }),
     );
     const onSuccess = vi.fn();
-    render(createElement(LoginView, { onRegister: vi.fn(), onSuccess }));
-    fireEvent.click(screen.getByRole("button", { name: /เข้าสู่ระบบด้วย Google/ }));
+    render(createElement(LoginView, {
+      onRegister: vi.fn(),
+      onSuccess,
+      onGoogleRegister: vi.fn(),
+    }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" }));
+
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("google_token"));
-    expect(vi.mocked(fetch).mock.calls[0][0]).toContain("/api/patient/auth/google/");
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).toContain("/api/patient/auth/google/");
+    expect(init?.body).toContain('"credential":"google-credential"');
+  });
+
+  it("routes a new Google user into linked registration", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({
+        ok: true,
+        is_new_user: true,
+        temp_token: "google-temp-token",
+        suggested_profile: {
+          first_name: "Somchai",
+          last_name: "Jaidee",
+          email: "somchai@example.com",
+        },
+      }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const onGoogleRegister = vi.fn();
+    render(createElement(LoginView, {
+      onRegister: vi.fn(),
+      onSuccess: vi.fn(),
+      onGoogleRegister,
+    }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" }));
+
+    await waitFor(() => expect(onGoogleRegister).toHaveBeenCalledWith(
+      "google-temp-token",
+      {
+        first_name: "Somchai",
+        last_name: "Jaidee",
+        email: "somchai@example.com",
+      },
+    ));
   });
 
   it("opens forgot password modal when forgot password link is clicked", () => {
-    render(createElement(LoginView, { onRegister: vi.fn(), onSuccess: vi.fn() }));
+    render(createElement(LoginView, {
+      onRegister: vi.fn(),
+      onSuccess: vi.fn(),
+      onGoogleRegister: vi.fn(),
+    }));
     fireEvent.click(screen.getByRole("button", { name: /ลืมรหัสผ่าน\?/ }));
     expect(screen.getByRole("heading", { name: /ลืมรหัสผ่าน \/ กู้คืนบัญชี/ })).toBeDefined();
   });
