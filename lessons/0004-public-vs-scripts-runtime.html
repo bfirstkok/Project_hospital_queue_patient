@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>บทเรียนที่ 4: ความแตกต่างระหว่าง scripts/ กับ public/ ในเรื่อง Runtime</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0004 • Project Structure</span>
+      <h1>scripts/ กับ public/<br><span style="font-size: 0.7em; color: var(--text-muted); font-weight: 400;">ทำความเข้าใจความต่างระหว่าง "เครื่องพิมพ์ป้าย" กับ "ตัวแผ่นป้ายประกาศ"</span></h1>
+      <p style="color: var(--text-muted); font-style: italic;">
+        บทก่อนหน้า: <a href="0003-env-vs-runtime-config.html">0003: .env vs Runtime Config</a>
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>1. ภาพเปรียบเทียบที่เข้าใจง่ายที่สุด 🏥</h2>
+        <div class="analogy-box">
+          <strong>ความสัมพันธ์ระหว่าง scripts/ กับ public/:</strong>
+          <ul>
+            <li><strong>scripts/write-runtime-config.mjs</strong> คือ <strong>"พนักงานเขียนป้ายประกาศ"</strong> (ทำงานอยู่ในห้องทำงานหลังโรงพยาบาล คนไข้มองไม่เห็น)</li>
+            <li><strong>public/runtime-config.js</strong> คือ <strong>"แผ่นป้ายประกาศจริง"</strong> (ที่พนักงานเอาออกมาแขวนไว้ที่เสาหน้าประตู เพื่อให้คนไข้ที่เดินเข้ามาอ่านได้)</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. ตารางเปรียบเทียบหน้าที่และความแตกต่าง</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>หัวข้อ</th>
+              <th><code>scripts/write-runtime-config.mjs</code></th>
+              <th><code>public/runtime-config.js</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>มันคืออะไร?</strong></td>
+              <td><strong>โค้ดคำสั่ง / สคริปต์ (Script / Tool)</strong> ที่สั่งให้ทำงาน</td>
+              <td><strong>ไฟล์ข้อมูลผลลัพธ์ (Artifact / Static Asset)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>ใครเป็นคนสั่งรัน?</strong></td>
+              <td><strong>โปรแกรมเมอร์ หรือ ระบบ Build (Node.js)</strong> บนคอมพิวเตอร์</td>
+              <td><strong>เว็บบราวเซอร์บนมือถือของคนไข้</strong> เป็นคนโหลดไปเปิดอ่าน</td>
+            </tr>
+            <tr>
+              <td><strong>คนไข้บนอินเทอร์เน็ตมองเห็นไหม?</strong></td>
+              <td>❌ <strong>มองไม่เห็นเด็ดขาด</strong> อยู่ในเครื่องพัฒนาเท่านั้น</td>
+              <td>✅ <strong>มองเห็นได้โดยตรง</strong> ผ่าน URL สาธารณะ</td>
+            </tr>
+            <tr>
+              <td><strong>หน้าที่ของมัน</strong></td>
+              <td>ไปหยิบค่าจาก <code>.env</code> ตรวจสอบความถูกต้อง แล้วเขียนลงไฟล์</td>
+              <td>เก็บตัวแปร <code>window.PATIENT_APP_ENV</code> ให้หน้าเว็บ React ใช้งาน</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>3. ความลับของโฟลเดอร์ <code>public/</code> ใน Next.js</h2>
+        <p>
+          ใน Next.js โฟลเดอร์ชื่อ <code>public</code> มีความหมายพิเศษตามชื่อของมันคือ <strong>"พื้นที่สาธารณะ"</strong>
+        </p>
+        <p>
+          ไฟล์อะไรก็ตามที่คุณวางไว้ในโฟลเดอร์นี้ เซิร์ฟเวอร์จะเปิดให้ทุกคนบนโลกอินเทอร์เน็ตสามารถพิมพ์ URL เข้ามาเปิดดูได้ตรงๆ เช่น รูปภาพโลโก้, ไอคอนเว็บ (favicon.ico), และไฟล์ <code>runtime-config.js</code>
+        </p>
+        <p>
+          นั่นเป็นเหตุผลที่ไฟล์ [src/app/layout.tsx](file:///c:/Users/Acer/Desktop/Queue-Hostpital/src/app/layout.tsx#L18) สามารถเขียนคำสั่งนี้ได้:
+        </p>
+        <pre><code>&lt;Script src="/patient/runtime-config.js" strategy="beforeInteractive" /&gt;</code></pre>
+        <p>
+          เพราะไฟล์อยู่ใน <code>public/</code> บราวเซอร์จึงดาวน์โหลดมาอ่านได้ตั้งแต่ก่อนที่หน้าจอจะเริ่มแสดงผล!
+        </p>
+      </section>
+
+      <section>
+        <h2>4. วงจรการทำงานครบวงจร (Life Cycle)</h2>
+        <div class="grid-cards">
+          <div class="card">
+            <h4>ขั้นที่ 1: สคริปต์เริ่มทำงาน</h4>
+            <p>เมื่อสั่ง build สคริปต์ใน <code>scripts/</code> จะตื่นขึ้นมาอ่าน <code>.env</code> ตรวจว่า URL ถูกต้องไหม</p>
+          </div>
+          <div class="card">
+            <h4>ขั้นที่ 2: ผลิตไฟล์ออกสู่สาธารณะ</h4>
+            <p>สคริปต์จะนำข้อความ JSON ไปเขียนบันทึกลงใน <code>public/runtime-config.js</code></p>
+          </div>
+          <div class="card">
+            <h4>ขั้นที่ 3: คนไข้เปิดอ่าน</h4>
+            <p>เมื่อคนไข้เปิดเว็บบนมือถือ บราวเซอร์จะดาวน์โหลดไฟล์จาก <code>public/</code> ไปเก็บไว้ในหน่วยความจำ (<code>window</code>) ทันที</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="quiz-container">
+        <div class="quiz-title">🧠 ทดสอบความเข้าใจ: ถ้าไฟล์ runtime-config.js ใน public หายไป จะเกิดอะไรขึ้น?</div>
+        <p>ถ้ามีคนเผลอไปกดลบไฟล์ <code>public/runtime-config.js</code> ทิ้ง จะแก้ปัญหานี้อย่างไร?</p>
+        <button class="quiz-btn" onclick="checkAnswer(1)">ก. ไม่ต้องตกใจ แค่สั่งรันสคริปต์ node scripts/write-runtime-config.mjs ไฟล์ใน public ก็จะถูกสร้างกลับมาใหม่ทันที</button>
+        <button class="quiz-btn" onclick="checkAnswer(2)">ข. ระบบพังถาวร ต้องเขียนโค้ด Next.js ใหม่ทั้งหมดเพราะกู้คืนไม่ได้แล้ว</button>
+        <button class="quiz-btn" onclick="checkAnswer(3)">ค. ต้องไปกู้ไฟล์กลับมาจากฐานข้อมูล SQL ของโรงพยาบาล</button>
+        
+        <div id="feedback" class="feedback"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>OPD Smart Hospital Learning Workspace • เรียนรู้โครงสร้างอย่างผู้เชี่ยวชาญ!</p>
+    </footer>
+  </div>
+
+  <script>
+    function checkAnswer(choice) {
+      const fb = document.getElementById('feedback');
+      fb.style.display = 'block';
+      if (choice === 1) {
+        fb.style.background = 'var(--accent-light)';
+        fb.style.border = '1px solid var(--accent)';
+        fb.style.color = 'var(--accent)';
+        fb.innerHTML = '<strong>ถูกต้องที่สุด! 🎉</strong> เพราะไฟล์ใน public เป็นแค่ "ผลผลิต" ชั่วคราว เมื่อสั่งรันสคริปต์ใน scripts/ มันจะไปอ่านต้นฉบับใน .env แล้วผลิตไฟล์ใน public ขึ้นมาใหม่อย่างง่ายดาย!';
+      } else {
+        fb.style.background = '#fee2e2';
+        fb.style.border = '1px solid #dc2626';
+        fb.style.color = '#dc2626';
+        fb.innerHTML = '<strong>ยังไม่ถูกต้อง:</strong> ไฟล์ใน public ไม่ใช่โค้ดต้นฉบับ แต่เป็นผลผลิตที่สร้างขึ้นใหม่อัตโนมัติได้ตลอดเวลาผ่านสคริปต์';
+      }
+    }
+  </script>
+</body>
+</html>

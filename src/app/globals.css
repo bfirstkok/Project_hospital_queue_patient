@@ -3825,6 +3825,20 @@ input:checked + .toggle-slider:before {
   cursor: not-allowed;
 }
 
+.google-auth-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 6px 0;
+}
+
+#googleSignInDiv {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 .google-icon {
   flex-shrink: 0;
 }

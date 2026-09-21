@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>บทเรียนที่ 1: เข้าใจเบื้องหลังและการทำงานของ API (Mental Model & Architecture)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0001 • Core Mental Model</span>
+      <h1>เข้าใจเบื้องหลังและการทำงานของ API<br><span style="font-size: 0.7em; color: var(--text-muted); font-weight: 400;">ทำไมต้องออกแบบ ใช้งาน เขียน และส่งข้อมูลแบบนี้?</span></h1>
+      <p style="color: var(--text-muted); font-style: italic;">
+        เป้าหมาย: สร้างความเข้าใจเชิงเหตุผลและภาพจำลองในหัว (Mental Model) ให้กระจ่างแจ้ง ก่อนที่เราจะแตะโค้ดแม้แต่บรรทัดเดียว
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>1. ภาพจำลองตั้งต้น: API คืออะไรในโลกจริง?</h2>
+        <p>
+          คำว่า <strong>API (Application Programming Interface)</strong> ฟังดูเป็นศัพท์เทคนิคที่น่ากลัว แต่ถ้าเราถอดเปลือกนอกออก API ทำหน้าที่เหมือน <strong>"เคาน์เตอร์เวชระเบียน"</strong> หรือ <strong>"บริกรในร้านอาหาร"</strong>
+        </p>
+
+        <div class="analogy-box">
+          <strong>🏥 อุปมาเทียบกับระบบโรงพยาบาล:</strong>
+          คนไข้ (Frontend / Client) เดินเข้ามาในโรงพยาบาล ไม่ได้รับอนุญาตให้เดินดุ่มๆ เข้าไปในห้องเก็บแฟ้มประวัติผู้ป่วย (Database) เอง หรือหยิบยาในคลังเองเด็ดขาด!<br><br>
+          สิ่งที่คนไข้ทำได้คือ เดินไปที่ <strong>เคาน์เตอร์บริการ (API Endpoint)</strong> บอกเจ้าหน้าที่ว่าต้องการอะไร พร้อมยื่นบัตรประชาชน (Request Header / Payload) จากนั้นเจ้าหน้าที่เคาน์เตอร์ (Backend Handler) จะตรวจสอบความถูกต้อง เดินไปค้นแฟ้มหลังห้อง (Database Query) แล้วเดินกลับมาพร้อม "ใบนำทางหรือบัตรคิว" (Response) ยื่นให้คนไข้
+        </div>
+
+        <p>
+          <strong>ทำไมโลกการเขียนโปรแกรมถึงสร้างเคาน์เตอร์นี้ขึ้นมา?</strong> ทำไมมือถือของคนไข้ไม่ต่อตรงกับ Database ไปเลยให้จบๆ?
+        </p>
+      </section>
+
+      <section>
+        <h2>2. ทำไมต้องออกแบบแบบนี้? (Why Design It This Way?)</h2>
+        <div class="grid-cards">
+          <div class="card">
+            <h4>1. ความปลอดภัยขั้นวิกฤต (Security Boundary)</h4>
+            <p>ถ้ารหัสผ่านเข้า Database ฝังอยู่ใน Browser หรือมือถือ ทุกคนที่กด F12 Inspect จะเห็นรหัสผ่านทันที และสามารถสั่ง <code>DROP TABLE patients;</code> ได้ API จึงเป็น "กำแพงปราการด่านเดียว" ที่มีสิทธิ์คุยกับฐานข้อมูล</p>
+          </div>
+          <div class="card">
+            <h4>2. กฎเกณฑ์ทางธุรกิจ (Business Rules)</h4>
+            <p>คนไข้จะกดขอคิวได้ ต้องผ่านการคัดกรอง หรือไม่ติดคิวซ้ำซ้อน กฎเหล่านี้ต้องถูกบังคับที่ Backend Server เสมอ เพราะโค้ดฝั่ง Client สามารถถูกแฮกหรือปลอมแปลงได้ง่ายดาย</p>
+          </div>
+          <div class="card">
+            <h4>3. ความเป็นอิสระ (Separation of Concerns)</h4>
+            <p>Frontend อาจเปลี่ยนจาก Next.js เป็น Mobile App (Flutter/iOS) หรือตู้คีออสจอสัมผัส แต่ทุกคนคุยกับ "API เส้นเดิม" ได้ทันทีโดยไม่ต้องเขียนตรรกะระบบใหม่</p>
+          </div>
+          <div class="card">
+            <h4>4. ความไม่จำสถานะ (Statelessness)</h4>
+            <p>Server ไม่ต้องจำว่า "เมื่อ 5 วินาทีก่อนเครื่องนี้ทำอะไร" ทุก Request ที่ส่งมาต้องพกข้อมูลระบุตัวตนมาครบในตัว ทำให้เราเพิ่ม Server เป็น 10 เครื่องเพื่อรองรับคนไข้หมื่นคนพร้อมกันได้ทันที (Scalability)</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. ทำไมต้องใช้งานแบบนี้? (Why Consume It This Way?)</h2>
+        <p>
+          การใช้งาน API ถูกออกแบบเลียนแบบ <strong>"ไวยากรณ์ภาษาคน"</strong> ที่ประกอบด้วย <strong>คำกริยา (Verb)</strong> + <strong>คำนาม/สิ่งของ (Noun)</strong>
+        </p>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>HTTP Method (กริยา)</th>
+              <th>เจตนาของการใช้งาน</th>
+              <th>ตัวอย่างในระบบโรงพยาบาล</th>
+              <th>ลักษณะสำคัญ</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET</code></td>
+              <td>"ขอดู / ขอดึงข้อมูล" ไม่เปลี่ยนแปลงข้อมูล</td>
+              <td><code>GET /api/queue/status</code></td>
+              <td>ดึงกี่ครั้ง ข้อมูลใน DB ก็ไม่เปลี่ยน (Safe)</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td>"สร้างสิ่งใหม่ / ยื่นคำร้องใหม่"</td>
+              <td><code>POST /api/queue/register</code></td>
+              <td>กดย้ำๆ อาจสร้างคิวซ้ำ ต้องระวัง</td>
+            </tr>
+            <tr>
+              <td><code>PATCH</code> / <code>PUT</code></td>
+              <td>"แก้ไขข้อมูลบางส่วน / แทนที่ข้อมูลเดิม"</td>
+              <td><code>PATCH /api/patients/me</code></td>
+              <td>อัปเดตเฉพาะเบอร์โทรศัพท์หรือที่อยู่</td>
+            </tr>
+            <tr>
+              <td><code>DELETE</code></td>
+              <td>"ขอลบหรือยกเลิกทรัพยากร"</td>
+              <td><code>DELETE /api/queue/ticket</code></td>
+              <td>ขอยกเลิกบัตรคิวตรวจ</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          <strong>เหตุผลที่ต้องแบ่งชัดเจน:</strong> เครือข่ายอินเทอร์เน็ต (รวมถึงบราวเซอร์และระบบแคช) รู้ว่าถ้าเป็น <code>GET</code> สามารถแคช (Cache) เก็บไว้ได้เพื่อความเร็ว แต่ถ้าเป็น <code>POST</code> ห้ามแคชเด็ดขาดเพราะข้อมูลอาจเสียหาย
+        </p>
+      </section>
+
+      <section>
+        <h2>4. ทำไมต้องส่งข้อมูลแบบนี้? (Why Transport Data This Way?)</h2>
+        <p>เวลาเราส่งคำขอทาง HTTP มันเหมือน <strong>"การส่งพัสดุหรือจดหมายลงทะเบียน"</strong> ที่แยกส่วนอย่างชัดเจน:</p>
+
+        <div class="grid-cards">
+          <div class="card">
+            <h4>1. ซองจดหมายด้านนอก (Headers)</h4>
+            <p>เป็นข้อมูลกำกับการจัดส่ง (Metadata) ไม่ใช่เนื้อความจดหมาย เช่น:
+              <br>• <code>Content-Type: application/json</code> (บอกว่าข้างในเขียนด้วยภาษา JSON นะ)
+              <br>• <code>Authorization: Bearer xyz...</code> (แปะบัตรประชาชนหรือตั๋วอนุญาตว่าใครเป็นคนส่ง)
+            </p>
+          </div>
+          <div class="card">
+            <h4>2. สิ่งของในกล่องพัสดุ (Request Body)</h4>
+            <p>เนื้อหาข้อมูลจริงที่ต้องการส่งมอบ เช่น ฟอร์มข้อมูลผู้ป่วย: ชื่อ, นามสกุล, อาการเริ่มต้น, เบอร์ติดต่อ</p>
+          </div>
+        </div>
+
+        <h3>ทำไมโลกถึงเลือกใช้ JSON (JavaScript Object Notation)?</h3>
+        <p>ในอดีตโปรแกรมเมอร์เคยส่งข้อมูลด้วย XML หรือข้อความดิบ (Plain Text) แต่ JSON ชนะขาดลอยเพราะ 3 เหตุผล:</p>
+        <ol style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+          <li><strong>มนุษย์อ่านรู้เรื่อง และคอมพิวเตอร์แปลงได้ทันที:</strong> โครงสร้าง Key-Value <code>{"hn": "HN-67001", "age": 35}</code> ตรงกับ Object ในแทบทุกภาษาบนโลก (Python Dict, JS Object, Swift Dictionary)</li>
+          <li><strong>มี Data Type ติดมาด้วย:</strong> แยกความต่างระหว่างตัวเลข <code>35</code> กับข้อความ <code>"35"</code> และ boolean <code>true/false</code> ชัดเจนโดยไม่ต้องเขียนโปรแกรมแกะเอง</li>
+          <li><strong>น้ำหนักเบา (Lightweight):</strong> ไม่มี Tag เปิด-ปิด ยืดยาวเหมือน XML ทำให้กินเน็ตมือถือน้อยลง ส่งผ่าน 4G/5G เร็วขึ้น</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>5. ทำไมต้องเขียนแบบนี้? (Why Implement & Structure It This Way?)</h2>
+        <p>
+          เวลาเขียนโค้ด Backend ทำไมเราไม่แค่รับค่ามาแล้วยัดลง Database เลย? ทำไมต้องมีสถาปัตยกรรมแบบ <strong>"Controller / Handler -> Validation -> Business Logic -> Data Access"</strong>?
+        </p>
+        <p>
+          เพราะ API คือ <strong>"สัญญาประชาคม (Contract)"</strong> ระหว่างสองฝั่งที่ไม่เคยเห็นหน้ากัน:
+        </p>
+        <ul style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+          <li><strong>กฎเหล็กความปลอดภัย (Never Trust Client Input):</strong> คนร้ายสามารถยิงคำขอปลอมเข้ามาได้ Backend ต้องมีด่านตรวจ (Validation) เสมอ เช่น เลขบัตรต้องครบ 13 หลัก, PIN ต้องเป็นตัวเลข 6 ตัว</li>
+          <li><strong>รหัสสถานะสากล (HTTP Status Codes):</strong> 
+            แทนที่จะตอบกลับมาแบบกำกวม API สากลสื่อสารด้วยรหัส 3 หลักที่ระบบอัตโนมัติเข้าใจได้ทันที:
+            <br>• <code>200 OK / 201 Created</code>: สำเร็จ เรียบร้อย
+            <br>• <code>400 Bad Request</code>: ลูกค้ากรอกข้อมูลผิดพลาด
+            <br>• <code>401 Unauthorized</code>: ไม่ได้เข้าสู่ระบบ / ไม่มีสิทธิ์
+            <br>• <code>404 Not Found</code>: ไม่พบคิวหรือผู้ป่วยที่ระบุ
+            <br>• <code>500 Internal Server Error</code>: เซิร์ฟเวอร์พังข้างใน
+          </li>
+        </ul>
+      </section>
+
+      <section class="quiz-container">
+        <div class="quiz-title">🧠 ทดสอบความเข้าใจ (Self-Check Challenge)</div>
+        <p>สมมติว่าคนไข้ต้องการ <strong>"ขอยกเลิกบัตรคิว"</strong> ในระบบโรงพยาบาล ตามหลักการออกแบบ API ที่ดี คุณคิดว่าควรออกแบบอย่างไร?</p>
+        <button class="quiz-btn" onclick="checkAnswer(1)">ก. ใช้ GET /api/queue/cancel เพราะเขียนง่ายและเรียกผ่าย URL ได้ทันที</button>
+        <button class="quiz-btn" onclick="checkAnswer(2)">ข. ใช้ POST /api/queue พร้อม Body {"action": "delete_my_queue_now"}</button>
+        <button class="quiz-btn" onclick="checkAnswer(3)">ค. ใช้ DELETE /api/queue/ticket พร้อมแนบสิทธิ์ยืนยันตัวตนใน Headers</button>
+        <button class="quiz-btn" onclick="checkAnswer(4)">ง. ส่งคำขอเข้า Database โดยตรงผ่าน SQL คำสั่ง DELETE FROM queue;</button>
+        
+        <div id="feedback" class="feedback"></div>
+      </section>
+
+      <section>
+        <h2>📚 แหล่งอ้างอิงคุณภาพสูง (Primary Sources)</h2>
+        <p>หากต้องการศึกษาเอกสารรากฐานของสถาปัตยกรรมนี้เพิ่มเติม:</p>
+        <ul>
+          <li><a href="https://www.rfc-editor.org/rfc/rfc9110.html" target="_blank">RFC 9110: HTTP Semantics</a> — มาตรฐานสากลว่าด้วย HTTP Verbs และ Status Codes</li>
+          <li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview" target="_blank">MDN Web Docs: An Overview of HTTP</a> — ภาพรวมการทำงานของโปรโตคอลเว็บโดยละเอียด</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>OPD Smart Hospital Learning Workspace • มีข้อสงสัยเพิ่มเติม ถามคุณครู AI ได้ทันที!</p>
+    </footer>
+  </div>
+
+  <script>
+    function checkAnswer(choice) {
+      const fb = document.getElementById('feedback');
+      fb.style.display = 'block';
+      if (choice === 3) {
+        fb.style.background = 'var(--accent-light)';
+        fb.style.border = '1px solid var(--accent)';
+        fb.style.color = 'var(--accent)';
+        fb.innerHTML = '<strong>ถูกต้องยอดเยี่ยม! 🎉</strong> กริยาคือ DELETE (ลบ/ยกเลิก) ตัวทรัพยากรคือ /api/queue/ticket (บัตรคิว) และส่งตั๋วยืนยันตัวตนผ่าน Headers เพื่อความปลอดภัยและตรงตามหลักการออกแบบสากล (RESTful)';
+      } else if (choice === 1) {
+        fb.style.background = '#fee2e2';
+        fb.style.border = '1px solid var(--danger)';
+        fb.style.color = varDanger();
+        fb.innerHTML = '<strong>ยังไม่ถูกต้อง:</strong> GET ต้องเป็นคำขอที่ปลอดภัยและไม่เปลี่ยนแปลงข้อมูลในฐานข้อมูล (Safe & Idempotent) ถ้าใช้ GET ยกเลิกคิว ระบบ Web Crawler หรือ Browser Prefetch อาจกดยกเลิกคิวคนไข้โดยไม่รู้ตัว!';
+      } else if (choice === 2) {
+        fb.style.background = '#fef3c7';
+        fb.style.border = '1px solid var(--warning)';
+        fb.style.color = varWarning();
+        fb.innerHTML = '<strong>ใช้งานได้แต่ยังไม่ใช่วิธีที่สง่างาม:</strong> HTTP มี Method DELETE สำหรับการทำลาย/ยกเลิกทรัพยากรโดยเฉพาะ การเอา action ไปซ่อนใน body ของ POST ทำให้ระบบ Cache และโครงข่ายไม่รู้ว่านี่คือการลบ';
+      } else {
+        fb.style.background = '#fee2e2';
+        fb.style.border = '1px solid var(--danger)';
+        fb.style.color = varDanger();
+        fb.innerHTML = '<strong>อันตรายมาก! ❌:</strong> การให้ Client ต่อตรงเข้า Database คือหายนะทางความปลอดภัย เพราะ Client อาจลบข้อมูลคนไข้ทั้งโรงพยาบาลได้!';
+      }
+    }
+    function varDanger() { return '#dc2626'; }
+    function varWarning() { return '#b45309'; }
+  </script>
+</body>
+</html>

@@ -23,9 +23,12 @@ if (parsedUrl.protocol !== "https:" && !localHosts.has(parsedUrl.hostname)) {
   throw new Error("PATIENT_API_BASE_URL must use HTTPS outside local development");
 }
 
+const googleClientId = String(getEnvVal("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "") || getEnvVal("GOOGLE_CLIENT_ID", "")).trim();
+
 const output = `window.PATIENT_APP_ENV = ${JSON.stringify({
   API_BASE_URL: apiBaseUrl,
   STATUS_REFRESH_MS: refreshMs,
+  GOOGLE_CLIENT_ID: googleClientId,
 }, null, 2)};\n`;
 
 await writeFile(resolve("public", "runtime-config.js"), output, "utf8");

@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, act } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginView } from "./LoginView";
@@ -52,5 +52,59 @@ describe("LoginView", () => {
     render(createElement(LoginView, { onRegister: vi.fn(), onSuccess: vi.fn() }));
     fireEvent.click(screen.getByRole("button", { name: /ลืมรหัสผ่าน\?/ }));
     expect(screen.getByRole("heading", { name: /ลืมรหัสผ่าน \/ กู้คืนบัญชี/ })).toBeDefined();
+  });
+
+  it("initializes Google Identity Services and handles credential callback", async () => {
+    let capturedCallback: ((response: { credential: string }) => void) | undefined;
+    const initializeMock = vi.fn().mockImplementation((config: any) => {
+      capturedCallback = config.callback;
+    });
+    const renderButtonMock = vi.fn();
+
+    window.google = {
+      accounts: {
+        id: {
+          initialize: initializeMock,
+          renderButton: renderButtonMock,
+          prompt: vi.fn(),
+        },
+      },
+    } as any;
+
+    window.PATIENT_APP_ENV = {
+      API_BASE_URL: "https://hospital.example.com",
+      GOOGLE_CLIENT_ID: "test-client-id.apps.googleusercontent.com",
+    };
+
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, access_token: "real_google_session_token" }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const onSuccess = vi.fn();
+    render(createElement(LoginView, { onRegister: vi.fn(), onSuccess }));
+
+    await waitFor(() => expect(initializeMock).toHaveBeenCalled());
+    expect(initializeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client_id: "test-client-id.apps.googleusercontent.com",
+      }),
+    );
+    expect(renderButtonMock).toHaveBeenCalled();
+
+    // Trigger the Google credential callback
+    expect(capturedCallback).toBeDefined();
+    await act(async () => {
+      capturedCallback!({ credential: "real_jwt_from_google" });
+    });
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("real_google_session_token"));
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "https://hospital.example.com/api/patient/auth/google/",
+      expect.objectContaining({
+        body: JSON.stringify({ credential: "real_jwt_from_google" }),
+      }),
+    );
   });
 });

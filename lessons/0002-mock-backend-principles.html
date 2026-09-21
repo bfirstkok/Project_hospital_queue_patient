@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>บทเรียนที่ 2: ผ่าโครงสร้างและหลักการทำ Mock Backend (mock_backend.py)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0002 • Backend Architecture</span>
+      <h1>ผ่าโครงสร้างและหลักการทำ Mock Backend<br><span style="font-size: 0.7em; color: var(--text-muted); font-weight: 400;">ทำความเข้าใจเบื้องลึกของ <code>mock_backend.py</code> ตั้งแต่แนวคิดไปจนถึงท่อส่งข้อมูล</span></h1>
+      <p style="color: var(--text-muted); font-style: italic;">
+        บทก่อนหน้า: <a href="0001-api-architecture-mental-model.html">0001: เข้าใจเบื้องหลังและการทำงานของ API</a>
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>1. ทำไมเราต้องสร้าง Mock Backend ขึ้นมา? (The "Why")</h2>
+        <p>
+          ในการพัฒนาซอฟต์แวร์จริง ปัญหาคลาสสิกที่สุดคือ <strong>"ทีมหน้าบ้าน (Frontend) ต้องรอทีมหลังบ้าน (Backend) เขียนเสร็จก่อน ถึงจะเริ่มต่อระบบได้"</strong> ทำให้งานล่าช้า
+        </p>
+
+        <div class="analogy-box">
+          <strong>🏥 อุปมา: ห้องซ้อมเสมือนจริงของโรงพยาบาล</strong>
+          ก่อนที่ตึกโรงพยาบาลจริงจะสร้างเสร็จ หรือก่อนที่ห้องเก็บเวชระเบียนจริงจะเปิดใช้งาน พยาบาลและเจ้าหน้าที่จำเป็นต้องมี <strong>"เคาน์เตอร์จำลองพร้อมหุ่นคนไข้"</strong> เพื่อซ้อมกระบวนการทำงาน การแจกบัตรคิว และซ้อมรับมือเหตุฉุกเฉิน<br><br>
+          <code>mock_backend.py</code> ทำหน้าที่เป็น <strong>"เซิร์ฟเวอร์จำลองเสมือนจริง"</strong> ที่ปฏิบัติตามสัญญา (Contract) ทุกข้อ ทำให้หน้าบ้าน (Next.js) พัฒนาและทดสอบการทำงานได้ 100% ทันทีโดยไม่ต้องรอใคร
+        </div>
+
+        <div class="grid-cards">
+          <div class="card">
+            <h4>1. ตัดการพึ่งพาภายนอก (Zero Dependencies)</h4>
+            <p>เขียนด้วย <strong>Python Standard Library</strong> ล้วนๆ (<code>http.server</code>, <code>json</code>) ไม่ต้องลง <code>pip install</code> อะไรเพิ่ม รันได้บนเครื่องคอมพิวเตอร์ทุกเครื่องทันที</p>
+          </div>
+          <div class="card">
+            <h4>2. ข้อมูลจำลองที่เสถียร (Deterministic Data)</h4>
+            <p>มีข้อมูลคนไข้ทดสอบ เช่น <code>somchai99</code>, บัตรคิว <code>A012</code> ทำให้รันชุดทดสอบอัตโนมัติ (Playwright E2E) ได้ผลลัพธ์แน่นอน ไม่เปลี่ยนไปมา</p>
+          </div>
+          <div class="card">
+            <h4>3. จำลองเคสวิกฤตได้ง่าย (Edge Case Simulation)</h4>
+            <p>สามารถสั่งให้ส่ง Error แปลกๆ ได้ง่ายดาย เช่น กรอก PIN ผิด 3 ครั้งโดนระงับบัญชี (Status 423), OTP ผิด (400), หรือจำลองเน็ตหลุด</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. เสาหลักทั้ง 5 ของ mock_backend.py</h2>
+        
+        <h3>เสาหลักที่ 1: In-Memory Database (ฐานข้อมูลในแรม)</h3>
+        <p>
+          แทนที่จะติดตั้ง PostgreSQL หรือ MongoDB ซึ่งยุ่งยาก เราใช้ <strong>Python Dictionary</strong> เป็นฐานข้อมูลจำลอง:
+        </p>
+        <pre><code>MOCK_PATIENT_PROFILE = {
+    "username": "somchai99",
+    "hn": "HN-67001",
+    "first_name": "สมชาย"
+}
+MOCK_ACTIVE_QUEUE = { "queue_number": "A012", "status_label": "รอตรวจ" }</code></pre>
+        <p><strong>ข้อดี:</strong> ทำงานเร็วระดับไมโครวินาที และเมื่อต้องการรีเซ็ตข้อมูลทั้งหมดให้กลับมาสะอาดเหมือนใหม่ เพียงแค่กด <code>Ctrl + C</code> แล้วสั่งรันใหม่ ข้อมูลก็กลับสู่ค่าเริ่มต้นทันที</p>
+
+        <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--card-border);">
+
+        <h3>เสาหลักที่ 2: ท่อประปาข้อมูล HTTP (Low-level Stream Mechanics)</h3>
+        <p>
+          เนื่องจากเราไม่ได้ใช้ Framework สำเร็จรูปอย่าง FastAPI หรือ Express.js เราจึงได้เห็น <strong>"การทำงานที่แท้จริงของเครือข่ายอินเทอร์เน็ต"</strong> ผ่าน 2 ตัวแปรหลัก:
+        </p>
+        <ul>
+          <li><strong><code>self.rfile</code> (Read File Stream):</strong> ท่อน้ำท่อรับข้อมูลที่ไหลมาจาก Browser คอมพิวเตอร์ไม่รู้ว่าข้อมูลยาวแค่ไหน เราจึงต้องอ่าน Header <code>Content-Length</code> ก่อน เพื่อรู้ว่าจะต้องดูดน้ำกี่ไบต์ แล้วนำมาแปลงด้วย <code>json.loads()</code></li>
+          <li><strong><code>self.wfile</code> (Write File Stream):</strong> ท่อน้ำท่อส่งข้อมูลกลับไปยัง Browser เราต้องแปลง Python Dictionary ให้เป็นตัวอักษร JSON แล้วเข้ารหัสเป็นไบต์ <code>encode("utf-8")</code> ก่อนฉีดน้ำลงท่อ</li>
+        </ul>
+
+        <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--card-border);">
+
+        <h3>เสาหลักที่ 3: ด่านตรวจคนเข้าเมืองของบราวเซอร์ (CORS Guard)</h3>
+        <p>
+          เมื่อหน้าบ้านรันที่พอร์ต <code>3000</code> (Next.js) แต่หลังบ้านรันที่พอร์ต <code>8000</code> บราวเซอร์จะมองว่าเป็นคนละคน และสั่ง <strong>บล็อกคำขอทิ้งทันที</strong> ตามกฎความปลอดภัยสากล (Same-Origin Policy)!
+        </p>
+        <p>
+          <code>mock_backend.py</code> จึงต้องมี <code>_send_cors_headers()</code> เพื่อออกใบอนุญาต:
+        </p>
+        <pre><code>self.send_header("Access-Control-Allow-Origin", "*")
+self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")</code></pre>
+        <p>และต้องมี <code>do_OPTIONS()</code> เพื่อรองรับ <strong>Preflight Request</strong> ที่บราวเซอร์จะแอบส่งมาเคาะประตูก่อนว่า <em>"ฉันจะส่ง POST มานะ คุณอนุญาตไหม?"</em></p>
+
+        <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--card-border);">
+
+        <h3>เสาหลักที่ 4: การจัดสรรเคาน์เตอร์บริการ (Routing Dispatcher)</h3>
+        <p>
+          ในคลาส <code>BaseHTTPRequestHandler</code> ของ Python กริยา HTTP จะถูกแมปเข้ากับฟังก์ชันโดยตรง:
+        </p>
+        <ul>
+          <li>คำขอแบบ <strong>GET</strong> จะวิ่งเข้าฟังก์ชัน <code>do_GET(self)</code></li>
+          <li>คำขอแบบ <strong>POST</strong> จะวิ่งเข้าฟังก์ชัน <code>do_POST(self)</code></li>
+          <li>คำขอแบบ <strong>PATCH</strong> จะวิ่งเข้าฟังก์ชัน <code>do_PATCH(self)</code></li>
+        </ul>
+        <p>ภายในฟังก์ชัน เราจะใช้เงื่อนไขตรวจสอบ <code>path = self.path.rstrip("/") + "/"</code> เพื่อแยกส่งไปยังเคาน์เตอร์ต่างๆ เช่น <code>/api/patient/login/</code> หรือ <code>/api/patient/queue/</code></p>
+
+        <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--card-border);">
+
+        <h3>เสาหลักที่ 5: การส่งสัญญาณสถานะ (Status Code Signaling)</h3>
+        <p>Mock Backend ต้องไม่ส่งแค่ 200 เสมอไป แต่มันจำลองตรรกะจริง เช่น การกด PIN ผิด:</p>
+        <pre><code>attempts = MOCK_DATABASE_SECURITY["attempts"].get("default", 0) + 1
+if attempts >= 3:
+    self._send_json(423, {"ok": False, "error": "รหัส PIN ไม่ถูกต้องเกินกำหนด ระบบระงับชั่วคราว"})
+else:
+    self._send_json(401, {"ok": False, "error": f"รหัส PIN ไม่ถูกต้อง (เหลือโอกาสอีก {3 - attempts} ครั้ง)"})</code></pre>
+        <p>สิ่งนี้ช่วยให้ฝั่งหน้าบ้านสามารถทดสอบ UI แจ้งเตือนสีแดง และการนับถอยหลังล็อกหน้าจอได้อย่างสมบูรณ์แบบ</p>
+      </section>
+
+      <section class="quiz-container">
+        <div class="quiz-title">🧠 ทดสอบความเข้าใจเรื่อง Mock Backend</div>
+        <p>ทำไมในฟังก์ชัน <code>_read_json()</code> ของ <code>mock_backend.py</code> จึงต้องอ่านค่า <code>Content-Length</code> จาก Header ก่อนสั่ง <code>self.rfile.read()</code>?</p>
+        <button class="quiz-btn" onclick="checkAnswer(1)">ก. เพื่อให้โปรแกรมรู้ว่าจะต้องอ่านข้อมูลกี่ไบต์จากสตรีมเครือข่าย ไม่เช่นนั้นคำสั่ง read() จะค้างรอไม่มีที่สิ้นสุด</button>
+        <button class="quiz-btn" onclick="checkAnswer(2)">ข. เพื่อแปลงตัวเลขความยาวไปเป็นรหัสผ่านสำหรับเข้าสู่ระบบของคนไข้</button>
+        <button class="quiz-btn" onclick="checkAnswer(3)">ค. เพราะมาตรฐานความปลอดภัยของ Python บังคับให้ไฟล์ JSON ทุกไฟล์ต้องมีความยาวเท่ากันเสมอ</button>
+        
+        <div id="feedback" class="feedback"></div>
+      </section>
+
+      <section>
+        <h2>📚 แหล่งอ้างอิงและศึกษาต่อ</h2>
+        <ul>
+          <li><a href="https://docs.python.org/3/library/http.server.html" target="_blank">Python Documentation: http.server</a> — เอกสารทางการของไลบรารีมาตรฐาน HTTP ใน Python</li>
+          <li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS" target="_blank">MDN Web Docs: Cross-Origin Resource Sharing (CORS)</a> — ทำความเข้าใจกลไกความปลอดภัยข้ามพอร์ต</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>OPD Smart Hospital Learning Workspace • ยินดีตอบทุกคำถามเพื่อความเข้าใจอย่างลึกซึ้ง!</p>
+    </footer>
+  </div>
+
+  <script>
+    function checkAnswer(choice) {
+      const fb = document.getElementById('feedback');
+      fb.style.display = 'block';
+      if (choice === 1) {
+        fb.style.background = 'var(--accent-light)';
+        fb.style.border = '1px solid var(--accent)';
+        fb.style.color = 'var(--accent)';
+        fb.innerHTML = '<strong>ถูกต้องที่สุด! 🎉</strong> เครือข่ายอินเทอร์เน็ตทำงานแบบ Stream (สายน้ำไหล) ถ้าเราไม่บอกจำนวนไบต์ที่แน่นอน (Content-Length) โปรแกรมจะไม่รู้ว่าข้อมูลจบตรงไหน และจะนั่งรอข้อมูลต่อไปเรื่อยๆ จนระบบค้าง (Hang)';
+      } else {
+        fb.style.background = '#fee2e2';
+        fb.style.border = '1px solid #dc2626';
+        fb.style.color = '#dc2626';
+        fb.innerHTML = '<strong>ยังไม่ถูกต้อง:</strong> Content-Length คือตัวเลขที่บอก "ขนาดของเนื้อความในหน่วยไบต์" เพื่อให้ระบบเครือข่ายอ่านสตรีมข้อมูลได้พอดี ไม่ขาดและไม่เกิน';
+      }
+    }
+  </script>
+</body>
+</html>

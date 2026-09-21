@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>บทเรียนที่ 3: ความลับของ .env vs Runtime Config (ทำไมดูเหมือนกันแต่ขาดอันไหนไม่ได้?)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0003 • Configuration Architecture</span>
+      <h1>.env vs Runtime Config<br><span style="font-size: 0.7em; color: var(--text-muted); font-weight: 400;">ทำไมสองตัวนี้ถึงดูเหมือนกันเป๊ะ? แต่ทำไมระบบขาดตัวใดตัวหนึ่งไม่ได้?</span></h1>
+      <p style="color: var(--text-muted); font-style: italic;">
+        บทก่อนหน้า: <a href="0002-mock-backend-principles.html">0002: ผ่าโครงสร้างและหลักการทำ Mock Backend</a>
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>1. จุดเริ่มต้นของความสงสัย: "ทำไมมันซ้ำซ้อนกัน?"</h2>
+        <p>
+          เมื่อเปิดดูไฟล์ <code>.env</code>:
+        </p>
+        <pre><code>PATIENT_API_BASE_URL=http://127.0.0.1:8000
+PATIENT_STATUS_REFRESH_MS=10000</code></pre>
+        <p>
+          แล้วพอเปิดดูไฟล์ <code>runtime-config.ts</code> หรือ <code>runtime-config.js</code>:
+        </p>
+        <pre><code>window.PATIENT_APP_ENV = {
+  API_BASE_URL: "http://127.0.0.1:8000",
+  STATUS_REFRESH_MS: 10000
+};</code></pre>
+        <p>
+          หลายคนจะรู้สึกทันทีว่า <em>"นี่มันข้อมูลชุดเดียวกันชัดๆ! ทำไมไม่เลือกใช้แค่อย่างใดอย่างหนึ่ง?"</em>
+        </p>
+
+        <div class="analogy-box">
+          <strong>🏥 อุปมาเปรียบเทียบ:</strong>
+          <strong>.env</strong> เปรียบเหมือน <strong>"พิมพ์เขียวในโต๊ะทำงานของวิศวกร"</strong> (มีอยู่ในเครื่องคนสร้าง แต่คนไข้ที่มา รพ. มองไม่เห็น)<br><br>
+          <strong>runtime-config</strong> เปรียบเหมือน <strong>"ป้ายบอกทางที่แขวนอยู่หน้าประตูโรงพยาบาล"</strong> (เมื่อคนไข้เปิดประตูเข้ามาใน Browser จะมองเห็นป้ายนี้ทันทีว่าเคาน์เตอร์ตรวจอยู่ที่ไหน)
+        </div>
+      </section>
+
+      <section>
+        <h2>2. มิติเวลา: Build Time (เวลาสร้าง) vs Run Time (เวลาใช้งานจริง)</h2>
+        <p>ความแตกต่างที่แท้จริงไม่ได้อยู่ที่ "เนื้อข้อมูล" แต่อยู่ที่ <strong>"ใครเป็นคนอ่าน และอ่านตอนไหน"</strong>:</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>มิติ</th>
+              <th><code>.env</code> (Environment Variables)</th>
+              <th><code>runtime-config</code> (Runtime Window)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>อยู่ที่ไหน?</strong></td>
+              <td>อยู่บนเครื่องคอมพิวเตอร์ของโปรแกรมเมอร์ หรือบนเครื่องเซิร์ฟเวอร์ CI/CD</td>
+              <td>วิ่งไปอยู่บน <strong>Browser / มือถือของคนไข้</strong> (ผ่านตัวแปร <code>window</code>)</td>
+            </tr>
+            <tr>
+              <td><strong>อ่านตอนไหน?</strong></td>
+              <td><strong>Build Time:</strong> อ่านตอนที่โปรแกรมเมอร์สั่ง <code>npm run build</code></td>
+              <td><strong>Run Time:</strong> อ่านทุกครั้งที่คนไข้เปิดหน้าเว็บขึ้นมาดูคิว</td>
+            </tr>
+            <tr>
+              <td><strong>บราวเซอร์คนไข้เข้าถึงได้ไหม?</strong></td>
+              <td><strong>ไม่ได้เด็ดขาด ❌</strong> บราวเซอร์ของคนไข้เปิดอ่านไฟล์ <code>.env</code> บนเครื่องเราไม่ได้</td>
+              <td><strong>ได้ 100% ✅</strong> เพราะถูกโหลดเป็นสคริปต์ <code>runtime-config.js</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>3. กับดักครั้งใหญ่ของ Next.js Static Export (output: "export")</h2>
+        <p>
+          ในโปรเจกต์นี้ ไฟล์ <code>next.config.ts</code> ตั้งค่าไว้ว่า:
+        </p>
+        <pre><code>const nextConfig: NextConfig = {
+  output: "export",
+  basePath: "/patient",
+};</code></pre>
+        <p>
+          <code>output: "export"</code> แปลว่า Next.js จะคอมไพล์โค้ดทั้งหมดออกมาเป็น <strong>HTML/JS ล้วนๆ (Static Site)</strong> โดยไม่มี Node.js Server คอยรันอยู่เบื้องหลัง!
+        </p>
+        <div class="grid-cards">
+          <div class="card">
+            <h4>ถ้าไม่มี Runtime Config (ใช้ .env เพียวๆ):</h4>
+            <p>
+              Next.js จะ <strong>"สลัก (Bake / Hardcode)"</strong> ค่า <code>http://127.0.0.1:8000</code> ฝังตายลงไปในไฟล์ JavaScript ทันทีที่สั่ง build!<br><br>
+              <strong>ผลร้าย:</strong> เมื่อนำไฟล์ไปขึ้นเซิร์ฟเวอร์จริงของโรงพยาบาล (เช่น <code>hospital.bfirstkok.me</code>) เว็บจะพังทันที เพราะมันยังคงพยายามยิงไปที่ <code>127.0.0.1:8000</code> บนเครื่องคนไข้เอง! ถ้าอยากเปลี่ยน URL คุณต้องเปิดคอมมาสั่ง <code>npm run build</code> ใหม่ทุกครั้ง!
+            </p>
+          </div>
+          <div class="card">
+            <h4>เมื่อมี Runtime Config (วิถีมืออาชีพ):</h4>
+            <p>
+              โค้ดในหน้าบ้านจะไม่ฮาร์ดโค้ด URL แต่จะเขียนว่า <code>window.PATIENT_APP_ENV.API_BASE_URL</code><br><br>
+              <strong>ข้อดี:</strong> คุณสั่ง build โค้ดเพียงครั้งเดียว (Build Once) แล้วนำไฟล์ก้อนเดิมไปวางได้ทุกที่! หากต้องการเปลี่ยน API ปลายทาง เพียงแค่เปิดแก้ไฟล์ข้อความ <code>runtime-config.js</code> บรรทัดเดียว ระบบก็เปลี่ยนเป้าหมายทันทีโดยไม่ต้องเสียเวลา build ใหม่!
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>4. สคริปต์ตัวเชื่อมสะพาน: write-runtime-config.mjs</h2>
+        <p>
+          คำถามคือ: <em>"แล้วทำไมในเครื่องเรา สองตัวนี้ถึงมีค่าเหมือนกัน?"</em><br>
+          คำตอบอยู่ที่ไฟล์ <code>scripts/write-runtime-config.mjs</code> ครับ!
+        </p>
+        <p>
+          เมื่อคุณสั่ง <code>npm run build</code> หรือรันระบบ สคริปต์นี้จะ:
+        </p>
+        <ol style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+          <li>อ่านค่าจาก <code>.env</code> (เช่น <code>PATIENT_API_BASE_URL=http://127.0.0.1:8000</code>)</li>
+          <li>ตรวจสอบความปลอดภัย (ถ้าไม่ใช่ localhost ต้องเป็น <code>https://</code> เท่านั้น)</li>
+          <li>สร้างไฟล์ <code>public/runtime-config.js</code> โดยนำค่าใน <code>.env</code> ไปเขียนลงใน <code>window.PATIENT_APP_ENV</code> ให้แบบอัตโนมัติ!</li>
+        </ol>
+        <p>
+          นั่นเป็นเหตุผลที่คุณรู้สึกว่ามันเหมือนกัน เพราะ <strong><code>runtime-config</code> เป็นผลผลิตที่ถูกสร้างมาจาก <code>.env</code></strong> ในตอนพัฒนานั่นเองครับ!
+        </p>
+      </section>
+
+      <section class="quiz-container">
+        <div class="quiz-title">🧠 ทดสอบความเข้าใจ: ทำไมถึงแยก .env กับ Runtime Config?</div>
+        <p>สมมติว่าโรงพยาบาลต้องการย้ายระบบขึ้น Production บน Cloudflare หรือ Nginx โดยเปลี่ยน API จาก <code>http://127.0.0.1:8000</code> ไปเป็น <code>https://api.hospital.com</code> เราควรทำอย่างไรในสถาปัตยกรรมนี้?</p>
+        <button class="quiz-btn" onclick="checkAnswer(1)">ก. ต้องเอาซอร์สโค้ดทั้งหมดมาเปิดใน VS Code แก้ .env แล้วกด npm run build ใหม่</button>
+        <button class="quiz-btn" onclick="checkAnswer(2)">ข. แก้ไขค่าในไฟล์ runtime-config.js บนเซิร์ฟเวอร์โดยตรงได้ทันที โดยไม่ต้อง build เว็บใหม่</button>
+        <button class="quiz-btn" onclick="checkAnswer(3)">ค. ลบไฟล์ runtime-config.js ทิ้ง แล้วเปลี่ยนมาใช้การพิมพ์ URL ตรงในโค้ด React</button>
+        
+        <div id="feedback" class="feedback"></div>
+      </section>
+
+      <section>
+        <h2>📚 แหล่งอ้างอิงระดับสากล</h2>
+        <ul>
+          <li><a href="https://12factor.net/config" target="_blank">The Twelve-Factor App: Config</a> — หลักการสากลว่าด้วยการแยกการตั้งค่าออกจากโค้ด</li>
+          <li><a href="https://nextjs.org/docs/app/building-your-application/deploying/static-exports" target="_blank">Next.js Documentation: Static Exports</a> — ข้อจำกัดและการใช้งาน Environment Variables ในโหมด Static Export</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>OPD Smart Hospital Learning Workspace • เข้าใจลึกซึ้งทั้งระบบ!</p>
+    </footer>
+  </div>
+
+  <script>
+    function checkAnswer(choice) {
+      const fb = document.getElementById('feedback');
+      fb.style.display = 'block';
+      if (choice === 2) {
+        fb.style.background = 'var(--accent-light)';
+        fb.style.border = '1px solid var(--accent)';
+        fb.style.color = 'var(--accent)';
+        fb.innerHTML = '<strong>ถูกต้องอย่างยอดเยี่ยม! 🎯</strong> นี่คือพลังของ "Build Once, Deploy Anywhere" เราแค่แก้ค่าใน runtime-config.js บรรทัดเดียว คนไข้ที่เปิดเว็บใหม่ก็จะได้ URL ใหม่ทันที ไม่ต้องเสียเวลา build โค้ดใหม่ทั้งโปรเจกต์';
+      } else {
+        fb.style.background = '#fee2e2';
+        fb.style.border = '1px solid #dc2626';
+        fb.style.color = '#dc2626';
+        fb.innerHTML = '<strong>ยังไม่ตรงจุด:</strong> ถ้าต้อง build ใหม่ทุกครั้งที่เปลี่ยนเซิร์ฟเวอร์ นั่นแปลว่าเรายังติดอยู่ในกับดัก Hardcoded Build-time ซึ่งขัดกับหลักการพัฒนาซอฟต์แวร์สมัยใหม่';
+      }
+    }
+  </script>
+</body>
+</html>

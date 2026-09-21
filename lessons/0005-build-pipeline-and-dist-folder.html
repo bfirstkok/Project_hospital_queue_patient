@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>บทเรียนที่ 5: ขั้นตอนการ Deploy และผ่าโครงสร้างโฟลเดอร์ dist</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0005 • Production & Deployment</span>
+      <h1>ขั้นตอนการ Deploy และเจาะลึกโฟลเดอร์ dist<br><span style="font-size: 0.7em; color: var(--text-muted); font-weight: 400;">ทำความเข้าใจกระบวนการแปลงโค้ดจากเครื่องช่างไปสู่การเปิดให้บริการจริงในโรงพยาบาล</span></h1>
+      <p style="color: var(--text-muted); font-style: italic;">
+        บทก่อนหน้า: <a href="0004-public-vs-scripts-runtime.html">0004: scripts/ กับ public/</a>
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>1. โฟลเดอร์ <code>dist/</code> คืออะไร? (The Distribution Artifact)</h2>
+        <p>
+          คำว่า <strong>`dist`</strong> ย่อมาจาก <strong>Distribution</strong> แปลว่า <strong>"กล่องสินค้าสำเร็จรูปที่พร้อมแจกจ่าย/ส่งมอบ"</strong>
+        </p>
+        <div class="analogy-box">
+          <strong>🏥 อุปมาเปรียบเทียบ:</strong>
+          ซอร์สโค้ดใน <code>src/</code> เหมือนกับ <strong>"วัตถุดิบและสูตรยาในห้องทดลอง"</strong> (คนไข้กินไม่ได้ ต้องผ่านกรรมวิธีผลิตก่อน)<br><br>
+          โฟลเดอร์ <code>dist/</code> คือ <strong>"ยาเม็ดที่ผ่านการสกัด บรรจุแผง ใส่กล่อง ปิดฉลากเรียบร้อยแล้ว"</strong> พร้อมนำไปวางที่ชั้นจ่ายยาของโรงพยาบาลให้คนไข้เปิดใช้งานได้ทันที
+        </div>
+      </section>
+
+      <section>
+        <h2>2. สายพานการผลิต 4 ขั้นตอนของ <code>npm run build</code></h2>
+        <p>เมื่อเราสั่ง <code>npm run build</code> ใน <code>package.json</code> ระบบจะรัน 4 ขั้นตอนต่อเนื่องกันอัตโนมัติ:</p>
+
+        <div class="grid-cards">
+          <div class="card">
+            <h4>1. clean-build.mjs</h4>
+            <p>ล้างสต็อกเก่า ลบโฟลเดอร์ <code>dist/</code> และ <code>out/</code> เดิมทิ้ง เพื่อป้องกันไม่ให้มีไฟล์ค้างเก่าปะปนกับของใหม่</p>
+          </div>
+          <div class="card">
+            <h4>2. write-runtime-config.mjs</h4>
+            <p>อ่านค่า <code>.env</code> มาสร้างเป็นไฟล์ <code>runtime-config.js</code> เพื่อเตรียมพร้อมสำหรับส่งมอบ</p>
+          </div>
+          <div class="card">
+            <h4>3. next build</h4>
+            <p>อบโค้ด React/TypeScript ทั้งหมด กลั่นกรองออกมาเป็นไฟล์ HTML, CSS, JavaScript ที่ผ่านการบีบอัดจนมีขนาดเล็กที่สุด</p>
+          </div>
+          <div class="card">
+            <h4>4. publish-export.mjs</h4>
+            <p>จัดรูปแบบโครงสร้างโฟลเดอร์ <code>dist/</code> และ <code>dist/patient/</code> พร้อมใส่สคริปต์ Redirect อัตโนมัติ</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. ผ่าชิ้นส่วนข้างในโฟลเดอร์ <code>dist/</code> แต่ละไฟล์คืออะไร?</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ไฟล์ / โฟลเดอร์</th>
+              <th>มันคืออะไร?</th>
+              <th>หน้าที่ของมัน</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>index.html</code></td>
+              <td>โครงสร้างหน้าเว็บหลัก</td>
+              <td>หน้าจอแรกที่เปิดขึ้นมาตอนคนไข้สแกน QR Code เข้ามาที่เว็บโรงพยาบาล</td>
+            </tr>
+            <tr>
+              <td><code>runtime-config.js</code></td>
+              <td>ป้ายบอกทาง API</td>
+              <td>ไฟล์ข้อความที่ระบุว่า API ของ รพ. อยู่ที่ URL ไหน (แก้ไฟล์นี้ได้โดยไม่ต้อง build ใหม่)</td>
+            </tr>
+            <tr>
+              <td><code>_next/static/</code></td>
+              <td>ไส้ในและกลไกทั้งหมด</td>
+              <td>ก้อนไฟล์ JavaScript และ CSS ทั้งหมดที่ถูกบีบอัด รวมโค้ดปุ่ม ฟอร์ม และเสียงกระดิ่งคิว</td>
+            </tr>
+            <tr>
+              <td><code>patient/</code></td>
+              <td>โฟลเดอร์จำลองเส้นทาง</td>
+              <td>รองรับ <code>basePath: /patient</code> ทำให้เว็บเปิดได้สมบูรณ์ทั้งแบบมีหรือไม่มี /patient</td>
+            </tr>
+            <tr>
+              <td><code>404.html</code></td>
+              <td>หน้าแจ้งเตือนหาไม่เจอ</td>
+              <td>แสดงผลเวลาคนไข้พิมพ์ URL ผิด</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>4. ขั้นตอนการ Deploy สู่เซิร์ฟเวอร์จริงของโรงพยาบาล</h2>
+        <p>เนื่องจากเป็น <strong>Static Export</strong> การ Deploy จึงง่ายและปลอดภัยอย่างยิ่ง:</p>
+        <ol style="margin-left: 1.5rem; line-height: 2;">
+          <li><strong>Step 1: สั่ง Build</strong> รัน <code>npm run build</code> บนคอมพิวเตอร์ หรือให้ GitHub Actions รัน</li>
+          <li><strong>Step 2: อัปโหลดโฟลเดอร์ dist</strong> คัดลอกเฉพาะสิ่งที่อยู่ในโฟลเดอร์ <code>dist/</code> ไปวางไว้บน Web Server ของโรงพยาบาล (เช่น Nginx, Apache หรือ Cloudflare Pages) <strong>โดยไม่ต้องลง Node.js บนเซิร์ฟเวอร์เลย!</strong></li>
+          <li><strong>Step 3: ตรวจสอบ runtime-config.js</strong> ตรวจสอบว่าในไฟล์ <code>runtime-config.js</code> บนเซิร์ฟเวอร์ ชี้ไปที่ <code>https://hospital.bfirstkok.me</code> เรียบร้อยดี</li>
+          <li><strong>Step 4: เปิดให้บริการ</strong> คนไข้เปิดมือถือ สแกน QR Code หน้าตึก OPD ใช้งานระบบคิวได้ทันที!</li>
+        </ol>
+      </section>
+
+      <section class="quiz-container">
+        <div class="quiz-title">🧠 ทดสอบความเข้าใจ: ทำไมบนเซิร์ฟเวอร์จริงถึงไม่ต้องติดตั้ง Node.js?</div>
+        <p>ทำไมเวลาเรานำโฟลเดอร์ <code>dist</code> ไปขึ้นเซิร์ฟเวอร์โรงพยาบาลจริง เราถึงไม่จำเป็นต้องติดตั้ง Node.js หรือรันคำสั่ง npm อีกต่อไป?</p>
+        <button class="quiz-btn" onclick="checkAnswer(1)">ก. เพราะโฟลเดอร์ dist คือไฟล์ HTML/CSS/JS ธรรมดาที่เว็บเซิร์ฟเวอร์อะไรก็แจกจ่ายได้ ไม่ต้องมีเอนจิน Node.js คอยคำนวณอยู่เบื้องหลัง</button>
+        <button class="quiz-btn" onclick="checkAnswer(2)">ข. เพราะโปรแกรม Python เข้ามาควบคุมและแปลงตัวเองเป็น Node.js ให้โดยอัตโนมัติ</button>
+        <button class="quiz-btn" onclick="checkAnswer(3)">ค. เพราะเบราว์เซอร์ของคนไข้จะทำหน้าที่เป็น Node.js Server ให้กับโรงพยาบาล</button>
+        
+        <div id="feedback" class="feedback"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>OPD Smart Hospital Learning Workspace • ยินดีต้อนรับสู่การเป็นวิศวกรซอฟต์แวร์เต็มตัว!</p>
+    </footer>
+  </div>
+
+  <script>
+    function checkAnswer(choice) {
+      const fb = document.getElementById('feedback');
+      fb.style.display = 'block';
+      if (choice === 1) {
+        fb.style.background = 'var(--accent-light)';
+        fb.style.border = '1px solid var(--accent)';
+        fb.style.color = 'var(--accent)';
+        fb.innerHTML = '<strong>ถูกต้องที่สุด! 🎯</strong> นี่คือจุดแข็งที่สุดของโหมด Static Export (output: export) เราทำหน้าที่ประมวลผลและคอมไพล์ทุกอย่างเสร็จตั้งแต่อยู่ในเครื่องเราแล้ว บนเซิร์ฟเวอร์จึงต้องการแค่โปรแกรมแจกไฟล์ธรรมดา (Web Server) เท่านั้น ทำให้ระบบเสถียร ไม่แฮงก์ และประหยัดค่าโฮสติ้งมหาศาล!';
+      } else {
+        fb.style.background = '#fee2e2';
+        fb.style.border = '1px solid #dc2626';
+        fb.style.color = '#dc2626';
+        fb.innerHTML = '<strong>ยังไม่ถูกต้อง:</strong> Node.js มีบทบาทเฉพาะตอนพัฒนาและตอนสั่ง build เท่านั้น พอออกมาเป็น dist มันคือไฟล์ธรรมดาที่ไม่ต้องการ runtime ของ Node.js อีกต่อไป';
+      }
+    }
+  </script>
+</body>
+</html>

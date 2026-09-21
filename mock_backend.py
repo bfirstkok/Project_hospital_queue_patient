@@ -1,4 +1,5 @@
 import json
+import base64
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 
@@ -130,10 +131,40 @@ class MockBackendHandler(BaseHTTPRequestHandler):
 
         # 2. Google OAuth Login Endpoint
         if path == "/api/patient/auth/google/":
+            credential = body.get("credential", "")
+            
+            # If a real Google JWT token is received, extract user profile
+            if credential and "." in credential:
+                try:
+                    parts = credential.split(".")
+                    if len(parts) >= 2:
+                        payload_b64 = parts[1]
+                        payload_b64 += "=" * ((4 - len(payload_b64) % 4) % 4)
+                        claims = json.loads(base64.urlsafe_b64decode(payload_b64.encode("utf-8")).decode("utf-8"))
+                        google_email = claims.get("email", MOCK_PATIENT_PROFILE["email"])
+                        given_name = claims.get("given_name", "")
+                        family_name = claims.get("family_name", "")
+                        
+                        if given_name:
+                            MOCK_PATIENT_PROFILE["first_name"] = given_name
+                        if family_name:
+                            MOCK_PATIENT_PROFILE["last_name"] = family_name
+                        MOCK_PATIENT_PROFILE["email"] = google_email
+                        
+                        print(f"\n========================================================")
+                        print(f" [Google OAuth] Received REAL Google Token from Browser!")
+                        print(f" > Email: {google_email}")
+                        print(f" > Name:  {given_name} {family_name}")
+                        print(f" > Sub:   {claims.get('sub')}")
+                        print(f" > Raw Token (First 60 chars): {credential[:60]}...")
+                        print(f"========================================================\n")
+                except Exception as e:
+                    print(f"[Google OAuth] Could not decode JWT claims: {e}")
+
             response_data = {
                 "ok": True,
                 "access_token": "mock_patient_token_google_12345",
-                "message": "เข้าสู่ระบบด้วย Google สำเร็จ"
+                "message": f"เข้าสู่ระบบด้วย Google สำเร็จ ({MOCK_PATIENT_PROFILE.get('email', '')})"
             }
             self._send_json(200, response_data)
             return
