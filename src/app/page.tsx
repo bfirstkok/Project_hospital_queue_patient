@@ -16,7 +16,7 @@ import {
   savePairedPatient,
 } from "@/shared/auth/pin-storage";
 import { patientApi } from "@/shared/api/patient-api";
-import type { RegistrationResult } from "@/shared/api/types";
+import type { PatientProfile, RegistrationResult } from "@/shared/api/types";
 import { SiteShell, type FontSize } from "@/shared/ui/SiteShell";
 import type { NavView } from "@/shared/ui/AppNavbar";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
@@ -64,6 +64,7 @@ export default function Page() {
   const [pinSetupReturnView, setPinSetupReturnView] = useState<View>("status");
   const [token, setToken] = useState("");
   const [pendingAuth, setPendingAuth] = useState<{ token: string; nationalId?: string } | null>(null);
+  const [googleOnboarding, setGoogleOnboarding] = useState<{ tempToken: string; suggestedProfile: PatientProfile } | null>(null);
   const [initialQueue, setInitialQueue] = useState<Partial<RegistrationResult> | null>(null);
   const [queueActive, setQueueActive] = useState(false);
   const [fontSize, setFontSize] = useState<FontSize>(getInitialFontSize);
@@ -167,6 +168,7 @@ export default function Page() {
       }
       setToken("");
       setPendingAuth(null);
+      setGoogleOnboarding(null);
       setInitialQueue(null);
       setQueueActive(false);
       setView("login");
@@ -246,6 +248,7 @@ export default function Page() {
    * Checks if PIN exists; if not, navigates to PIN setup (`pin_setup`).
    */
   function registrationSuccess(accessToken: string, result: RegistrationResult) {
+    setGoogleOnboarding(null);
     setPendingAuth({ token: accessToken });
     setInitialQueue(result);
     setQueueActive(true);
@@ -355,8 +358,22 @@ export default function Page() {
       {/* 1. Login Gate */}
       {view === "login" && (
         <LoginView
-          onRegister={() => setView("registration")}
+          onRegister={() => {
+            setGoogleOnboarding(null);
+            setView("registration");
+          }}
           onSuccess={loginSuccess}
+          onGoogleRegister={(tempToken, suggestedProfile) => {
+            setGoogleOnboarding({
+              tempToken,
+              suggestedProfile: {
+                first_name: suggestedProfile?.first_name || "",
+                last_name: suggestedProfile?.last_name || "",
+                email: suggestedProfile?.email || null,
+              },
+            });
+            setView("registration");
+          }}
         />
       )}
 
@@ -432,8 +449,16 @@ export default function Page() {
         <RegistrationView
           token={token}
           hasToken={hasSavedAccount}
-          onLogin={() => setView("login")}
-          onCancel={() => setView(hasSavedAccount ? "status" : "login")}
+          googleTempToken={googleOnboarding?.tempToken}
+          initialProfile={googleOnboarding?.suggestedProfile}
+          onLogin={() => {
+            setGoogleOnboarding(null);
+            setView("login");
+          }}
+          onCancel={() => {
+            setGoogleOnboarding(null);
+            setView(hasSavedAccount ? "status" : "login");
+          }}
           onSuccess={registrationSuccess}
           onUnauthorized={expireSession}
           onDuplicateQueue={(existingToken, natId) => loginSuccess(existingToken, natId || undefined)}

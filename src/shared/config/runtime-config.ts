@@ -18,7 +18,7 @@ declare global {
             parent: HTMLElement,
             options: Record<string, unknown>
           ) => void;
-          prompt: (notification?: (notification: unknown) => void) => void;
+          prompt?: (notification?: (notification: unknown) => void) => void;
         };
         oauth2?: {
           initTokenClient: (config: {

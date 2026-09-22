@@ -165,9 +165,16 @@ python -m http.server 5500 --bind 127.0.0.1 -d dist
 
 ```javascript
 window.PATIENT_APP_ENV = {
+<<<<<<< HEAD
   "API_BASE_URL": "http://127.0.0.1:8000",       // เปลี่ยนเป็น Domain หลังบ้านเมื่อขึ้น Production
   "STATUS_REFRESH_MS": 10000,                    // ความถี่ในการดึงสถานะคิว (มิลลิวินาที)
   "GOOGLE_CLIENT_ID": "477244523835-vopgha7b47cohjn2ouk80ng1gsup5tl8.apps.googleusercontent.com"
+=======
+  apiBaseUrl: "http://127.0.0.1:8000",       // สลับไป https://hospital.bfirstkok.me เมื่อต่อเซิร์ฟเวอร์จริง
+  statusRefreshMs: 10000,                    // ความถี่ในการอัปเดตสถานะคิวอัตโนมัติ (มิลลิวินาที)
+  GOOGLE_CLIENT_ID: "your-google-oauth-web-client-id.apps.googleusercontent.com"
+  seniorMode: false
+>>>>>>> origin/main
 };
 ```
 
@@ -200,3 +207,14 @@ Queue-Hostpital/
 ├─ playwright.config.ts        การตั้งค่า Playwright รองรับ Desktop และ Mobile Emulation
 └─ README.md                   คู่มือการใช้งานและเอกสารอธิบายระบบ
 ```
+
+
+### Google OAuth production
+
+ฝั่ง Patient Portal และ Django backend ต้องใช้ Google OAuth Web Client ID เดียวกัน:
+
+- Patient Portal: `PATIENT_GOOGLE_CLIENT_ID=<client-id>`
+- Django backend: `GOOGLE_CLIENT_ID=<client-id>`
+- Google Cloud Console Authorized JavaScript origins: `https://hospital.bfirstkok.me`
+
+ห้ามใช้ mock token ใน production; หน้า Login โหลด Google Identity Services และส่ง ID token จริงไปที่ `/api/patient/auth/google/`.

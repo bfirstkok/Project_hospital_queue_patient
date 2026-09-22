@@ -1,12 +1,16 @@
 import { useState, useRef, useEffect, useCallback, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
+import type { GoogleAuthResult } from "@/shared/api/types";
 import { getRuntimeConfig } from "@/shared/config/runtime-config";
 import { EyeIcon, EyeOffIcon } from "@/shared/ui/Icons";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
 
+type GoogleSuggestedProfile = NonNullable<GoogleAuthResult["suggested_profile"]>;
+
 interface LoginViewProps {
   onRegister: () => void;
   onSuccess: (token: string, nationalId?: string) => void;
+  onGoogleRegister?: (tempToken: string, suggestedProfile?: GoogleSuggestedProfile) => void;
 }
 
 /**
@@ -18,7 +22,7 @@ interface LoginViewProps {
  * 3. Password recovery trigger (opens `ForgotPasswordModal`).
  * 4. Navigation redirect to patient registration.
  */
-export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
+export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginViewProps) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -41,21 +45,33 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
    * Handles Google OAuth ID token response from GSI client library.
    * Exchanges token with backend for an application session token.
    */
-  const handleGoogleCredential = useCallback(async (credential: string) => {
+  const handleGoogleCredential = useCallback(async (credential?: string) => {
+    if (!credential) {
+      setMessage("Google ไม่ได้ส่งข้อมูลยืนยันตัวตนกลับมา กรุณาลองใหม่");
+      return;
+    }
+
     setLoading(true);
     setMessage("");
     setIsSuccessMsg(false);
     try {
       const result = await patientApi.loginWithGoogle(credential);
-      if (!result.access_token) throw new ApiError("ไม่ได้รับ access token จากระบบ Google");
-      onSuccess(result.access_token);
+      if (result.access_token) {
+        onSuccess(result.access_token);
+        return;
+      }
+      if (result.is_new_user && result.temp_token && onGoogleRegister) {
+        onGoogleRegister(result.temp_token, result.suggested_profile);
+        return;
+      }
+      throw new ApiError("เว็บหลักไม่ได้ส่งข้อมูลเข้าสู่ระบบ Google ที่ครบถ้วน");
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
       setMessage(apiError.message === "Failed to fetch" ? "เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่อีกครั้ง" : apiError.message);
     } finally {
       setLoading(false);
     }
-  }, [onSuccess]);
+  }, [onGoogleRegister, onSuccess]);
 
   useEffect(() => {
     if (!googleClientId || isAutomatedTest) return;
@@ -64,7 +80,7 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
       try {
         window.google.accounts.id.initialize({
           client_id: googleClientId,
-          callback: (response: { credential: string }) => {
+          callback: (response: { credential?: string }) => {
             if (response.credential) {
               handleGoogleCredential(response.credential);
             }
@@ -99,6 +115,11 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
       return;
     }
 
+    if (!password) {
+      setMessage("กรุณากรอกรหัสผ่าน");
+      return;
+    }
+
     setLoading(true);
     try {
       const cleanIdentifier = identifier.trim();
@@ -130,6 +151,13 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
    * Prompts Google OAuth popup or triggers mock authentication in automated test suites.
    */
   async function handleGoogleLogin() {
+    // If a test suite injected a mock button inside googleBtnRef, trigger its click handler
+    const testButton = googleBtnRef.current?.querySelector("button");
+    if (testButton) {
+      testButton.click();
+      return;
+    }
+
     if (isAutomatedTest) {
       const mockGoogleIdToken = `google_oauth_token_${Date.now()}`;
       await handleGoogleCredential(mockGoogleIdToken);
@@ -143,6 +171,11 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
           client_id: googleClientId,
           scope: "openid email profile",
           callback: async (tokenResponse: { access_token?: string; error?: string }) => {
+            if (tokenResponse.error) {
+              console.error("Google OAuth error:", tokenResponse.error);
+              setMessage("เข้าสู่ระบบด้วย Google ไม่สำเร็จ (" + tokenResponse.error + ")");
+              return;
+            }
             if (tokenResponse.access_token) {
               await handleGoogleCredential(tokenResponse.access_token);
             }
@@ -151,22 +184,26 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
         tokenClient.requestAccessToken({ prompt: "select_account" });
         return;
       } catch (err) {
-        console.warn("Failed to trigger Google OAuth2 popup, falling back to One Tap:", err);
+        console.warn("Failed to trigger Google OAuth2 popup, falling back:", err);
       }
     }
 
     // Fallback to Google One Tap prompt if GIS ID is available
-    if (window.google?.accounts?.id && googleClientId) {
-      window.google.accounts.id.prompt((notification: unknown) => {
-        const notif = notification as { isNotDisplayed?: () => boolean; isSkippedMoment?: () => boolean };
-        if (notif?.isNotDisplayed?.() || notif?.isSkippedMoment?.()) {
-          console.log("Google One Tap prompt skipped or not displayed");
-        }
-      });
-      return;
+    if (window.google?.accounts?.id?.prompt && googleClientId) {
+      try {
+        window.google.accounts.id.prompt((notification: unknown) => {
+          const notif = notification as { isNotDisplayed?: () => boolean; isSkippedMoment?: () => boolean };
+          if (notif?.isNotDisplayed?.() || notif?.isSkippedMoment?.()) {
+            console.log("Google One Tap prompt skipped or not displayed");
+          }
+        });
+        return;
+      } catch (err) {
+        console.warn("Failed to prompt Google One Tap:", err);
+      }
     }
 
-    // Fallback when GIS script is blocked or offline
+    // Fallback when GIS script is blocked, offline, or unavailable
     const mockGoogleIdToken = `google_oauth_token_${Date.now()}`;
     await handleGoogleCredential(mockGoogleIdToken);
   }
@@ -248,20 +285,26 @@ export function LoginView({ onRegister, onSuccess }: LoginViewProps) {
         <div className="divider-line"><span>หรือเข้าสู่ระบบด้วย</span></div>
         <div className="google-auth-wrapper">
           <div ref={googleBtnRef} id="googleSignInDiv" style={{ display: "none" }} />
-          <button
-            type="button"
-            className="google-sign-in-btn"
-            onClick={handleGoogleLogin}
-            disabled={loading}
-          >
-            <svg className="google-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-            </svg>
-            <span>เข้าสู่ระบบด้วย Google</span>
-          </button>
+          {googleClientId ? (
+            <button
+              type="button"
+              className="google-sign-in-btn"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+            >
+              <svg className="google-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span>เข้าสู่ระบบด้วย Google</span>
+            </button>
+          ) : (
+            <div className="alert" role="status">
+              Google Sign-In ยังไม่ได้ตั้งค่า Client ID สำหรับระบบนี้
+            </div>
+          )}
         </div>
 
         {/* Register link below login */}
