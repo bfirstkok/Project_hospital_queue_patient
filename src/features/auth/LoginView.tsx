@@ -111,7 +111,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
     setIsSuccessMsg(false);
 
     if (!identifier.trim()) {
-      setMessage("กรุณากรอกชื่อผู้ใช้ อีเมล หรือเลขบัตรประชาชน");
+      setMessage("กรุณากรอกชื่อผู้ใช้ หรืออีเมล");
       return;
     }
 
