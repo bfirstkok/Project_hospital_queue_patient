@@ -14,17 +14,28 @@ import {
 
 export type PinMode = "unlock" | "setup" | "change" | "reset";
 
+/**
+ * Formats lockout duration into human-readable duration text.
+ */
 function formatLockoutDuration(seconds: number): string {
   const mins = Math.max(1, Math.round(seconds / 60));
   return `${mins} นาที`;
 }
 
+/**
+ * Masks telephone number for PDPA privacy compliance.
+ * e.g., "0812345678" -> "081-xxx-xx78"
+ */
 function maskPhone(raw: string): string {
   const d = raw.replace(/\D/g, "");
   if (d.length < 4) return d;
   return `${d.slice(0, 3)}-xxx-xx${d.slice(-2)}`;
 }
 
+/**
+ * Masks email address for PDPA privacy compliance.
+ * e.g., "somchai@gmail.com" -> "so•••••@gmail.com"
+ */
 function maskEmail(raw: string): string {
   const [user, domain] = raw.trim().split("@");
   if (!domain) return raw.trim();
@@ -45,6 +56,15 @@ interface PinAuthViewProps {
   onPinConfigured?: (pin: string) => Promise<void> | void;
 }
 
+/**
+ * 6-digit PIN Authentication & Management View component.
+ *
+ * Supports 4 operation modes:
+ * 1. 'unlock': System unlock with escalation lockout on consecutive failed attempts.
+ * 2. 'setup': 2-step PIN setup wizard (enter + confirm).
+ * 3. 'change': 3-step PIN rotation (verify current -> enter new -> confirm new).
+ * 4. 'reset': Account recovery via OTP sent to registered phone/email.
+ */
 export function PinAuthView({
   mode: initialMode,
   onSuccess,
@@ -139,6 +159,9 @@ export function PinAuthView({
   const registeredEmail = (pairedInfo?.email || "").trim();
   const recoveryTarget = recoveryMethod === "phone" ? registeredPhone : registeredEmail;
 
+  /**
+   * Displays an error message, triggers a UI shake effect, and vibrates the device.
+   */
   function triggerError(msg: string) {
     setErrorMessage(msg);
     setIsShaking(true);
@@ -151,6 +174,10 @@ export function PinAuthView({
     }, 600);
   }
 
+  /**
+   * Handles numeric keypad input (0-9).
+   * Automatically invokes `handleComplete` when 6 digits are reached.
+   */
   function handleDigit(digit: string) {
     if (lockoutSeconds > 0 || verifyingPin) return;
     if (enteredPin.length >= 6) return;
@@ -163,12 +190,18 @@ export function PinAuthView({
     }
   }
 
+  /**
+   * Deletes the most recent digit (Backspace).
+   */
   function handleDelete() {
     if (lockoutSeconds > 0) return;
     setEnteredPin((prev) => prev.slice(0, -1));
     setErrorMessage("");
   }
 
+  /**
+   * Clears all entered PIN digits.
+   */
   function handleClear() {
     if (lockoutSeconds > 0) return;
     setEnteredPin("");
@@ -176,9 +209,14 @@ export function PinAuthView({
   }
 
   /**
-   * Verify a PIN: server first (POST /api/patient/pin/verify/), local hash as
-   * fallback when the endpoint is missing / offline. Once the backend ships,
-   * editing localStorage no longer bypasses the PIN.
+   * Validates PIN against backend API with fallback to local salted hash.
+   *
+   * Flow:
+   * 1. Attempts verification with backend endpoint `POST /api/patient/pin/verify/`.
+   * 2. If endpoint is unavailable or network is offline, falls back to local storage hash.
+   *
+   * @param {string} pin - 6-digit PIN to verify.
+   * @returns {"ok" | "wrong" | "locked"} Verification outcome.
    */
   async function checkPin(pin: string): Promise<"ok" | "wrong" | "locked"> {
     const nid = (nationalId || pairedInfo?.nationalId || "").replace(/\D/g, "");
@@ -201,6 +239,10 @@ export function PinAuthView({
     return verifyPin(pin, nationalId) ? "ok" : isLockedOut() ? "locked" : "wrong";
   }
 
+  /**
+   * Invoked when 6 digits are fully entered.
+   * Evaluates logic depending on current mode: unlock, setup, change, or reset.
+   */
   async function handleComplete(pin: string) {
     if (currentMode === "unlock") {
       if (lockoutSeconds > 0) {
@@ -307,6 +349,9 @@ export function PinAuthView({
     }
   }
 
+  /**
+   * Dispatches PIN reset OTP to registered phone (SMS) or email.
+   */
   async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
     if (sendingOtp) return;
@@ -360,6 +405,9 @@ export function PinAuthView({
     }
   }
 
+  /**
+   * Validates 6-digit OTP length and advances wizard to new PIN entry step.
+   */
   function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault();
     if (otpCode.length !== 6) {
@@ -372,6 +420,9 @@ export function PinAuthView({
     setStep(3); // Proceed to setting new PIN
   }
 
+  /**
+   * Returns contextual Title and Subtitle strings based on active Mode and Step.
+   */
   function getTitleAndSubtitle(): { title: string; subtitle: string } {
     if (currentMode === "unlock") {
       return {

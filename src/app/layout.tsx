@@ -9,6 +9,18 @@ export const metadata: Metadata = {
   description: "ลงทะเบียนและติดตามสถานะคิวผู้ป่วย OPD",
 };
 
+/**
+ * RootLayout: Primary layout component for the application (Next.js App Router).
+ *
+ * Responsibilities:
+ * 1. Defines basic HTML structure (`<html lang="th">`, `<body>`).
+ * 2. Wraps application tree with `ErrorBoundary` to gracefully catch rendering crashes.
+ * 3. Displays `OfflineBanner` when network connectivity is lost.
+ * 4. Injects client runtime configuration (`runtime-config.js`) before interactive phase.
+ * 5. Loads Google Identity Services (GSI) script for Google Sign-In.
+ *
+ * @param children - Child page/component nodes rendered inside this layout.
+ */
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="th">

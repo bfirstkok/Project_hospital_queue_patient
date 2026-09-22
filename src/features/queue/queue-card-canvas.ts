@@ -1,5 +1,19 @@
 import type { QueueData } from "@/shared/api/types";
 
+/**
+ * Renders an OPD queue slip onto an HTML5 2D Canvas and triggers a client-side PNG download.
+ *
+ * Render flow:
+ * 1. Initializes an 800x1050 px canvas scaled 2x for crisp high-DPI displays.
+ * 2. Draws rounded white background card with teal hospital header banner.
+ * 3. Draws queue number, status badge, queue position, and examination room.
+ * 4. Displays estimated wait time box and staff instructions.
+ * 5. Stamps current Thai-localized timestamp and footer guidance.
+ * 6. Generates PNG data URL and triggers browser download (`queue-card-{queue_number}.png`).
+ *
+ * @param {Partial<QueueData>} queue - Current patient queue record.
+ * @param {string} estimatedText - Formatted estimated wait text (e.g., "approx. 15 minutes").
+ */
 export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText: string): void {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");

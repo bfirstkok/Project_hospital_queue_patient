@@ -16,7 +16,18 @@ interface AccountViewProps {
 
 type AccountTab = "profile" | "health" | "appointments" | "visits";
 
+/**
+ * Fallback helper replacing empty/nullish values with an en-dash "–".
+ */
 const dash = (value: unknown) => (value === null || value === undefined || value === "" ? "–" : String(value));
+
+/**
+ * Formats an ISO date string into Thai-localized date/time display string.
+ *
+ * @param {string | null} [value] - ISO date string.
+ * @param {boolean} [includeTime=true] - Whether to include time in format.
+ * @returns {string} Formatted localized date string.
+ */
 const thaiDate = (value?: string | null, includeTime = true) =>
   value
     ? new Intl.DateTimeFormat("th-TH", includeTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" }).format(
@@ -24,6 +35,16 @@ const thaiDate = (value?: string | null, includeTime = true) =>
       )
     : "–";
 
+/**
+ * Generates and triggers download of an iCalendar (`.ics`) file for an appointment.
+ *
+ * Steps:
+ * 1. Formats date and time parts into VCALENDAR standard strings (`DTSTART` / `DTEND`).
+ * 2. Sets summary, description, and location metadata.
+ * 3. Creates a `text/calendar` Blob and triggers download link.
+ *
+ * @param {Appointment} appointment - Doctor appointment record.
+ */
 function downloadIcsCalendar(appointment: Appointment) {
   const dateParts = appointment.date.split("-");
   if (dateParts.length < 3) return;
@@ -56,6 +77,15 @@ function downloadIcsCalendar(appointment: Appointment) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Patient Account & Medical Records Portal component.
+ *
+ * Provides 4 view tabs:
+ * 1. 'profile': Personal demographic information (HN, National ID, Address, Emergency contacts).
+ * 2. 'health': Medical profile (Blood group, Vitals, Chronic conditions, Allergies, Medications).
+ * 3. 'appointments': Upcoming physician appointments with calendar export (`.ics`).
+ * 4. 'visits': Medical visit history, vital signs, and diagnostic summaries.
+ */
 export function AccountView({
   token,
   onQueue,
@@ -130,6 +160,9 @@ export function AccountView({
     };
   }, [token, onUnauthorized]);
 
+  /**
+   * Dispatches updated patient profile to backend API (`PATCH /api/patient/me/`).
+   */
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!account || saving || !profileRef.current) return;

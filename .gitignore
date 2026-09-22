@@ -6,6 +6,9 @@ node_modules/
 *.tsbuildinfo
 out/
 dist/
+patient/
+_next/
+index.html
 .ua/
 __pycache__/
 *.pyc

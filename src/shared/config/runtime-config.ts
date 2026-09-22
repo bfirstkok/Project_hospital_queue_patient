@@ -20,6 +20,15 @@ declare global {
           ) => void;
           prompt: (notification?: (notification: unknown) => void) => void;
         };
+        oauth2?: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: { access_token?: string; error?: string }) => void;
+          }) => {
+            requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
+          };
+        };
       };
     };
   }
@@ -31,6 +40,17 @@ export interface RuntimeConfig {
   googleClientId: string;
 }
 
+/**
+ * Retrieves the application's runtime configuration.
+ *
+ * Responsibilities:
+ * 1. Checks if running in browser or SSR environment.
+ * 2. Reads `API_BASE_URL` from `window.PATIENT_APP_ENV` (injected via runtime-config.js); falls back to current origin.
+ * 3. Reads queue status refresh polling interval (`statusRefreshMs`), defaulting to 10,000 ms (10 seconds).
+ * 4. Reads Google OAuth Client ID for Google Sign-In.
+ *
+ * @returns {RuntimeConfig} Object containing `apiBaseUrl`, `statusRefreshMs`, and `googleClientId`.
+ */
 export function getRuntimeConfig(): RuntimeConfig {
   const runtime = typeof window === "undefined" ? undefined : window.PATIENT_APP_ENV;
   const sameOriginApiBaseUrl = typeof window === "undefined" ? "" : window.location.origin;

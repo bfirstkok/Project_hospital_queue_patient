@@ -5,6 +5,10 @@ import type { QueueData } from "@/shared/api/types";
 
 const STORAGE_KEY_NOTIF = "hospital_queue_sound_enabled";
 
+/**
+ * Synthesizes a gentle 3-tone chime using Web Audio API without requiring external audio asset files.
+ * Chime notes: C5 (523.25Hz) -> E5 (659.25Hz) -> G5 (783.99Hz).
+ */
 function playChimeSound() {
   try {
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -38,6 +42,10 @@ function playChimeSound() {
   }
 }
 
+/**
+ * Triggers haptic feedback via the browser's Vibration API.
+ * Rhythm: 300ms on -> 150ms off -> 300ms on -> 150ms off -> 500ms on.
+ */
 function triggerVibration() {
   try {
     if (typeof navigator !== "undefined" && "vibrate" in navigator && typeof navigator.vibrate === "function") {
@@ -49,6 +57,11 @@ function triggerVibration() {
   }
 }
 
+/**
+ * Retrieves the persisted sound notification preference from local storage.
+ *
+ * @returns {boolean} True if sound is enabled (default: true).
+ */
 function getInitialSoundState(): boolean {
   if (typeof window === "undefined") return true;
   try {
@@ -60,6 +73,17 @@ function getInitialSoundState(): boolean {
   return true;
 }
 
+/**
+ * Custom hook for patient queue chime audio and vibration alerts.
+ *
+ * Responsibilities:
+ * 1. Monitors queue changes (e.g. remaining queues <= 3 or status becomes "calling").
+ * 2. Deduplicates triggers via `lastNotifiedKey` ref.
+ * 3. Plays Web Audio synth chime and triggers phone vibration.
+ * 4. Exposes `toggleNotification` for user preference switching.
+ *
+ * @param {Partial<QueueData> | null | undefined} queue - Active queue record.
+ */
 export function useQueueNotification(queue: Partial<QueueData> | null | undefined) {
   const [enabled, setEnabled] = useState<boolean>(getInitialSoundState);
   const [alertActive, setAlertActive] = useState<boolean>(false);

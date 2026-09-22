@@ -5,6 +5,14 @@ interface PdpaConsentGateProps {
   onDecline: () => void;
 }
 
+/**
+ * PDPA Consent Gate component.
+ *
+ * Responsibilities:
+ * 1. Displays personal data consent terms complying with Thailand's PDPA B.E. 2562.
+ * 2. Requires patient agreement via checkbox before unlocking the registration form.
+ * 3. Handles decline action by navigating back to the previous screen.
+ */
 export function PdpaConsentGate({ onAccept, onDecline }: PdpaConsentGateProps) {
   const [agreed, setAgreed] = useState(false);
 

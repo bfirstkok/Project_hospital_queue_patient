@@ -32,6 +32,9 @@ type View =
   | "account"
   | "settings";
 
+/**
+ * Reads initial font size preference from local storage.
+ */
 function getInitialFontSize(): FontSize {
   if (typeof window === "undefined") return "normal";
   try {
@@ -47,6 +50,15 @@ function getInitialFontSize(): FontSize {
 
 const VIEW_STORAGE_KEY = "patient_app_current_view";
 
+/**
+ * Main Single Page Application (SPA) orchestrator and state controller.
+ *
+ * Responsibilities:
+ * 1. Controls application view routing (state-based navigation).
+ * 2. Manages authentication lifecycle: access token, unlocked session flag, 401 expiration, and logout.
+ * 3. Enforces 2-step security verification flow (Credentials -> 6-Digit PIN).
+ * 4. Synchronizes live queue status with `AppNavbar` badges.
+ */
 export default function Page() {
   const [view, setView] = useState<View>("login");
   const [pinSetupReturnView, setPinSetupReturnView] = useState<View>("status");
@@ -114,6 +126,9 @@ export default function Page() {
     }
   }, [view, token, pendingAuth]);
 
+  /**
+   * Completes authentication: stores the access token in memory and sets the unlocked session flag.
+   */
   const authenticate = useCallback((accessToken: string) => {
     saveToken(accessToken);
     setToken(accessToken);
@@ -124,11 +139,19 @@ export default function Page() {
     }
   }, []);
 
+  /**
+   * Synchronizes live queue active state to control badges and enable/disable booking actions.
+   */
   const handleQueueStateChange = useCallback((active: boolean) => {
     setQueueActive(active);
     if (!active) setInitialQueue(null);
   }, []);
 
+  /**
+   * Clears state and redirects the patient back to the login view.
+   *
+   * @param {boolean} clearPinData - If true, clears PIN and paired patient cache as well (e.g. account switching).
+   */
   const resetToLogin = useCallback(
     (clearPinData: boolean) => {
       clearToken();
@@ -151,15 +174,33 @@ export default function Page() {
     [pendingAuth],
   );
 
+  /**
+   * Handles expired sessions (e.g. token expired or HTTP 401 unauthorized).
+   */
   const expireSession = useCallback(() => resetToLogin(false), [resetToLogin]);
+
+  /**
+   * Handles user logout.
+   */
   const logout = useCallback(() => resetToLogin(false), [resetToLogin]);
+
+  /**
+   * Handles forgotten PIN scenario (clears existing PIN data and redirects to login).
+   */
   const handleForgotPin = useCallback(() => resetToLogin(true), [resetToLogin]);
+
+  /**
+   * Handles switching to another patient account.
+   */
   const handleSwitchAccount = useCallback(() => resetToLogin(true), [resetToLogin]);
 
   const activeQueueNumber = initialQueue?.queue_number || null;
   const hasSavedAccount = Boolean(token);
   const hasActiveQueue = Boolean(activeQueueNumber || queueActive);
 
+  /**
+   * Switches view when the user selects a tab in the navigation bar (`AppNavbar`).
+   */
   function handleSelectNav(navView: NavView) {
     if (!token && navView !== "registration") {
       setView("login");
@@ -172,6 +213,9 @@ export default function Page() {
     setView(navView);
   }
 
+  /**
+   * Fetches patient profile from API and caches it in sessionStorage to show greeting name on PIN screen.
+   */
   function fetchAndSavePairedProfile(accessToken: string) {
     patientApi
       .account(accessToken)
@@ -197,6 +241,10 @@ export default function Page() {
       });
   }
 
+  /**
+   * Handles successful registration and queue booking.
+   * Checks if PIN exists; if not, navigates to PIN setup (`pin_setup`).
+   */
   function registrationSuccess(accessToken: string, result: RegistrationResult) {
     setPendingAuth({ token: accessToken });
     setInitialQueue(result);
@@ -211,6 +259,10 @@ export default function Page() {
     }
   }
 
+  /**
+   * Handles successful login via credentials or Google OAuth.
+   * Navigates to PIN unlock or PIN setup view.
+   */
   function loginSuccess(accessToken: string, nationalId?: string) {
     setPendingAuth({ token: accessToken, nationalId });
     setInitialQueue(null);
@@ -226,6 +278,10 @@ export default function Page() {
     }
   }
 
+  /**
+   * Handles completion of PIN authentication (successful unlock).
+   * Authenticates session with token and navigates to target view (e.g., 'status').
+   */
   function finishPinFlow(nextView: View) {
     const finalToken = pendingAuth?.token || token || readToken() || "";
     if (finalToken) {
@@ -235,6 +291,9 @@ export default function Page() {
     setView(nextView);
   }
 
+  /**
+   * Synchronizes newly configured 6-digit security PIN to backend server.
+   */
   async function persistPin(pin: string) {
     const activeTok = pendingAuth?.token || token;
     if (activeTok) {
@@ -248,6 +307,9 @@ export default function Page() {
     }
   }
 
+  /**
+   * Changes application font size and persists preference to localStorage.
+   */
   function changeFontSize(size: FontSize) {
     setFontSize(size);
     try {

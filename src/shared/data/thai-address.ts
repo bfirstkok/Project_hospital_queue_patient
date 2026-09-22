@@ -1038,16 +1038,34 @@ export const ALL_77_PROVINCES: string[] = [
   "อุบลราชธานี",
 ];
 
+/**
+ * Retrieves the complete list of all 77 Thai provinces.
+ *
+ * @returns {string[]} Array of province names in Thai.
+ */
 export function getProvinces(): string[] {
   return ALL_77_PROVINCES;
 }
 
+/**
+ * Retrieves all districts (Amphoe / Khet) belonging to a specified province.
+ *
+ * @param {string} provinceName - Thai province name.
+ * @returns {string[]} Array of district names, or empty array if province not found.
+ */
 export function getDistricts(provinceName: string): string[] {
   const prov = THAI_PROVINCES.find((p) => p.name === provinceName);
   if (!prov) return [];
   return prov.districts.map((d) => d.name);
 }
 
+/**
+ * Retrieves all subdistricts (Tambon / Khwaeng) for a given province and district.
+ *
+ * @param {string} provinceName - Thai province name.
+ * @param {string} districtName - Thai district name.
+ * @returns {string[]} Array of subdistrict names, or empty array if not found.
+ */
 export function getSubdistricts(provinceName: string, districtName: string): string[] {
   const prov = THAI_PROVINCES.find((p) => p.name === provinceName);
   if (!prov) return [];
@@ -1056,6 +1074,14 @@ export function getSubdistricts(provinceName: string, districtName: string): str
   return dist.subdistricts.map((s) => s.name);
 }
 
+/**
+ * Automatically looks up the 5-digit postal code for a specific province, district, and subdistrict.
+ *
+ * @param {string} provinceName - Thai province name.
+ * @param {string} districtName - Thai district name.
+ * @param {string} subdistrictName - Thai subdistrict name.
+ * @returns {string} 5-digit postal code (e.g. "10200"), or empty string if not found.
+ */
 export function getPostalCode(provinceName: string, districtName: string, subdistrictName: string): string {
   const prov = THAI_PROVINCES.find((p) => p.name === provinceName);
   if (!prov) return "";

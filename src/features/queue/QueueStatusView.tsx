@@ -16,6 +16,19 @@ interface QueueStatusViewProps {
   onQueueStateChange?: (hasActiveQueue: boolean) => void;
 }
 
+/**
+ * Calculates estimated wait duration based on current position and status.
+ *
+ * Rules:
+ * - Completed / Pharmacy: Finished examination.
+ * - In progress / Position 0: Currently inside examination room.
+ * - Position 1: Next up (approx 1 - 5 mins).
+ * - Position > 1: Multiplies remaining count by 5 to 7 mins per patient.
+ *
+ * @param {number | null | undefined} position - Queue position number.
+ * @param {string} statusLabel - Current status text.
+ * @returns {string} Formatted wait time estimate string.
+ */
 function calculateEstimatedWaitTime(position: number | null | undefined, statusLabel: string): string {
   if (statusLabel.includes("ตรวจเสร็จ") || statusLabel.includes("รับยา")) return "ตรวจเสร็จสิ้นแล้ว";
   if (statusLabel.includes("กำลังตรวจ") || position === 0) return "กำลังรับการตรวจในห้องตรวจ";
@@ -28,6 +41,15 @@ function calculateEstimatedWaitTime(position: number | null | undefined, statusL
   return "ระบบกำลังประเมินระยะเวลารอ";
 }
 
+/**
+ * OPD Patient Queue Status view component.
+ *
+ * Handles 3 main display states:
+ * 1. Initial Loading: Displays `LoadingScreen`.
+ * 2. Active Queue: Displays live queue card, position, exam room, wait estimate,
+ *    save image button, and 2-step safe cancellation modal.
+ * 3. No Queue: Displays empty state with button to request a new queue.
+ */
 export function QueueStatusView({
   token,
   initialQueue,
@@ -74,11 +96,17 @@ export function QueueStatusView({
   const isNearQueue = (typeof position === "number" && position > 0 && position <= 3) || statusLabel.includes("เรียก");
   const estimatedWaitText = calculateEstimatedWaitTime(position, statusLabel);
 
+  /**
+   * Generates and downloads a PNG image of the queue slip via Canvas.
+   */
   function handleSaveImage() {
     if (!queue) return;
     generateQueueCardImage(queue, estimatedWaitText);
   }
 
+  /**
+   * Sends queue cancellation request to API and updates UI state on success.
+   */
   async function handleConfirmCancelQueue() {
     if (!token) return;
     setCancelling(true);

@@ -55,6 +55,13 @@ const THAI_MONTHS = [
 const CURRENT_YEAR = new Date().getFullYear();
 const DOB_YEARS = Array.from({ length: 121 }, (_, i) => CURRENT_YEAR - i);
 
+/**
+ * Computes the total number of days in a given month/year (supports leap years).
+ *
+ * @param {string} month - Month number string ("1" to "12").
+ * @param {string} year - CE year string.
+ * @returns {number} Days in month (28 - 31).
+ */
 function daysInMonth(month: string, year: string): number {
   const m = Number(month);
   if (!m) return 31;
@@ -94,6 +101,9 @@ interface PatientProfileFormProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
+/**
+ * Splits comma-separated values into matching predefined chips and custom free-text.
+ */
 function splitStored(value: string | null | undefined, options: string[]) {
   const items = (value || "").split(",").map((s) => s.trim()).filter(Boolean);
   return {
@@ -102,6 +112,16 @@ function splitStored(value: string | null | undefined, options: string[]) {
   };
 }
 
+/**
+ * Demographic and medical profile form component (`PatientProfileForm`).
+ *
+ * Capabilities:
+ * 1. Personal & identity fields: Name, 13-digit ID, DOB (real-time age calculation), contact channels.
+ * 2. 77-province address cascading selects (Province -> District -> Subdistrict -> Postal Code).
+ * 3. Health & triage profile: Vitals (height, weight), chronic diseases, allergies, regular medications.
+ * 4. Dynamic emergency contacts (up to 3 contacts).
+ * 5. Local storage draft autosave/restore for onboarding patients.
+ */
 export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientProfileFormProps>(
   function PatientProfileForm(
     { mode, token, hasToken, initialProfile, draftKey, children, onUnauthorized, onDirtyChange },
@@ -152,6 +172,11 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       { id: "em-initial-1", name: "", relationship: "", phone: "" },
     ]);
 
+    /**
+     * Calculates patient age in years, months, and days based on ISO date of birth string.
+     *
+     * @param {string} val - Date of birth string in ISO format (YYYY-MM-DD).
+     */
     function calculateAge(val: string) {
       if (!val) {
         setCalculatedAgeText("");
@@ -176,7 +201,9 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       setCalculatedAgeText(`อายุ: ${years} ปี ${months} เดือน ${days} วัน`);
     }
 
-    /** Fold the three DOB selects into the committed ISO value + recompute age. */
+    /**
+     * Concatenates day, month, and year inputs into an ISO date string and triggers age calculation.
+     */
     function commitDob(day: string, month: string, year: string) {
       if (day && month && year) {
         const iso = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
@@ -188,6 +215,9 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       }
     }
 
+    /**
+     * Handles changes to DOB part (day, month, or year) and adjusts days to fit month boundaries.
+     */
     function changeDobPart(part: "day" | "month" | "year", value: string) {
       let d = part === "day" ? value : dobDay;
       const m = part === "month" ? value : dobMonth;
@@ -201,6 +231,11 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       commitDob(d, m, y);
     }
 
+    /**
+     * Populates form fields with existing patient profile retrieved from the server.
+     *
+     * @param {PatientProfile} p - Patient profile object.
+     */
     function applyProfile(p: PatientProfile) {
       if (p.username) setUsername(p.username);
       if (p.first_name) setFirstName(p.first_name);
@@ -404,6 +439,9 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       selectedMedications, customMedication, province, district, subdistrict, postalCode, emergencyContacts,
     ]);
 
+    /**
+     * Clears persisted draft from local storage and resets all form state to defaults.
+     */
     function clearDraft() {
       if (draftKey) {
         try {
@@ -442,6 +480,11 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       setDraftSavedTime("");
     }
 
+    /**
+     * Aggregates and serializes form inputs into a `PatientProfilePayload` structure.
+     *
+     * @returns {PatientProfilePayload} Normalized profile payload ready for API update.
+     */
     function getPayload(): PatientProfilePayload {
       const contacts = emergencyContacts.filter((c) => c.name.trim() || c.phone.trim());
       const primary = contacts[0];
@@ -479,14 +522,34 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       };
     }
 
+    /**
+     * Focuses the input element with the matching `name` attribute.
+     */
     function focusName(name: string) {
       const el = document.querySelector<HTMLElement>(`[name="${name}"]`);
       el?.focus();
     }
+
+    /**
+     * Smoothly scrolls viewport to center on the specified element ID.
+     */
     function scrollToGroup(id: string) {
       document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     }
 
+    /**
+     * Validates form inputs and returns the first failing field error.
+     *
+     * Validation rules:
+     * - Edit mode: Validates email format.
+     * - Register mode: Validates username (>= 3 chars) and password (>= 8 chars).
+     * - National ID must contain 13 digits.
+     * - Phone number must contain at least 9 digits.
+     * - Email format must conform to standard regex.
+     * - Mandatory triage fields: Chronic diseases, allergies, and regular medications.
+     *
+     * @returns {{ field: string; message: string } | null} First blocking error or null if valid.
+     */
     function validate(): { field: string; message: string } | null {
       // Edit mode is a partial patch of an existing record: the national ID is
       // read-only, and the health fields that are mandatory at registration are
@@ -555,6 +618,10 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     // it has been pulled from a known patient record.
     const idLocked = mode === "edit" || Boolean(hasToken && nationalId.length === 13 && !nationalId.includes("x"));
 
+    /**
+     * Toggles chip selection state (e.g. chronic diseases, allergies).
+     * Automatically clears other selections if the "none" option is clicked.
+     */
     function toggleChip(
       item: string,
       noneLabel: string,
@@ -571,6 +638,9 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       setList(filtered.includes(item) ? filtered.filter((x) => x !== item) : [...filtered, item]);
     }
 
+    /**
+     * Updates an emergency contact entry by its unique ID.
+     */
     function updateContact(id: string, field: "name" | "relationship" | "phone", value: string) {
       setEmergencyContacts((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
     }
@@ -1057,6 +1127,10 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
   },
 );
 
+/**
+ * Form field wrapper component.
+ * Renders label text, required indicator (`*`), input children, and optional help text.
+ */
 function Field({
   label, required, wide, help, children,
 }: { label: string; required?: boolean; wide?: boolean; help?: string; children: ReactNode }) {
@@ -1069,6 +1143,9 @@ function Field({
   );
 }
 
+/**
+ * Numeric input field with a trailing unit suffix (e.g. years, cm, kg).
+ */
 function SuffixInput(props: React.InputHTMLAttributes<HTMLInputElement> & { name: string; suffix: string }) {
   const { suffix, ...inputProps } = props;
   const labels: Record<string, string> = { age: "อายุ", height_cm: "ส่วนสูง", weight_kg: "น้ำหนัก" };

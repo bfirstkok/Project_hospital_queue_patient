@@ -20,7 +20,12 @@ interface RegistrationViewProps {
   onDuplicateQueue?: (token: string, nationalId: string) => void;
 }
 
-/** Token for an existing patient with this national ID, or "" if not found / lookup failed. */
+/**
+ * Checks whether an active access token already exists for the given National ID.
+ *
+ * @param {string} nationalId - 13-digit Thai national ID.
+ * @returns {Promise<string>} Access token or empty string if patient does not exist.
+ */
 async function probeExistingToken(nationalId: string): Promise<string> {
   try {
     const res = await patientApi.login(nationalId);
@@ -30,7 +35,12 @@ async function probeExistingToken(nationalId: string): Promise<string> {
   }
 }
 
-/** Whether the token's patient currently has an active (not-finished) queue. */
+/**
+ * Checks whether the patient already has an active (uncompleted/uncancelled) OPD queue ticket.
+ *
+ * @param {string} token - Patient access token.
+ * @returns {Promise<boolean>} True if patient has an active queue today.
+ */
 async function probeActiveQueue(token: string): Promise<boolean> {
   try {
     const q = await patientApi.queue(token);
@@ -42,11 +52,26 @@ async function probeActiveQueue(token: string): Promise<boolean> {
 
 const numericFields = new Set(["age", "height_cm", "weight_kg"]);
 
+/**
+ * Normalizes FormData entry to trimmed string or null if empty.
+ */
 function valueOrNull(value: FormDataEntryValue | null): string | null {
   const text = typeof value === "string" ? value.trim() : "";
   return text || null;
 }
 
+/**
+ * Aggregates and normalizes registration form fields into a typed `RegistrationPayload`.
+ *
+ * Responsibilities:
+ * 1. Reads all form inputs via `FormData`.
+ * 2. Joins up to 3 emergency contacts with commas.
+ * 3. Casts numeric fields (`age`, `height_cm`, `weight_kg`) to numbers or null.
+ * 4. Cleans national ID to 13 pure digits.
+ *
+ * @param {HTMLFormElement} form - Target HTML form element.
+ * @returns {RegistrationPayload} Typed payload ready for API dispatch.
+ */
 export function collectRegistrationPayload(form: HTMLFormElement): RegistrationPayload {
   const data = new FormData(form);
   const payload = Object.fromEntries(
@@ -103,6 +128,15 @@ const SYMPTOM_OPTIONS = [
   "ตาแดง / ระคายเคืองตา",
 ];
 
+/**
+ * Patient Registration & OPD Queue Booking View component.
+ *
+ * Features:
+ * 1. PDPA Consent Gate (`PdpaConsentGate`).
+ * 2. Demographic & Medical Profile Form (`PatientProfileForm`).
+ * 3. Chief Complaint & Symptom Checklist.
+ * 4. Duplicate Queue Guard (prevents double ticket issuance).
+ */
 export function RegistrationView({
   token,
   hasToken,
@@ -131,16 +165,25 @@ export function RegistrationView({
   const symptomDirty = customSymptom.trim().length > 0 || selectedSymptoms.length > 0;
   const isFormDirty = profileDirty || symptomDirty;
 
+  /**
+   * Toggles selection state of a symptom chip item.
+   */
   function toggleSymptom(item: string) {
     setSelectedSymptoms((prev) => (prev.includes(item) ? prev.filter((s) => s !== item) : [...prev, item]));
   }
 
+  /**
+   * Clears form inputs and cached browser draft.
+   */
   function resetForm() {
     profileRef.current?.clearDraft();
     setSelectedSymptoms([]);
     setCustomSymptom("");
   }
 
+  /**
+   * Handles user cancel click; prompts confirmation if unsaved changes exist.
+   */
   function handleCancelClick() {
     if (isFormDirty) {
       setShowCancelConfirm(true);
@@ -150,12 +193,25 @@ export function RegistrationView({
     (onCancel ?? onLogin)();
   }
 
+  /**
+   * Confirms cancellation and navigates back to previous screen.
+   */
   function handleConfirmCancel() {
     setShowCancelConfirm(false);
     resetForm();
     (onCancel ?? onLogin)();
   }
 
+  /**
+   * Submits patient registration form to book an OPD queue.
+   *
+   * Flow:
+   * 1. Validates form constraints and required medical fields.
+   * 2. Serializes data using `collectRegistrationPayload`.
+   * 3. Runs duplicate queue check to avoid double bookings.
+   * 4. Dispatches `patientApi.register()` and clears draft.
+   * 5. Notifies parent component via `onSuccess()`.
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;

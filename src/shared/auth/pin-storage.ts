@@ -17,6 +17,12 @@ export const MAX_FAILED_ATTEMPTS = 3;
  */
 export const LOCKOUT_TIERS_SECONDS = [60, 300, 1800];
 
+/**
+ * Calculates lockout duration in seconds based on escalation level.
+ *
+ * @param {number} level - Lockout escalation tier (0 = 60s, 1 = 300s, 2 = 1800s).
+ * @returns {number} Wait time in seconds.
+ */
 function lockoutSecondsForLevel(level: number): number {
   return LOCKOUT_TIERS_SECONDS[Math.min(Math.max(level, 0), LOCKOUT_TIERS_SECONDS.length - 1)];
 }
@@ -24,8 +30,11 @@ function lockoutSecondsForLevel(level: number): number {
 const SALT = "hospital_patient_pin_salt_v1:";
 
 /**
- * Standard FIPS 180-4 SHA-256 hash implementation in pure TypeScript.
- * Works synchronously in any environment (Browser, Node, Vitest).
+ * Hashes a 6-digit PIN using salted SHA-256 algorithm.
+ * Prevents storing plaintext PINs in client-side storage.
+ *
+ * @param {string} pin - 6-digit PIN entered by user.
+ * @returns {string} 64-character hexadecimal SHA-256 hash.
  */
 export function hashPin(pin: string): string {
   function rightRotate(value: number, amount: number) {
@@ -118,6 +127,12 @@ export function hashPin(pin: string): string {
   return result;
 }
 
+/**
+ * Generates local storage key for PIN data scoped to patient's national ID.
+ *
+ * @param {string} [nationalId] - 13-digit Thai national ID.
+ * @returns {string} Storage key string.
+ */
 export function getPinKey(nationalId?: string): string {
   if (nationalId && nationalId.trim()) {
     return `hospital_patient_pin_${nationalId.trim()}`;
@@ -125,6 +140,12 @@ export function getPinKey(nationalId?: string): string {
   return PIN_STORAGE_KEY;
 }
 
+/**
+ * Reads stored PIN hash from browser storage.
+ *
+ * @param {string} [nationalId] - Patient national ID.
+ * @returns {string | null} Stored PIN hash, or null if unconfigured.
+ */
 export function readPin(nationalId?: string): string | null {
   if (typeof window === "undefined") return null;
   if (nationalId && nationalId.trim()) {
@@ -134,6 +155,13 @@ export function readPin(nationalId?: string): string | null {
   return window.localStorage.getItem(PIN_STORAGE_KEY);
 }
 
+/**
+ * Stores a new hashed PIN for the patient.
+ * Automatically enables PIN protection and clears current lockout state.
+ *
+ * @param {string} pin - 6-digit numeric PIN.
+ * @param {string} [nationalId] - Associated patient national ID.
+ */
 export function savePin(pin: string, nationalId?: string): void {
   if (typeof window === "undefined") return;
   const hashed = hashPin(pin);
@@ -145,43 +173,84 @@ export function savePin(pin: string, nationalId?: string): void {
   clearActiveLockout();
 }
 
+/**
+ * Checks whether a PIN is configured for the given patient.
+ *
+ * @param {string} [nationalId] - Patient national ID.
+ * @returns {boolean} True if PIN exists in storage.
+ */
 export function hasPin(nationalId?: string): boolean {
   return Boolean(readPin(nationalId));
 }
 
+/**
+ * Checks whether PIN authentication is globally enabled and a PIN exists.
+ *
+ * @returns {boolean} True if enabled and PIN exists.
+ */
 export function isPinEnabled(): boolean {
   if (typeof window === "undefined") return false;
   const enabled = window.localStorage.getItem(PIN_ENABLED_KEY);
   return enabled === "true" && hasPin();
 }
 
+/**
+ * Toggles PIN authentication enabled flag.
+ *
+ * @param {boolean} enabled - True to enable, false to disable.
+ */
 export function setPinEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(PIN_ENABLED_KEY, enabled ? "true" : "false");
 }
 
+/**
+ * Reads cumulative failed PIN attempts in the current lockout cycle.
+ *
+ * @returns {number} Count of failed attempts.
+ */
 export function getFailedAttempts(): number {
   if (typeof window === "undefined") return 0;
   const raw = window.localStorage.getItem(PIN_ATTEMPTS_KEY);
   return raw ? parseInt(raw, 10) || 0 : 0;
 }
 
+/**
+ * Calculates remaining allowed failed attempts before lockout triggers.
+ *
+ * @returns {number} Remaining attempts (0 to 3).
+ */
 export function getRemainingAttempts(): number {
   const attempts = getFailedAttempts();
   return Math.max(0, MAX_FAILED_ATTEMPTS - attempts);
 }
 
+/**
+ * Reads the current lockout escalation level for calculating penalty duration.
+ *
+ * @returns {number} Tier index (0-indexed).
+ */
 export function getLockoutLevel(): number {
   if (typeof window === "undefined") return 0;
   const raw = window.localStorage.getItem(PIN_LOCKOUT_LEVEL_KEY);
   return raw ? parseInt(raw, 10) || 0 : 0;
 }
 
-/** How long the NEXT lockout will last given the escalation reached so far. */
+/**
+ * Gets duration in seconds for the next lockout penalty (1m -> 5m -> 30m).
+ *
+ * @returns {number} Penalty duration in seconds.
+ */
 export function getNextLockoutSeconds(): number {
   return lockoutSecondsForLevel(getLockoutLevel());
 }
 
+/**
+ * Calculates remaining active lockout duration in seconds.
+ * Automatically clears expired lockout timestamp while preserving escalation tier.
+ *
+ * @returns {number} Remaining seconds in lockout (0 if not locked out).
+ */
 export function getLockoutRemainingSeconds(): number {
   if (typeof window === "undefined") return 0;
   const lockoutUntil = window.localStorage.getItem(PIN_LOCKOUT_UNTIL_KEY);
@@ -197,11 +266,18 @@ export function getLockoutRemainingSeconds(): number {
   return Math.ceil((until - now) / 1000);
 }
 
+/**
+ * Checks whether the user is currently locked out from entering a PIN.
+ *
+ * @returns {boolean} True if lockout is active.
+ */
 export function isLockedOut(): boolean {
   return getLockoutRemainingSeconds() > 0;
 }
 
-/** Full reset including the escalation level — only for a genuine success (correct PIN). */
+/**
+ * Resets all lockout and failure counters upon successful PIN entry.
+ */
 export function resetLockout(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(PIN_ATTEMPTS_KEY);
@@ -209,13 +285,19 @@ export function resetLockout(): void {
   window.localStorage.removeItem(PIN_LOCKOUT_LEVEL_KEY);
 }
 
-/** Clears the active lockout window but keeps the escalation level. */
+/**
+ * Clears current cycle failure counters while preserving lockout escalation tier.
+ */
 export function clearActiveLockout(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(PIN_ATTEMPTS_KEY);
   window.localStorage.removeItem(PIN_LOCKOUT_UNTIL_KEY);
 }
 
+/**
+ * Records a failed PIN attempt.
+ * Triggers a timed lockout when threshold reaches `MAX_FAILED_ATTEMPTS` (3).
+ */
 export function recordFailedAttempt(): void {
   if (typeof window === "undefined") return;
   const current = getFailedAttempts() + 1;
@@ -228,6 +310,19 @@ export function recordFailedAttempt(): void {
   }
 }
 
+/**
+ * Verifies entered PIN against stored salted hash.
+ *
+ * Flow:
+ * 1. Checks lockout status; rejects immediately if locked out.
+ * 2. Hashes input and compares with stored hash (or legacy plaintext).
+ * 3. On success: calls `resetLockout()`, upgrades legacy plaintext if needed, returns true.
+ * 4. On failure: calls `recordFailedAttempt()`, returns false.
+ *
+ * @param {string} enteredPin - PIN entered by patient.
+ * @param {string} [nationalId] - Patient national ID.
+ * @returns {boolean} True if PIN matches and user is not locked out.
+ */
 export function verifyPin(enteredPin: string, nationalId?: string): boolean {
   if (isLockedOut()) {
     return false;
@@ -253,6 +348,12 @@ export function verifyPin(enteredPin: string, nationalId?: string): boolean {
   }
 }
 
+/**
+ * Removes PIN credentials from device storage.
+ * Note: Does not reset lockout tier to prevent bypass via re-login.
+ *
+ * @param {string} [nationalId] - Patient national ID.
+ */
 export function clearPin(nationalId?: string): void {
   if (typeof window === "undefined") return;
   if (nationalId && nationalId.trim()) {
@@ -280,6 +381,14 @@ export interface PairedPatientInfo {
 
 let inMemoryPairedPatient: PairedPatientInfo | null = null;
 
+/**
+ * Caches paired patient identity temporarily in sessionStorage.
+ *
+ * Prevents Personally Identifiable Information (PII) leakage by avoiding permanent disk storage.
+ * Data remains active only during the browser session.
+ *
+ * @param {PairedPatientInfo} info - Patient profile info (name, nationalId, phone, email).
+ */
 export function savePairedPatient(info: PairedPatientInfo): void {
   inMemoryPairedPatient = info;
   if (typeof window === "undefined") return;
@@ -292,6 +401,11 @@ export function savePairedPatient(info: PairedPatientInfo): void {
   }
 }
 
+/**
+ * Reads paired patient profile cached from device storage.
+ *
+ * @returns {PairedPatientInfo | null} Paired patient info, or null if none.
+ */
 export function readPairedPatient(): PairedPatientInfo | null {
   if (inMemoryPairedPatient) return inMemoryPairedPatient;
   if (typeof window === "undefined") return null;
@@ -304,6 +418,9 @@ export function readPairedPatient(): PairedPatientInfo | null {
   }
 }
 
+/**
+ * Purges paired patient data from memory and sessionStorage.
+ */
 export function clearPairedPatient(): void {
   inMemoryPairedPatient = null;
   if (typeof window === "undefined") return;

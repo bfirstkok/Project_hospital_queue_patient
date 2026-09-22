@@ -1,5 +1,6 @@
 import json
 import base64
+import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 
@@ -133,8 +134,36 @@ class MockBackendHandler(BaseHTTPRequestHandler):
         if path == "/api/patient/auth/google/":
             credential = body.get("credential", "")
             
-            # If a real Google JWT token is received, extract user profile
-            if credential and "." in credential:
+            # If a real Google OAuth2 access_token is received, query Google Userinfo endpoint
+            if credential and credential.startswith("ya29."):
+                try:
+                    req = urllib.request.Request(
+                        "https://www.googleapis.com/oauth2/v3/userinfo",
+                        headers={"Authorization": f"Bearer {credential}"}
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        user_info = json.loads(response.read().decode("utf-8"))
+                        google_email = user_info.get("email", MOCK_PATIENT_PROFILE["email"])
+                        given_name = user_info.get("given_name", "")
+                        family_name = user_info.get("family_name", "")
+                        
+                        if given_name:
+                            MOCK_PATIENT_PROFILE["first_name"] = given_name
+                        if family_name:
+                            MOCK_PATIENT_PROFILE["last_name"] = family_name
+                        MOCK_PATIENT_PROFILE["email"] = google_email
+                        
+                        print(f"\n========================================================")
+                        print(f" [Google OAuth2] Received REAL Google Access Token from Browser!")
+                        print(f" > Email: {google_email}")
+                        print(f" > Name:  {given_name} {family_name}")
+                        print(f" > Picture: {user_info.get('picture')}")
+                        print(f"========================================================\n")
+                except Exception as e:
+                    print(f"[Google OAuth2] Could not fetch userinfo from Google: {e}")
+
+            # If a real Google JWT token (e.g. from One Tap) is received, extract claims
+            elif credential and "." in credential:
                 try:
                     parts = credential.split(".")
                     if len(parts) >= 2:
@@ -152,7 +181,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
                         MOCK_PATIENT_PROFILE["email"] = google_email
                         
                         print(f"\n========================================================")
-                        print(f" [Google OAuth] Received REAL Google Token from Browser!")
+                        print(f" [Google OAuth] Received REAL Google JWT Token from Browser!")
                         print(f" > Email: {google_email}")
                         print(f" > Name:  {given_name} {family_name}")
                         print(f" > Sub:   {claims.get('sub')}")

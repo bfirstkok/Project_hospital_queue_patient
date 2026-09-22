@@ -10,6 +10,15 @@ interface AppNavbarProps {
   hasToken: boolean;
 }
 
+/**
+ * Responsive application navigation bar (`AppNavbar`).
+ *
+ * Behavior:
+ * - Mobile: Renders as a fixed bottom navigation bar with accessible touch targets.
+ * - Desktop: Adapts into top navigation bar.
+ * - Displays active badge and queue ticket number on "My Queue" tab when waiting in queue.
+ * - Disables "Book Queue" tab when an active queue exists to prevent duplicate bookings.
+ */
 export function AppNavbar({
   currentView,
   onSelectView,

@@ -10,6 +10,15 @@ interface ForgotPasswordModalProps {
 
 type Step = "request" | "verify" | "reset" | "completed";
 
+/**
+ * Modal dialog for patient password recovery via 3-step OTP verification.
+ *
+ * Workflow steps:
+ * 1. Step 'request': Patient enters username, email, or phone to request a 6-digit OTP.
+ * 2. Step 'verify': Enters the 6-digit OTP to authenticate and receive a `reset_token`.
+ * 3. Step 'reset': Enters and confirms new password (minimum 8 characters).
+ * 4. Step 'completed': Displays success confirmation and directs back to login.
+ */
 export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswordModalProps) {
   const [step, setStep] = useState<Step>("request");
   const [identifier, setIdentifier] = useState("");
@@ -48,6 +57,9 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
 
   if (!isOpen) return null;
 
+  /**
+   * Step 1: Dispatches OTP request to chosen delivery channel (email/sms).
+   */
   async function handleRequestOtp(e: FormEvent) {
     e.preventDefault();
     if (!identifier.trim()) {
@@ -72,6 +84,9 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
     }
   }
 
+  /**
+   * Step 2: Validates entered 6-digit OTP and extracts reset token.
+   */
   async function handleVerifyOtp(e: FormEvent) {
     e.preventDefault();
     const cleanOtp = otp.trim().replace(/\D/g, "");
@@ -99,6 +114,9 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
     }
   }
 
+  /**
+   * Step 3: Submits new password to finalize account recovery.
+   */
   async function handleResetPassword(e: FormEvent) {
     e.preventDefault();
     if (newPassword.length < 8) {

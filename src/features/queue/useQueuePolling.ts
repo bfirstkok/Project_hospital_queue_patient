@@ -10,6 +10,19 @@ interface UseQueuePollingOptions {
   onUnauthorized: () => void;
 }
 
+/**
+ * Custom hook for periodic background polling of patient queue status.
+ *
+ * Responsibilities:
+ * 1. Fetches queue data immediately upon initialization.
+ * 2. Establishes a timer-based polling cycle via `setInterval` using `statusRefreshMs` from runtime config.
+ * 3. Performs silent background refreshes to prevent UI flickering.
+ * 4. Detects HTTP 401 Unauthorized errors and invokes `onUnauthorized` callback for re-authentication.
+ * 5. Handles HTTP 404 cleanly by clearing active queue state.
+ *
+ * @param {UseQueuePollingOptions} options - Polling configuration options.
+ * @returns Object containing `{ queue, error, loading, initialLoading, refresh, clearActiveQueue }`.
+ */
 export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }: UseQueuePollingOptions) {
   const [queue, setQueue] = useState<Partial<QueueData> | null>(initialQueue || null);
   const [error, setError] = useState("");

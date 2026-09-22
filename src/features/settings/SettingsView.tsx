@@ -11,6 +11,16 @@ interface SettingsViewProps {
   onResetPin?: () => void;
 }
 
+/**
+ * Patient Portal Settings View component.
+ *
+ * Capabilities:
+ * 1. PIN Security management (change PIN or request recovery OTP).
+ * 2. Accessibility font size scaling (Normal 16px, Large 18px, Extra Large 20px).
+ * 3. Emergency hotline contacts (1669, Emergency Room ER, OPD Information).
+ * 4. Privacy policy (PDPA) notice and application version banner.
+ * 5. Secure session logout action.
+ */
 export function SettingsView({
   fontSize,
   onChangeFontSize,

@@ -12,17 +12,27 @@ interface State {
 }
 
 /**
- * Catches render/lifecycle crashes in any view so the patient sees a recovery
- * screen instead of a blank page. Reloading re-runs the auth gate from scratch.
+ * React Error Boundary component.
+ *
+ * Responsibilities:
+ * Catches unhandled runtime rendering exceptions and prevents blank white screens.
+ * Displays a friendly fallback error card with recovery options:
+ * "Go Home" (/patient), "Go Back", and "Reload Page".
  */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 
+  /**
+   * Updates state when an error is thrown to render fallback UI.
+   */
   static getDerivedStateFromError(error: unknown): State {
     const msg = error instanceof Error ? error.message : String(error || "");
     return { hasError: true, errorMessage: msg };
   }
 
+  /**
+   * Logs unhandled UI error details to console for debugging.
+   */
   componentDidCatch(error: unknown) {
     console.error("Unhandled UI error:", error);
   }

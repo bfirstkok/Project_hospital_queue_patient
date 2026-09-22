@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 
 /**
- * App-wide banner shown whenever the browser reports no network connection, so
- * the patient knows queue updates are paused rather than assuming the queue moved.
- * Sits above the mobile bottom nav (see .offline-banner in globals.css).
+ * Network offline warning banner component (`OfflineBanner`).
+ *
+ * Responsibilities:
+ * Listens to browser `online` and `offline` network events.
+ * Displays an amber alert banner informing the patient that queue polling is temporarily paused
+ * until connectivity is restored.
  */
 export function OfflineBanner() {
   const [offline, setOffline] = useState(false);

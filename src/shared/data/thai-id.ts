@@ -1,6 +1,16 @@
 /**
- * Thai national ID validation, including the mod-11 check digit.
- * See https://en.wikipedia.org/wiki/National_identification_number#Thailand
+ * Validates a 13-digit Thai National ID using the official Modulo 11 checksum algorithm.
+ *
+ * Algorithm steps:
+ * 1. Strips non-digit characters.
+ * 2. Ensures length is exactly 13 digits.
+ * 3. Rejects repeated identical digits (e.g., 0000000000000 or 1111111111111).
+ * 4. Sums the first 12 digits multiplied by their descending weights (13 down to 2).
+ * 5. Computes check digit: `(11 - (sum % 11)) % 10`.
+ * 6. Compares computed check digit against the 13th digit.
+ *
+ * @param {string} input - National ID string to validate.
+ * @returns {boolean} True if checksum is valid.
  */
 export function isValidThaiNationalId(input: string): boolean {
   const digits = (input || "").replace(/\D/g, "");

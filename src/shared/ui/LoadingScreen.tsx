@@ -6,6 +6,15 @@ interface LoadingScreenProps {
   fullScreen?: boolean;
 }
 
+/**
+ * Accessible hospital loading screen component (`LoadingScreen`).
+ *
+ * Capabilities:
+ * - Animated medical cross icon with pulsating ring effect.
+ * - Configurable title and subtitle messages.
+ * - Supports fullscreen overlay or embedded container modes.
+ * - Uses `role="status"` and `aria-live="polite"` for screen reader accessibility.
+ */
 export function LoadingScreen({
   title = "กำลังโหลด",
   subtitle = "กรุณารอสักครู่ ระบบกำลังดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์",

@@ -16,6 +16,11 @@ interface SiteShellProps {
   children: ReactNode;
 }
 
+/**
+ * Retrieves persisted accessibility font size preference from localStorage.
+ *
+ * @returns {FontSize} "normal" | "large" | "xlarge" (defaults to "normal").
+ */
 function getInitialFontSize(): FontSize {
   if (typeof window === "undefined") return "normal";
   try {
@@ -29,6 +34,15 @@ function getInitialFontSize(): FontSize {
   return "normal";
 }
 
+/**
+ * Primary layout shell component (`SiteShell`).
+ *
+ * Responsibilities:
+ * 1. Renders site header with hospital brand logo and title.
+ * 2. Mounts responsive `AppNavbar`: top bar on desktop, bottom navigation on mobile.
+ * 3. Applies accessibility font size setting via `data-font-size` attribute on `<html>`.
+ * 4. Renders footer and manages safe bottom padding for fixed mobile navbars.
+ */
 export function SiteShell({
   currentView,
   onSelectView,

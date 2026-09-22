@@ -81,15 +81,15 @@ describe("RegistrationView", () => {
     expect(districtSelect.disabled).toBe(true);
     expect(subdistrictSelect.disabled).toBe(true);
 
-    // Select province: ขอนแก่น
+    // Select province
     fireEvent.change(provinceSelect, { target: { value: "ขอนแก่น" } });
     expect(districtSelect.disabled).toBe(false);
 
-    // Select district: เมืองขอนแก่น
+    // Select district
     fireEvent.change(districtSelect, { target: { value: "เมืองขอนแก่น" } });
     expect(subdistrictSelect.disabled).toBe(false);
 
-    // Select subdistrict: ศิลา
+    // Select subdistrict
     fireEvent.change(subdistrictSelect, { target: { value: "ศิลา" } });
     expect(postalCodeInput.value).toBe("40000");
   });
@@ -110,14 +110,14 @@ describe("RegistrationView", () => {
     fireEvent.change(nameInputs[1], { target: { value: "ผู้ติดต่อสอง" } });
     fireEvent.change(nameInputs[2], { target: { value: "ผู้ติดต่อสาม" } });
 
-    // There are 2 "ลบรายการ" buttons (for contact 2 and contact 3)
+    // There are 2 remove buttons (for contact 2 and contact 3)
     const removeButtons = screen.getAllByRole("button", { name: "ลบรายการ" });
     expect(removeButtons.length).toBe(2);
 
     // Click remove on the 2nd contact (the first remove button in the list)
     fireEvent.click(removeButtons[0]);
 
-    // Now there should be 2 contacts remaining: "ผู้ติดต่อหนึ่ง" and "ผู้ติดต่อสาม" (shifted to index 2)
+    // Now there should be 2 contacts remaining (contact 1 and contact 3 shifted to index 2)
     const remainingInputs = screen.getAllByPlaceholderText("ชื่อ-นามสกุล") as HTMLInputElement[];
     expect(remainingInputs.length).toBe(2);
     expect(remainingInputs[0].value).toBe("ผู้ติดต่อหนึ่ง");
