@@ -2042,39 +2042,6 @@ footer {
 /* ==========================================================================
    Multi-View Portal Navigation (Top Desktop & Bottom Mobile Nav)
    ========================================================================== */
-.portal-container {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  /* clip (not hidden/auto) so no accidental horizontal scroll, without breaking the sticky header */
-  overflow-x: clip;
-}
-
-.main-content {
-  flex: 1;
-  padding-bottom: 84px; /* Space for Mobile Bottom Nav */
-}
-
-@media (min-width: 769px) {
-  .main-content {
-    padding-bottom: 32px;
-  }
-}
-
-.site-footer {
-  text-align: center;
-  padding: 24px 16px 96px;
-  font-size: 0.9rem;
-  color: var(--muted);
-  border-top: 1px solid var(--line);
-}
-
-@media (min-width: 769px) {
-  .site-footer {
-    padding-bottom: 32px;
-  }
-}
-
 /* App Navigation Bar */
 .app-nav-bar {
   display: flex;
@@ -3198,10 +3165,6 @@ input:checked + .toggle-slider:before {
   color: #ffffff !important;
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(13, 138, 125, 0.35) !important;
-}
-
-.no-bottom-pad {
-  padding-bottom: 24px !important;
 }
 
 /* ==========================================================================

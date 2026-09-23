@@ -177,25 +177,18 @@ export default function Page() {
     [pendingAuth],
   );
 
-  /**
-   * Handles expired sessions (e.g. token expired or HTTP 401 unauthorized).
-   */
-  const expireSession = useCallback(() => resetToLogin(false), [resetToLogin]);
+  /** Clears the session after logout or an expired/unauthorized request. */
+  const resetSession = useCallback(() => resetToLogin(false), [resetToLogin]);
+  const expireSession = resetSession;
 
-  /**
-   * Handles user logout.
-   */
-  const logout = useCallback(() => resetToLogin(false), [resetToLogin]);
+  const logout = resetSession;
 
   /**
    * Handles forgotten PIN scenario (clears existing PIN data and redirects to login).
    */
   const handleForgotPin = useCallback(() => resetToLogin(true), [resetToLogin]);
 
-  /**
-   * Handles switching to another patient account.
-   */
-  const handleSwitchAccount = useCallback(() => resetToLogin(true), [resetToLogin]);
+  const handleSwitchAccount = handleForgotPin;
 
   const activeQueueNumber = initialQueue?.queue_number || null;
   const hasSavedAccount = Boolean(token);

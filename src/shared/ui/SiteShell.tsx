@@ -61,7 +61,7 @@ export function SiteShell({
   }, [fontSize]);
 
   return (
-    <div className="portal-container">
+    <div className="flex min-h-screen flex-col overflow-x-clip">
       <header className="site-header">
         <div className="header-inner">
           <Link
@@ -96,7 +96,11 @@ export function SiteShell({
         </div>
       </header>
 
-      <main className={`main-content ${hideNav || !hasSavedAccount ? "no-bottom-pad" : ""}`}>{children}</main>
+      <main
+        className={`flex-1 pb-[84px] min-[769px]:pb-[32px] ${hideNav || !hasSavedAccount ? "!pb-[24px]" : ""}`}
+      >
+        {children}
+      </main>
 
       {/* Mobile Bottom Navigation Bar (Shown when logged in) */}
       {!hideNav && hasSavedAccount && (
@@ -111,7 +115,7 @@ export function SiteShell({
         </div>
       )}
 
-      <footer className="site-footer">
+      <footer className="border-t border-[var(--line)] px-[16px] pt-[24px] pb-[96px] text-center text-[0.9rem] text-muted min-[769px]:pb-[32px]">
         <p>ระบบจัดการคิวผู้ป่วย OPD โรงพยาบาล · บริการเพื่อประชาชน</p>
       </footer>
     </div>

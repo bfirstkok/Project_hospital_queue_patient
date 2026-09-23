@@ -86,14 +86,14 @@ test.describe("Patient Registration Flow - E2E Tests", () => {
     // Should prompt for 6-digit PIN setup
     await expect(page.locator(".pin-card h1")).toContainText("ตั้งรหัส PIN");
 
-    // Enter PIN: 6 5 4 3 2 1
-    for (const digit of ["6", "5", "4", "3", "2", "1"]) {
+    // Enter a non-sequential PIN.
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
-    // Confirm PIN: 6 5 4 3 2 1
+    // Confirm the PIN.
     await expect(page.locator(".pin-card h1")).toContainText("ยืนยันรหัส PIN");
-    for (const digit of ["6", "5", "4", "3", "2", "1"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
@@ -128,14 +128,14 @@ test.describe("Patient Registration Flow - E2E Tests", () => {
     // Duplicate guard routes to PIN setup/unlock
     await expect(page.locator(".pin-card h1")).toBeVisible();
 
-    // Step 1: Set PIN 1 2 3 4 5 6
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    // Step 1: Set a non-sequential PIN.
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
-    // Step 2: Confirm PIN 1 2 3 4 5 6
+    // Step 2: Confirm the PIN.
     await expect(page.locator(".pin-card h1")).toContainText("ยืนยันรหัส PIN");
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 

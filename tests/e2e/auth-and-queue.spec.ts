@@ -54,14 +54,14 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
     // Should navigate to PIN setup
     await expect(page.locator(".pin-card h1")).toContainText("ตั้งรหัส PIN");
 
-    // Enter 6 digits: 1 2 3 4 5 6
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    // Use a non-sequential PIN because the app rejects weak PINs.
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
     // Step 2: Confirm PIN
     await expect(page.locator(".pin-card h1")).toContainText("ยืนยันรหัส PIN");
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
@@ -78,11 +78,11 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
     await page.fill("#login-password", "Password@2026");
     await page.click("button[type='submit']");
 
-    // Enter PIN
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    // Enter the configured PIN.
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
@@ -116,11 +116,11 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
     await page.fill("#login-password", "Password@2026");
     await page.click("button[type='submit']");
 
-    // Enter PIN
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    // Enter the configured PIN.
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
@@ -145,11 +145,11 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
     await page.fill("#login-password", "Password@2026");
     await page.click("button[type='submit']");
 
-    // Enter PIN
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    // Enter the configured PIN.
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
@@ -173,11 +173,11 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
     await page.fill("#login-password", "Password@2026");
     await page.click("button[type='submit']");
 
-    // Enter PIN
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    // Enter the configured PIN.
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
@@ -191,4 +191,3 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
     await expect(page.locator("h1")).toContainText("เข้าสู่ระบบผู้ป่วย");
   });
 });
-

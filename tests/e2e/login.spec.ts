@@ -52,15 +52,15 @@ test.describe("Login System - E2E Tests", () => {
     await page.fill("#login-password", "Password@2026");
     await page.click("button[type='submit']");
 
-    // Step 1: Set PIN
+    // Step 1: Set a non-sequential PIN.
     await expect(page.locator(".pin-card h1")).toContainText("ตั้งรหัส PIN");
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
     // Step 2: Confirm PIN
     await expect(page.locator(".pin-card h1")).toContainText("ยืนยันรหัส PIN");
-    for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+    for (const digit of ["1", "3", "5", "7", "9", "0"]) {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
@@ -76,10 +76,10 @@ test.describe("Login System - E2E Tests", () => {
     if ((await googleBtn.count()) > 0) {
       await googleBtn.click();
       await expect(page.locator(".pin-card h1")).toContainText("ตั้งรหัส PIN");
-      for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+      for (const digit of ["1", "3", "5", "7", "9", "0"]) {
         await page.click(`.keypad-btn:has-text('${digit}')`);
       }
-      for (const digit of ["1", "2", "3", "4", "5", "6"]) {
+      for (const digit of ["1", "3", "5", "7", "9", "0"]) {
         await page.click(`.keypad-btn:has-text('${digit}')`);
       }
       await expect(page.locator(".site-header")).toBeVisible();
