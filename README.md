@@ -52,7 +52,7 @@
 ```env
 PATIENT_API_BASE_URL=http://127.0.0.1:8000
 PATIENT_STATUS_REFRESH_MS=10000
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=477244523835-vopgha7b47cohjn2ouk80ng1gsup5tl8.apps.googleusercontent.com
+GOOGLE_CLIENT_ID=477244523835-vopgha7b47cohjn2ouk80ng1gsup5tl8.apps.googleusercontent.com
 ```
 
 ### 2. การตั้งค่าใน Google Cloud Console
@@ -81,9 +81,9 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID=477244523835-vopgha7b47cohjn2ouk80ng1gsup5tl8.apps.
 
 ## 🧪 การทดสอบระบบ (Automated Testing - 100% Pass)
 
-โครงการนี้มีชุดทดสอบครอบคลุมทั้ง Unit Testing และ End-to-End Testing รวม **96 การทดสอบ**:
+โครงการนี้มีชุดทดสอบครอบคลุมทั้ง Unit Testing และ End-to-End Testing รวม **97 การทดสอบ**:
 
-### 1. Unit & Component Tests (Vitest - 64 Tests)
+### 1. Unit & Component Tests (Vitest - 65 Tests)
 ```powershell
 # สั่งรัน Unit Test ทั้งหมด
 npm run test
@@ -152,9 +152,9 @@ npm run typecheck
 npm run build
 
 # 3. รัน Static Server ด้วย Python
-python -m http.server 5500 --bind 127.0.0.1 -d dist
+python -m http.server 5500 --bind 0.0.0.0 -d dist
 ```
-เข้าใช้งานผ่านเบราว์เซอร์ได้ที่: **`http://127.0.0.1:5500`** หรือ **`http://127.0.0.1:5500/patient/`**  
+เข้าใช้งานผ่านเบราว์เซอร์ได้ที่: **`http://127.0.0.1:5500`**, **`http://localhost:5500/patient`** หรือผ่าน IP ของเครื่องในวง LAN เช่น **`http://172.x.x.x:5500/patient`**
 *(ระบบมีสคริปต์ Auto-Redirect จากหน้า Root `/` ไปยัง `/patient/` ให้โดยอัตโนมัติ)*
 
 ---
@@ -165,16 +165,9 @@ python -m http.server 5500 --bind 127.0.0.1 -d dist
 
 ```javascript
 window.PATIENT_APP_ENV = {
-<<<<<<< HEAD
-  "API_BASE_URL": "http://127.0.0.1:8000",       // เปลี่ยนเป็น Domain หลังบ้านเมื่อขึ้น Production
-  "STATUS_REFRESH_MS": 10000,                    // ความถี่ในการดึงสถานะคิว (มิลลิวินาที)
+  "API_BASE_URL": "http://127.0.0.1:8000",       // สลับเป็น https://hospital.bfirstkok.me เมื่อต่อเซิร์ฟเวอร์จริง
+  "STATUS_REFRESH_MS": 10000,                    // ความถี่ในการอัปเดตสถานะคิวอัตโนมัติ (มิลลิวินาที)
   "GOOGLE_CLIENT_ID": "477244523835-vopgha7b47cohjn2ouk80ng1gsup5tl8.apps.googleusercontent.com"
-=======
-  apiBaseUrl: "http://127.0.0.1:8000",       // สลับไป https://hospital.bfirstkok.me เมื่อต่อเซิร์ฟเวอร์จริง
-  statusRefreshMs: 10000,                    // ความถี่ในการอัปเดตสถานะคิวอัตโนมัติ (มิลลิวินาที)
-  GOOGLE_CLIENT_ID: "your-google-oauth-web-client-id.apps.googleusercontent.com"
-  seniorMode: false
->>>>>>> origin/main
 };
 ```
 
@@ -208,13 +201,16 @@ Queue-Hostpital/
 └─ README.md                   คู่มือการใช้งานและเอกสารอธิบายระบบ
 ```
 
+### 🔒 Google OAuth Production & Backend Parity
 
-### Google OAuth production
+ฝั่ง Patient Portal (Next.js) และ Django Backend (`Project_hospital_queue`) ใช้ชื่อตัวแปรและ Client ID เดียวกัน:
 
-ฝั่ง Patient Portal และ Django backend ต้องใช้ Google OAuth Web Client ID เดียวกัน:
+- **Patient Portal:** `GOOGLE_CLIENT_ID=<client-id>` (ใน `.env` / runtime config)
+- **Django Backend:** `GOOGLE_CLIENT_ID=<client-id>` (ใน `.env` ของเซิร์ฟเวอร์หลังบ้าน)
+- **Google Cloud Console Authorized JavaScript origins:**
+  - `https://hospital.bfirstkok.me`
+  - `http://localhost:5500`
+  - `http://127.0.0.1:5500`
+  - `http://localhost:3000`
 
-- Patient Portal: `PATIENT_GOOGLE_CLIENT_ID=<client-id>`
-- Django backend: `GOOGLE_CLIENT_ID=<client-id>`
-- Google Cloud Console Authorized JavaScript origins: `https://hospital.bfirstkok.me`
-
-ห้ามใช้ mock token ใน production; หน้า Login โหลด Google Identity Services และส่ง ID token จริงไปที่ `/api/patient/auth/google/`.
+> **Note:** หน้า Login โหลด Google Identity Services (GSI) และส่ง ID token ที่ได้ไปยัง Endpoint `POST /api/patient/auth/google/` โดยหลังบ้านจะ Verify Token ผ่าน Google Public Certificate โดยไม่ต้องใช้ Client Secret ครับ

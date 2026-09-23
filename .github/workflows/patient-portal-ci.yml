@@ -29,5 +29,5 @@ jobs:
         env:
           PATIENT_API_BASE_URL: https://hospital.bfirstkok.me
           PATIENT_STATUS_REFRESH_MS: "10000"
-          PATIENT_GOOGLE_CLIENT_ID: ""
+          GOOGLE_CLIENT_ID: ""
         run: npm run build

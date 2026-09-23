@@ -54,7 +54,7 @@ export interface RuntimeConfig {
 export function getRuntimeConfig(): RuntimeConfig {
   const runtime = typeof window === "undefined" ? undefined : window.PATIENT_APP_ENV;
   const sameOriginApiBaseUrl = typeof window === "undefined" ? "" : window.location.origin;
-  const envClientId = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "" : "";
+  const envClientId = typeof process !== "undefined" ? process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "" : "";
   return {
     apiBaseUrl: String(runtime?.API_BASE_URL || sameOriginApiBaseUrl).trim().replace(/\/$/, ""),
     statusRefreshMs: Number(runtime?.STATUS_REFRESH_MS) || 10000,
