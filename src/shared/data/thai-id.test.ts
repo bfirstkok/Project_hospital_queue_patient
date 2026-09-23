@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidThaiNationalId } from "./thai-id";
+import { isValidThaiNationalId, formatMaskedNationalId } from "./thai-id";
 
 describe("isValidThaiNationalId", () => {
   it("accepts IDs with a correct check digit (ignoring dashes/spaces)", () => {
@@ -14,5 +14,14 @@ describe("isValidThaiNationalId", () => {
     expect(isValidThaiNationalId("1111111111111")).toBe(false);
     expect(isValidThaiNationalId("1101700230704")).toBe(false);
     expect(isValidThaiNationalId("")).toBe(false);
+  });
+});
+
+describe("formatMaskedNationalId", () => {
+  it("masks the middle digits of a 13-digit Thai National ID", () => {
+    expect(formatMaskedNationalId("1234567890123")).toBe("1-xxxx-xxxx0-12-3");
+    expect(formatMaskedNationalId("1-2345-67890-12-3")).toBe("1-xxxx-xxxx0-12-3");
+    expect(formatMaskedNationalId("")).toBe("-");
+    expect(formatMaskedNationalId(null)).toBe("-");
   });
 });

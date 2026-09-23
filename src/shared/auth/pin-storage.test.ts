@@ -8,6 +8,7 @@ import {
   hasPin,
   isLockedOut,
   isPinEnabled,
+  isWeakPin,
   MAX_FAILED_ATTEMPTS,
   readPairedPatient,
   resetLockout,
@@ -176,5 +177,33 @@ describe("pin-storage", () => {
     clearPin(natId1);
     expect(hasPin(natId1)).toBe(false);
     expect(hasPin(natId2)).toBe(true);
+  });
+
+  describe("isWeakPin", () => {
+    it("detects repeated identical 6 digits as weak", () => {
+      expect(isWeakPin("000000")).toBe(true);
+      expect(isWeakPin("111111")).toBe(true);
+      expect(isWeakPin("999999")).toBe(true);
+    });
+
+    it("detects sequential 6 digits as weak", () => {
+      expect(isWeakPin("012345")).toBe(true);
+      expect(isWeakPin("123456")).toBe(true);
+      expect(isWeakPin("234567")).toBe(true);
+      expect(isWeakPin("654321")).toBe(true);
+      expect(isWeakPin("987654")).toBe(true);
+    });
+
+    it("rejects invalid length or non-digits as weak", () => {
+      expect(isWeakPin("123")).toBe(true);
+      expect(isWeakPin("abcdef")).toBe(true);
+      expect(isWeakPin("")).toBe(true);
+    });
+
+    it("accepts strong non-trivial PINs", () => {
+      expect(isWeakPin("135246")).toBe(false);
+      expect(isWeakPin("842915")).toBe(false);
+      expect(isWeakPin("719382")).toBe(false);
+    });
   });
 });

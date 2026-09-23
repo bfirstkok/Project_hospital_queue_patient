@@ -24,3 +24,14 @@ export function isValidThaiNationalId(input: string): boolean {
   const check = (11 - (sum % 11)) % 10;
   return check === Number(digits[12]);
 }
+
+/**
+ * Formats a 13-digit Thai National ID with masking for PDPA privacy compliance.
+ * Example: "1234567890123" -> "1-xxxx-xxxx0-12-3"
+ */
+export function formatMaskedNationalId(id?: string | null): string {
+  if (!id) return "-";
+  const digits = String(id).replace(/\D/g, "");
+  if (digits.length !== 13) return String(id);
+  return `${digits[0]}-xxxx-xxxx${digits[9]}-${digits.slice(10, 12)}-${digits[12]}`;
+}

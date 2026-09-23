@@ -38,7 +38,7 @@ describe("AccountView", () => {
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "สมชาย ใจดี" })).toBeInTheDocument());
     expect(screen.getByText("Q-5")).toBeInTheDocument();
-    expect(screen.getAllByText("1234567890123").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1-xxxx-xxxx0-12-3").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/170 ซม\. · 65 กก\./)).toBeInTheDocument();
     const [, init] = vi.mocked(fetch).mock.calls[0];
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer token");

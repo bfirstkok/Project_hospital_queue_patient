@@ -63,20 +63,34 @@ describe("PinAuthView", () => {
 
     expect(screen.getByText("ตั้งรหัส PIN 6 หลัก")).toBeInTheDocument();
 
-    // Enter initial pin 123456
-    ["1", "2", "3", "4", "5", "6"].forEach((num) => {
+    // Enter initial strong pin 135246
+    ["1", "3", "5", "2", "4", "6"].forEach((num) => {
       fireEvent.click(screen.getByRole("button", { name: num }));
     });
 
     // Step 2: Confirm PIN
     expect(screen.getByText("ยืนยันรหัส PIN อีกครั้ง")).toBeInTheDocument();
 
-    // Enter confirmation pin 123456
-    ["1", "2", "3", "4", "5", "6"].forEach((num) => {
+    // Enter confirmation pin 135246
+    ["1", "3", "5", "2", "4", "6"].forEach((num) => {
       fireEvent.click(screen.getByRole("button", { name: num }));
     });
 
     expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects weak PIN during setup (repeated or sequential digits)", () => {
+    const onSuccess = vi.fn();
+    render(createElement(PinAuthView, { mode: "setup", onSuccess }));
+
+    // Try entering repeated digits 111111
+    ["1", "1", "1", "1", "1", "1"].forEach((num) => {
+      fireEvent.click(screen.getByRole("button", { name: num }));
+    });
+
+    expect(screen.getByText("รหัส PIN ง่ายเกินไป ไม่อนุญาตให้ใช้ตัวเลขซ้ำหรือเรียงกัน")).toBeInTheDocument();
+    expect(screen.getByText("ตั้งรหัส PIN 6 หลัก")).toBeInTheDocument();
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
   it("calls onSwitchAccount when switch account button is clicked", () => {
@@ -250,8 +264,8 @@ describe("PinAuthView", () => {
     expect(await screen.findByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
 
     const enter = (d: string[]) => d.forEach((n) => fireEvent.click(screen.getByRole("button", { name: n })));
-    enter(["9", "8", "7", "6", "5", "4"]); // new PIN
-    enter(["9", "8", "7", "6", "5", "4"]); // confirm
+    enter(["9", "5", "1", "7", "5", "3"]); // new PIN
+    enter(["9", "5", "1", "7", "5", "3"]); // confirm
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
   });

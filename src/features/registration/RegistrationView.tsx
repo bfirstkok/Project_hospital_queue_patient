@@ -221,7 +221,10 @@ export function RegistrationView({
     const form = event.currentTarget;
     setMessage("");
     setInvalidField("");
-    if (!form.reportValidity()) return;
+    if (!form.reportValidity()) {
+      setMessage("กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน");
+      return;
+    }
 
     const profileError = profileRef.current?.validate();
     if (profileError) {
@@ -372,8 +375,6 @@ export function RegistrationView({
         </div>
       )}
 
-      {message && <div className="alert" role="alert">{message}</div>}
-
       <form ref={formRef} className="form-card" autoComplete="on" onSubmit={submit}>
         <input name="website" className="honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" />
 
@@ -434,6 +435,12 @@ export function RegistrationView({
           <input name="consent" type="checkbox" defaultChecked required />
           <span>ข้าพเจ้าขอยืนยันว่าข้อมูลข้างต้นถูกต้องตรงตามความเป็นจริง และยินยอมให้ใช้ข้อมูลในการคัดกรองและจัดลำดับคิวรับบริการ <b>*</b></span>
         </label>
+
+        {message && (
+          <div className="alert" role="alert" style={{ marginBottom: "16px" }}>
+            {message}
+          </div>
+        )}
 
         <div className="form-actions">
           <button className="primary-button" type="submit" disabled={loading}>

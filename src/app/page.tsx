@@ -20,6 +20,7 @@ import type { PatientProfile, RegistrationResult } from "@/shared/api/types";
 import { SiteShell, type FontSize } from "@/shared/ui/SiteShell";
 import type { NavView } from "@/shared/ui/AppNavbar";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
+import { formatMaskedNationalId } from "@/shared/data/thai-id";
 
 type View =
   | "login"
@@ -239,7 +240,7 @@ export default function Page() {
           const natId = account.profile.national_id || "";
           const masked =
             natId.length === 13
-              ? `${natId[0]}-xxxx-xxxx${natId.slice(9, 11)}-${natId[12]}`
+              ? formatMaskedNationalId(natId)
               : undefined;
           savePairedPatient({
             name: `${account.profile.first_name} ${account.profile.last_name}`.trim(),

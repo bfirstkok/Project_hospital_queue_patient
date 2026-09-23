@@ -431,3 +431,27 @@ export function clearPairedPatient(): void {
     // ignore
   }
 }
+
+/**
+ * Validates PIN complexity by rejecting trivial or easily guessable patterns:
+ * - Repeated identical digits (000000, 111111, ..., 999999)
+ * - Sequential ascending or descending digits (012345, 123456, ..., 654321, 543210)
+ *
+ * @param {string} pin - 6-digit PIN string.
+ * @returns {boolean} True if PIN is considered weak or trivial.
+ */
+export function isWeakPin(pin: string): boolean {
+  if (!pin || typeof pin !== "string" || !/^\d{6}$/.test(pin)) {
+    return true;
+  }
+  // Repeated digits (e.g. 000000, 111111, ..., 999999)
+  if (/^(\d)\1{5}$/.test(pin)) {
+    return true;
+  }
+  // Sequential numbers (ascending & descending)
+  const sequentialPatterns = [
+    "012345", "123456", "234567", "345678", "456789", "567890",
+    "987654", "876543", "765432", "654321", "543210", "098765",
+  ];
+  return sequentialPatterns.includes(pin);
+}

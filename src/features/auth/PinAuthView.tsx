@@ -4,6 +4,7 @@ import {
   getLockoutRemainingSeconds,
   getRemainingAttempts,
   isLockedOut,
+  isWeakPin,
   MAX_FAILED_ATTEMPTS,
   readPairedPatient,
   recordFailedAttempt,
@@ -272,6 +273,10 @@ export function PinAuthView({
       }
     } else if (currentMode === "setup") {
       if (step === 1) {
+        if (isWeakPin(pin)) {
+          triggerError("รหัส PIN ง่ายเกินไป ไม่อนุญาตให้ใช้ตัวเลขซ้ำหรือเรียงกัน");
+          return;
+        }
         setTempPin(pin);
         setStep(2);
       } else if (step === 2) {
@@ -294,6 +299,10 @@ export function PinAuthView({
           triggerError("รหัส PIN เดิมไม่ถูกต้อง");
         }
       } else if (step === 2) {
+        if (isWeakPin(pin)) {
+          triggerError("รหัส PIN ง่ายเกินไป ไม่อนุญาตให้ใช้ตัวเลขซ้ำหรือเรียงกัน");
+          return;
+        }
         setTempPin(pin);
         setStep(3);
       } else if (step === 3) {
@@ -311,6 +320,10 @@ export function PinAuthView({
     } else if (currentMode === "reset") {
       // Step 3: Enter new PIN, Step 4: Confirm new PIN + verify OTP with backend
       if (step === 3) {
+        if (isWeakPin(pin)) {
+          triggerError("รหัส PIN ง่ายเกินไป ไม่อนุญาตให้ใช้ตัวเลขซ้ำหรือเรียงกัน");
+          return;
+        }
         setTempPin(pin);
         setStep(4);
       } else if (step === 4) {
@@ -434,7 +447,7 @@ export function PinAuthView({
       if (step === 1) {
         return {
           title: "ตั้งรหัส PIN 6 หลัก",
-          subtitle: "กำหนดรหัสสำหรับเข้าใช้งานแอปอย่างปลอดภัยเหมือนแอปธนาคาร",
+          subtitle: "กำหนดรหัสสำหรับเข้าใช้งานครั้งแรก (กรุณากรอก 2 ครั้งเพื่อยืนยัน)",
         };
       }
       return {

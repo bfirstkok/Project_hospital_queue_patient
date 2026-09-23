@@ -238,7 +238,29 @@ class MockBackendHandler(BaseHTTPRequestHandler):
         # 4. Password Recovery - Request OTP
         if path == "/api/patient/password/reset/request/":
             channel = body.get("channel", "email")
-            identifier = body.get("identifier", "")
+            identifier = str(body.get("identifier", "")).strip()
+
+            # Reject non-existent identifiers (Negative test case TC-FORGOT-003)
+            known_identifiers = {
+                "1234567890123", "somchai99", "1101700230708", "0812345678",
+                MOCK_PATIENT_PROFILE.get("national_id", ""),
+                MOCK_PATIENT_PROFILE.get("username", ""),
+                MOCK_PATIENT_PROFILE.get("email", ""),
+                MOCK_PATIENT_PROFILE.get("phone", ""),
+            }
+            is_negative = (
+                not identifier or
+                "notfound" in identifier.lower() or
+                "unknown" in identifier.lower() or
+                identifier in ["0000000000000", "0000000000", "invalid"]
+            )
+            if is_negative or (identifier not in known_identifiers and not identifier.endswith("@hospital.com") and not identifier.startswith("test")):
+                self._send_json(404, {
+                    "ok": False,
+                    "error": "ไม่พบข้อมูลผู้ป่วยในระบบ กรุณาตรวจสอบชื่อผู้ใช้ เลขบัตรประชาชน หรืออีเมล"
+                })
+                return
+
             response_data = {
                 "ok": True,
                 "message": f"ระบบได้ส่งรหัส OTP 6 หลักไปยัง {channel} เรียบร้อยแล้ว (รหัสทดสอบ: 123456)",
@@ -252,15 +274,17 @@ class MockBackendHandler(BaseHTTPRequestHandler):
         # 5. Password Recovery - Verify OTP
         if path == "/api/patient/password/reset/verify-otp/":
             otp = str(body.get("otp", "")).strip()
-            if len(otp) == 6:
+            if otp == "123456":
                 response_data = {
                     "ok": True,
                     "reset_token": "mock_reset_token_valid_998877",
                     "message": "ยืนยันรหัส OTP ถูกต้อง กรุณาตั้งรหัสผ่านใหม่"
                 }
                 self._send_json(200, response_data)
-            else:
+            elif len(otp) != 6:
                 self._send_json(400, {"ok": False, "error": "รหัส OTP ต้องมี 6 หลัก"})
+            else:
+                self._send_json(400, {"ok": False, "error": "รหัส OTP ไม่ถูกต้อง หรือหมดอายุแล้ว"})
             return
 
         # 6. Password Recovery - Confirm New Password

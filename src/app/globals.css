@@ -490,15 +490,18 @@ button {
 }
 
 .field-group-invalid {
-  border: 1.5px solid var(--danger-border);
-  background: var(--danger-bg);
-  padding: 14px;
+  border: 2px solid #ef4444;
+  background: #fef2f2;
+  padding: 16px;
   border-radius: var(--radius-md);
-  animation: shake 0.3s ease;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
+  animation: shake 0.35s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .field-group-invalid .field-group-title {
-  color: var(--danger);
+  color: #dc2626;
+  font-weight: 700;
 }
 
 .age-badge-notification {

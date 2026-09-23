@@ -6,6 +6,7 @@ import {
   type PatientProfileFormHandle,
 } from "@/features/patient-profile/PatientProfileForm";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
+import { formatMaskedNationalId } from "@/shared/data/thai-id";
 
 interface AccountViewProps {
   token: string;
@@ -403,7 +404,7 @@ function ProfileDetails({ profile }: { profile: PatientProfile }) {
 
   const rows: Array<[string, unknown, boolean?]> = [
     ["ชื่อ-นามสกุล", `${profile.first_name} ${profile.last_name}`],
-    ["เลขประจำตัวประชาชน", profile.national_id],
+    ["เลขประจำตัวประชาชน", formatMaskedNationalId(profile.national_id)],
     ["HN", profile.hn],
     ["เบอร์โทรศัพท์", profile.phone],
     ["เพศ", profile.gender === "M" ? "ชาย" : profile.gender === "F" ? "หญิง" : profile.gender === "O" ? "อื่น ๆ" : profile.gender],
