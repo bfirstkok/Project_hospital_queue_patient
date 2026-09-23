@@ -1,4 +1,19 @@
 {
   "liveServer.settings.root": "/dist",
-  "liveServer.settings.port": 5500
+  "liveServer.settings.port": 5500,
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.next": true,
+    "**/.ua": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "**/tsconfig.tsbuildinfo": true
+  }
 }

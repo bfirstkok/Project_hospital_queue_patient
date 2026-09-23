@@ -1,5 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap');
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ==========================================================================
    Design Tokens & CSS Variables (Unified Medical Theme for All Ages)
    ========================================================================== */
@@ -30,6 +34,16 @@
   --shadow-sm: 0 2px 6px rgba(13, 138, 125, 0.05);
   --shadow-card: 0 8px 28px rgba(13, 138, 125, 0.07), 0 2px 4px rgba(0, 0, 0, 0.02);
   --shadow-hover: 0 12px 32px rgba(13, 138, 125, 0.12), 0 4px 8px rgba(0, 0, 0, 0.04);
+
+  /* Dedicated Component Tokens (แก้สีเฉพาะจุด ไม่กระทบข้อความอื่น) */
+  --brand-logo-bg: #0d8a7d;
+  --brand-logo-text: #ffffff;
+  --brand-title-color: #0d8a7d;
+  --brand-subtitle-color: #5f7774;
+
+  --btn-primary-bg: #0d8a7d;
+  --btn-primary-hover: #086e63;
+  --btn-primary-text: #ffffff;
 }
 
 /* Font Size Scaler Modifiers (Universal & Senior Accessibility) */
@@ -141,8 +155,8 @@ button {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: var(--primary);
-  color: white;
+  background: var(--brand-logo-bg, var(--primary));
+  color: var(--brand-logo-text, white);
   font-size: 26px;
   font-weight: 700;
   box-shadow: 0 4px 14px rgba(13, 138, 125, 0.28);
@@ -152,13 +166,13 @@ button {
   display: block;
   font-size: 1.15rem;
   font-weight: 700;
-  color: var(--primary);
+  color: var(--brand-title-color, var(--primary));
   line-height: 1.2;
 }
 
 .brand small {
   display: block;
-  color: var(--muted);
+  color: var(--brand-subtitle-color, var(--muted));
   font-size: 0.85rem;
   font-weight: 500;
 }
@@ -900,13 +914,13 @@ input:disabled {
 
 .primary-button {
   border: 0;
-  background: var(--primary);
-  color: white;
+  background: var(--btn-primary-bg, var(--primary));
+  color: var(--btn-primary-text, white);
   box-shadow: 0 4px 16px rgba(13, 138, 125, 0.25);
 }
 
 .primary-button:hover:not(:disabled) {
-  background: var(--primary-hover);
+  background: var(--btn-primary-hover, var(--primary-hover));
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(13, 138, 125, 0.35);
 }
@@ -1431,6 +1445,172 @@ input:disabled {
 .auth-card form .primary-button {
   margin-top: 6px;
 }
+
+/* Authentication Extra Elements (Password Toggle, Forgot Password, Google Login) */
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.forgot-link {
+  font-size: 0.85rem;
+  color: var(--primary, #0d8a7d);
+  text-decoration: underline;
+  padding: 0;
+  cursor: pointer;
+}
+
+.forgot-link:hover {
+  color: var(--primary-hover, #086e63);
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrapper input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.password-input-wrapper input::-ms-reveal,
+.password-input-wrapper input::-ms-clear {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.toggle-password-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted, #64748b);
+  border-radius: var(--radius-sm, 6px);
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.toggle-password-btn:hover {
+  color: var(--primary, #0d8a7d);
+  background-color: var(--primary-light, rgba(13, 138, 125, 0.08));
+}
+
+.toggle-password-btn:focus-visible {
+  outline: 2px solid var(--primary, #0d8a7d);
+  outline-offset: 2px;
+}
+
+.toggle-password-btn svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.google-sign-in-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1.5px solid var(--line, #cbd5e1);
+  border-radius: var(--radius-md, 8px);
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.98rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.google-sign-in-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.google-sign-in-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.google-auth-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 6px 0;
+}
+
+#googleSignInDiv {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.google-icon {
+  flex-shrink: 0;
+}
+
+.forgot-password-modal {
+  max-width: 480px;
+  width: 95%;
+}
+
+.forgot-desc {
+  color: var(--ink-secondary, #475569);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.channel-select-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.channel-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1.5px solid var(--line, #cbd5e1);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  background: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.channel-pill.active {
+  border-color: var(--primary, #0d8a7d);
+  background: #f0fdf4;
+  color: #065f46;
+  font-weight: 600;
+}
+
+.channel-pill input[type="radio"] {
+  accent-color: var(--primary, #0d8a7d);
+  width: 18px;
+  height: 18px;
+}
+
 
 /* ==========================================================================
    Account & Patient Profile View
@@ -3808,168 +3988,4 @@ input:checked + .toggle-slider:before {
   }
 }
 
-/* Authentication & Password Recovery Styles */
-.field-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.forgot-link {
-  font-size: 0.85rem;
-  color: var(--primary, #0d8a7d);
-  text-decoration: underline;
-  padding: 0;
-  cursor: pointer;
-}
-
-.forgot-link:hover {
-  color: var(--primary-dark, #065f46);
-}
-
-.password-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.password-input-wrapper input {
-  width: 100%;
-  padding-right: 44px;
-}
-
-.password-input-wrapper input::-ms-reveal,
-.password-input-wrapper input::-ms-clear {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
-}
-
-.toggle-password-btn {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  outline: none;
-  cursor: pointer;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted, #64748b);
-  border-radius: var(--radius-sm, 6px);
-  transition: color 0.15s ease, background-color 0.15s ease;
-}
-
-.toggle-password-btn:hover {
-  color: var(--primary, #0d8a7d);
-  background-color: var(--primary-light, rgba(13, 138, 125, 0.08));
-}
-
-.toggle-password-btn:focus-visible {
-  outline: 2px solid var(--primary, #0d8a7d);
-  outline-offset: 2px;
-}
-
-.toggle-password-btn svg {
-  width: 20px;
-  height: 20px;
-  display: block;
-}
-
-.google-sign-in-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 16px;
-  background: #ffffff;
-  border: 1.5px solid var(--line, #cbd5e1);
-  border-radius: var(--radius-md, 8px);
-  color: #334155;
-  font-weight: 600;
-  font-size: 0.98rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.google-sign-in-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #94a3b8;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-}
-
-.google-sign-in-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.google-auth-wrapper {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 6px 0;
-}
-
-#googleSignInDiv {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.google-icon {
-  flex-shrink: 0;
-}
-
-.forgot-password-modal {
-  max-width: 480px;
-  width: 95%;
-}
-
-.forgot-desc {
-  color: var(--ink-secondary, #475569);
-  font-size: 0.92rem;
-  line-height: 1.5;
-  margin-bottom: 20px;
-}
-
-.channel-select-row {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 6px;
-}
-
-.channel-pill {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border: 1.5px solid var(--line, #cbd5e1);
-  border-radius: var(--radius-md, 8px);
-  cursor: pointer;
-  background: #ffffff;
-  transition: all 0.2s ease;
-}
-
-.channel-pill.active {
-  border-color: var(--primary, #0d8a7d);
-  background: #f0fdf4;
-  color: #065f46;
-  font-weight: 600;
-}
-
-.channel-pill input[type="radio"] {
-  accent-color: var(--primary, #0d8a7d);
-  width: 18px;
-  height: 18px;
-}
 
