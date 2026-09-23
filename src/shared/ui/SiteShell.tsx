@@ -9,6 +9,7 @@ export type FontSize = "normal" | "large" | "xlarge";
 interface SiteShellProps {
   currentView: string;
   onSelectView: (view: NavView) => void;
+  onHome?: () => void;
   hasSavedAccount: boolean;
   hasActiveQueue?: boolean;
   queueNumber?: string | null;
@@ -46,6 +47,7 @@ function getInitialFontSize(): FontSize {
 export function SiteShell({
   currentView,
   onSelectView,
+  onHome,
   hasSavedAccount,
   hasActiveQueue,
   queueNumber,
@@ -64,10 +66,12 @@ export function SiteShell({
         <div className="header-inner">
           <Link
             className="brand"
-            href="/"
+            href="/patient"
             onClick={(e) => {
               e.preventDefault();
-              if (hasSavedAccount) {
+              if (onHome) {
+                onHome();
+              } else if (hasSavedAccount) {
                 onSelectView("status");
               }
             }}

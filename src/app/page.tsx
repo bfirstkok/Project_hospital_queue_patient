@@ -216,6 +216,19 @@ export default function Page() {
   }
 
   /**
+   * Returns patient to home view (status view when authenticated, or login view when guest).
+   */
+  const handleHomeClick = useCallback(() => {
+    if (hasSavedAccount) {
+      setView("status");
+    } else {
+      setGoogleOnboarding(null);
+      setPendingAuth(null);
+      setView("login");
+    }
+  }, [hasSavedAccount]);
+
+  /**
    * Fetches patient profile from API and caches it in sessionStorage to show greeting name on PIN screen.
    */
   function fetchAndSavePairedProfile(accessToken: string) {
@@ -346,10 +359,16 @@ export default function Page() {
     );
   }
 
+  // Test hook: Allows testers to verify Error Boundary recovery UI by visiting ?simulate_crash=true
+  if (typeof window !== "undefined" && window.location.search.includes("simulate_crash=true")) {
+    throw new Error("Simulated Test Crash for Error Boundary Verification");
+  }
+
   return (
     <SiteShell
       currentView={view}
       onSelectView={handleSelectNav}
+      onHome={handleHomeClick}
       hasSavedAccount={hasSavedAccount}
       hasActiveQueue={hasActiveQueue}
       queueNumber={activeQueueNumber}

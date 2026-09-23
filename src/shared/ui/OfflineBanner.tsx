@@ -12,22 +12,59 @@ import { useEffect, useState } from "react";
  */
 export function OfflineBanner() {
   const [offline, setOffline] = useState(false);
+  const [justReconnected, setJustReconnected] = useState(false);
 
   useEffect(() => {
-    const sync = () => setOffline(!navigator.onLine);
-    sync();
-    window.addEventListener("online", sync);
-    window.addEventListener("offline", sync);
+    const handleOnline = () => {
+      setOffline(false);
+      setJustReconnected(true);
+      const timer = setTimeout(() => {
+        setJustReconnected(false);
+      }, 3500);
+      return () => clearTimeout(timer);
+    };
+
+    const handleOffline = () => {
+      setJustReconnected(false);
+      setOffline(true);
+    };
+
+    setOffline(!navigator.onLine);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
     return () => {
-      window.removeEventListener("online", sync);
-      window.removeEventListener("offline", sync);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, []);
 
-  if (!offline) return null;
+  if (!offline && !justReconnected) return null;
+
+  if (justReconnected) {
+    return (
+      <aside className="offline-banner is-online" role="status" aria-live="polite">
+        <div className="offline-banner-icon">
+          <span>✓</span>
+        </div>
+        <div className="offline-banner-content">
+          <strong className="offline-banner-title">เชื่อมต่ออินเทอร์เน็ตแล้ว</strong>
+          <span className="offline-banner-desc">ระบบกลับมาทำงานและอัปเดตสถานะคิวตามปกติ</span>
+        </div>
+      </aside>
+    );
+  }
+
   return (
-    <div className="offline-banner" role="status">
-      ⚠️ ไม่มีการเชื่อมต่ออินเทอร์เน็ต ระบบจะหยุดอัปเดตคิวชั่วคราวจนกว่าจะเชื่อมต่อได้อีกครั้ง
-    </div>
+    <aside className="offline-banner" role="status" aria-live="assertive">
+      <div className="offline-banner-icon">
+        <span className="offline-pulse-dot" aria-hidden="true" />
+        <span aria-hidden="true">📡</span>
+      </div>
+      <div className="offline-banner-content">
+        <strong className="offline-banner-title">ไม่มีการเชื่อมต่ออินเทอร์เน็ต</strong>
+        <span className="offline-banner-desc">ระบบหยุดอัปเดตคิวชั่วคราว กำลังรอสัญญาณ...</span>
+      </div>
+    </aside>
   );
 }
