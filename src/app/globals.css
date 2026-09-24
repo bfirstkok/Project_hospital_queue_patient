@@ -1585,27 +1585,10 @@ input:disabled {
 #googleSignInDiv {
   width: min(100%, 400px);
   min-height: 44px;
-  max-height: 52px;
   display: flex;
   justify-content: center;
   align-items: center;
   overflow: hidden;
-}
-
-#googleSignInDiv > div {
-  width: 100% !important;
-  max-width: 400px !important;
-}
-
-#googleSignInDiv iframe {
-  display: block !important;
-  width: 100% !important;
-  max-width: 400px !important;
-  height: 44px !important;
-  min-height: 44px !important;
-  max-height: 44px !important;
-  margin: 0 auto !important;
-  border: 0 !important;
 }
 
 .google-icon {
@@ -1623,39 +1606,6 @@ input:disabled {
   line-height: 1.5;
   margin-bottom: 20px;
 }
-
-.channel-select-row {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 6px;
-}
-
-.channel-pill {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border: 1.5px solid var(--line, #cbd5e1);
-  border-radius: var(--radius-md, 8px);
-  cursor: pointer;
-  background: #ffffff;
-  transition: all 0.2s ease;
-}
-
-.channel-pill.active {
-  border-color: var(--primary, #0d8a7d);
-  background: #f0fdf4;
-  color: #065f46;
-  font-weight: 600;
-}
-
-.channel-pill input[type="radio"] {
-  accent-color: var(--primary, #0d8a7d);
-  width: 18px;
-  height: 18px;
-}
-
 
 /* ==========================================================================
    Account & Patient Profile View
@@ -3500,46 +3450,6 @@ input:checked + .toggle-slider:before {
   margin-top: 4px;
   font-size: 0.78rem;
   color: var(--muted);
-}
-
-/* Recovery Method Tabs (Email / Phone) */
-.recovery-method-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  background: var(--surface-alt);
-  padding: 6px;
-  border-radius: var(--radius-md);
-  border: 1.5px solid var(--line);
-  margin-bottom: 8px;
-}
-
-.recovery-tab-btn {
-  border: none;
-  background: transparent;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.recovery-tab-btn.active {
-  background: #ffffff;
-  color: var(--primary-hover);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--primary-border);
-}
-
-.recovery-tab-btn:hover:not(.active) {
-  background: rgba(0, 0, 0, 0.03);
-  color: var(--ink);
 }
 
 .pin-manage-btn-secondary {

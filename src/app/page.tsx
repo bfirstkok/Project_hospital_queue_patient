@@ -15,7 +15,7 @@ import {
   readPairedPatient,
   savePairedPatient,
 } from "@/shared/auth/pin-storage";
-import { patientApi } from "@/shared/api/patient-api";
+import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { PatientProfile, RegistrationResult } from "@/shared/api/types";
 import { SiteShell, type FontSize } from "@/shared/ui/SiteShell";
 import type { NavView } from "@/shared/ui/AppNavbar";
@@ -227,24 +227,22 @@ export default function Page() {
   /**
    * ดึงข้อมูลโปรไฟล์ผู้ป่วยจากเซิร์ฟเวอร์มาบันทึกไว้ใน sessionStorage เพื่อนำชื่อมาแสดงทักทายในหน้า PIN
    */
+  function cachePairedProfile(profile: PatientProfile) {
+    const natId = profile.national_id || "";
+    savePairedPatient({
+      name: `${profile.first_name} ${profile.last_name}`.trim(),
+      nationalId: natId,
+      maskedId: natId.length === 13 ? formatMaskedNationalId(natId) : undefined,
+      phone: profile.phone || undefined,
+      email: profile.email || undefined,
+    });
+  }
+
   function fetchAndSavePairedProfile(accessToken: string) {
     patientApi
       .account(accessToken)
       .then((account) => {
-        if (account.profile) {
-          const natId = account.profile.national_id || "";
-          const masked =
-            natId.length === 13
-              ? formatMaskedNationalId(natId)
-              : undefined;
-          savePairedPatient({
-            name: `${account.profile.first_name} ${account.profile.last_name}`.trim(),
-            nationalId: natId,
-            maskedId: masked,
-            phone: account.profile.phone || undefined,
-            email: account.profile.email || undefined,
-          });
-        }
+        if (account.profile) cachePairedProfile(account.profile);
       })
       .catch((reason) => {
         console.warn("Could not cache paired patient profile:", reason);
@@ -269,13 +267,18 @@ export default function Page() {
    * จัดการเมื่อเข้าสู่ระบบด้วยรหัสผ่านหรือ Google สำเร็จ:
    * นำทางไปยังหน้าปลดล็อก PIN หรือหน้าตั้งรหัส PIN ใหม่
    */
-  function loginSuccess(accessToken: string, nationalId?: string) {
-    setPendingAuth({ token: accessToken, nationalId });
+  async function loginSuccess(accessToken: string, nationalId?: string) {
+    const account = await patientApi.account(accessToken);
+    const resolvedId = account.profile?.national_id?.trim();
+    if (!resolvedId || (nationalId && nationalId !== resolvedId)) {
+      throw new ApiError("ข้อมูลบัญชีไม่ตรงกัน กรุณาติดต่อเจ้าหน้าที่");
+    }
+    cachePairedProfile(account.profile);
+    setPendingAuth({ token: accessToken, nationalId: resolvedId });
     setInitialQueue(null);
     setQueueActive(false);
-    fetchAndSavePairedProfile(accessToken);
 
-    const userHasPin = hasPin(nationalId);
+    const userHasPin = hasPin(resolvedId);
     if (userHasPin) {
       setView("pin_unlock");
     } else {
@@ -325,7 +328,7 @@ export default function Page() {
   }
 
   // ดึงเลขบัตรประชาชนสำหรับใช้ระบุตัวตนในทุกหน้าจอ PIN
-  const pinNationalId = pendingAuth?.nationalId || readPairedPatient()?.nationalId || undefined;
+  const pinNationalId = pendingAuth ? pendingAuth.nationalId : readPairedPatient()?.nationalId || undefined;
 
   // ตรวจสอบว่าหน้าจอปัจจุบันเป็นหน้าจอด่านความปลอดภัย (Authentication Gate) หรือไม่ เพื่อสั่งซ่อน Navbar
   const isAuthGateView =
@@ -474,7 +477,9 @@ export default function Page() {
           }}
           onSuccess={registrationSuccess}
           onUnauthorized={expireSession}
-          onDuplicateQueue={(existingToken, natId) => loginSuccess(existingToken, natId || undefined)}
+          onDuplicateQueue={(existingToken, natId) => {
+            void loginSuccess(existingToken, natId || undefined).catch(() => setView("login"));
+          }}
         />
       )}
 

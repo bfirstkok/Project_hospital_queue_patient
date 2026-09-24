@@ -9,7 +9,7 @@ type GoogleSuggestedProfile = NonNullable<GoogleAuthResult["suggested_profile"]>
 
 interface LoginViewProps {
   onRegister: () => void;                                                                           // นำทางไปหน้าลงทะเบียนใหม่
-  onSuccess: (token: string, nationalId?: string) => void;                                          // เมื่อเข้าสู่ระบบสำเร็จ
+  onSuccess: (token: string, nationalId?: string) => Promise<void> | void;                          // เมื่อเข้าสู่ระบบสำเร็จ
   onGoogleRegister?: (tempToken: string, suggestedProfile?: GoogleSuggestedProfile) => void;        // กรณีล็อกอิน Google แล้วพบว่าเป็นผู้ใช้ใหม่
 }
 
@@ -58,7 +58,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
       const result = await patientApi.loginWithGoogle(credential);
       // กรณีเป็นผู้ป่วยเดิมที่มีประวัติในโรงพยาบาลอยู่แล้ว
       if (result.access_token) {
-        onSuccess(result.access_token);
+        await onSuccess(result.access_token, result.profile?.national_id || undefined);
         return;
       }
       // กรณีเป็นผู้ใช้ใหม่: ส่งข้อมูลโปรไฟล์ที่ดึงมาจาก Google ไปหน้าลงทะเบียน
@@ -108,6 +108,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
           size: "large",
           shape: "rectangular",
           text: "signin_with",
+          locale: "th",
           logo_alignment: "left",
           width: buttonWidth,
         });
@@ -171,7 +172,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
       } catch {
         // ข้ามข้อผิดพลาด storage
       }
-      onSuccess(result.access_token, cleanDigits.length === 13 ? cleanDigits : undefined);
+      await onSuccess(result.access_token, result.profile?.national_id || (cleanDigits.length === 13 ? cleanDigits : undefined));
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "ไม่สามารถเข้าสู่ระบบได้");
       setMessage(apiError.message === "Failed to fetch" ? "เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่อีกครั้ง" : apiError.message);

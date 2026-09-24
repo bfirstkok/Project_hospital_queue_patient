@@ -156,8 +156,7 @@ export function getPinKey(nationalId?: string): string {
 export function readPin(nationalId?: string): string | null {
   if (typeof window === "undefined") return null;
   if (nationalId && nationalId.trim()) {
-    const patientPin = window.localStorage.getItem(getPinKey(nationalId));
-    if (patientPin) return patientPin;
+    return window.localStorage.getItem(getPinKey(nationalId));
   }
   return window.localStorage.getItem(PIN_STORAGE_KEY);
 }

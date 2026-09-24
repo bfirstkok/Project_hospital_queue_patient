@@ -86,6 +86,10 @@ def find_account(identifier):
     value = str(identifier or "").strip().lower()
     if not value:
         return None
+    if "@" in value:
+        matches = [account for account in ACCOUNTS.values()
+                   if str(account["profile"].get("email") or "").strip().lower() == value]
+        return matches[0] if len(matches) == 1 else None
     for account in ACCOUNTS.values():
         profile = account["profile"]
         if value in {str(profile.get(key) or "").strip().lower() for key in ("username", "email", "national_id", "phone")}:

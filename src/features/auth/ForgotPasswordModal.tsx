@@ -25,7 +25,6 @@ type Step = "request" | "verify" | "reset" | "completed";
 export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswordModalProps) {
   const [step, setStep] = useState<Step>("request");
   const [identifier, setIdentifier] = useState("");
-  const [channel, setChannel] = useState<"email" | "sms">("email");
   const [otp, setOtp] = useState("");
   const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -63,7 +62,7 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
   if (!isOpen) return null;
 
   /**
-   * ขั้นตอนที่ 1: ส่งคำขอรหัส OTP ไปยังช่องทางที่เลือก (Email หรือ SMS)
+   * ขั้นตอนที่ 1: ส่งคำขอรหัส OTP ไปยังอีเมลที่ลงทะเบียนไว้
    */
   async function handleRequestOtp(e: FormEvent) {
     e.preventDefault();
@@ -76,7 +75,7 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
     try {
       const res = await patientApi.requestPasswordReset({
         identifier: identifier.trim(),
-        channel,
+        channel: "email",
       });
       setSuccessMessage(res.message || "ระบบได้ส่งรหัส OTP เรียบร้อยแล้ว");
       setCooldown(res.cooldown_seconds || 60);
@@ -198,31 +197,7 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
               />
             </label>
 
-            <label className="field">
-              <span>ช่องทางรับรหัส OTP <b>*</b></span>
-              <div className="channel-select-row">
-                <label className={`channel-pill ${channel === "email" ? "active" : ""}`}>
-                  <input
-                    type="radio"
-                    name="channel"
-                    value="email"
-                    checked={channel === "email"}
-                    onChange={() => setChannel("email")}
-                  />
-                  <span>📧 ส่งรหัสทาง อีเมล (Email)</span>
-                </label>
-                <label className={`channel-pill ${channel === "sms" ? "active" : ""}`}>
-                  <input
-                    type="radio"
-                    name="channel"
-                    value="sms"
-                    checked={channel === "sms"}
-                    onChange={() => setChannel("sms")}
-                  />
-                  <span>📱 ส่งรหัสทาง SMS (เบอร์มือถือ)</span>
-                </label>
-              </div>
-            </label>
+            <p className="forgot-desc">รหัส OTP จะส่งไปยังอีเมลที่ลงทะเบียนไว้</p>
 
             <div className="modal-actions" style={{ marginTop: "24px" }}>
               <button className="primary-button" type="submit" disabled={loading}>
@@ -239,7 +214,7 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
         {step === "verify" && (
           <form onSubmit={handleVerifyOtp} className="forgot-password-form">
             <p className="forgot-desc">
-              กรุณากรอกรหัส OTP 6 หลักที่ได้รับทาง {channel === "email" ? "อีเมล" : "SMS"}
+              กรุณากรอกรหัส OTP 6 หลักที่ได้รับทางอีเมล
             </p>
 
             <label className="field">

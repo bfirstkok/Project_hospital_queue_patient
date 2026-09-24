@@ -82,7 +82,7 @@ describe("LoginView", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" }));
 
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("google_token"));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("google_token", undefined));
     const [url, init] = vi.mocked(fetch).mock.calls[0];
     expect(String(url)).toContain("/api/patient/auth/google/");
     expect(init?.body).toContain('"credential":"google-credential"');
@@ -188,7 +188,7 @@ describe("LoginView", () => {
       capturedCallback!({ credential: "real_jwt_from_google" });
     });
 
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("real_google_session_token"));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("real_google_session_token", undefined));
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       "https://hospital.example.com/api/patient/auth/google/",
       expect.objectContaining({

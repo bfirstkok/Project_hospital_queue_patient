@@ -140,8 +140,8 @@ export interface ProfileUpdatePayload {
 // ข้อมูลร้องขอรหัส OTP สำหรับรีเซ็ต PIN
 export interface PinResetRequestPayload {
   national_id: string;               // เลขประจำตัวประชาชน
-  channel: "phone" | "email";        // ช่องทางรับ OTP (เบอร์โทรศัพท์ หรือ อีเมล)
-  target: string;                    // เบอร์โทรศัพท์หรืออีเมลปลายทาง
+  channel: "email";                  // ช่องทางรับ OTP
+  target: string;                    // อีเมลปลายทาง
 }
 
 // ข้อมูลยืนยันการตั้งรหัส PIN ใหม่ด้วยรหัส OTP
@@ -159,6 +159,7 @@ export interface RegistrationResult extends QueueData {
 // ข้อมูลผลลัพธ์การเข้าสู่ระบบสำเร็จ
 export interface LoginResult extends ApiEnvelope {
   access_token: string;
+  profile?: PatientProfile;
 }
 
 // ข้อมูลผลลัพธ์การตั้งค่ารหัส PIN
@@ -185,6 +186,7 @@ export interface GoogleAuthPayload {
 // ข้อมูลผลลัพธ์การตรวจสอบตัวตนผ่าน Google OAuth
 export interface GoogleAuthResult extends ApiEnvelope {
   access_token?: string;             // โทเค็นเข้าใช้งาน (กรณีเป็นผู้ใช้เดิม)
+  profile?: PatientProfile;
   is_new_user?: boolean;             // แฟล็กบอกว่าเป็นผู้ใช้ใหม่ที่ต้องลงทะเบียนเพิ่มหรือไม่
   temp_token?: string;               // โทเค็นชั่วคราวสำหรับส่งต่อฟอร์มลงทะเบียน
   suggested_profile?: {              // ข้อมูลเบื้องต้นที่ดึงมาจาก Google Account
@@ -197,7 +199,7 @@ export interface GoogleAuthResult extends ApiEnvelope {
 // ข้อมูลส่งคำขอรีเซ็ตรหัสผ่าน (ระบุตัวตนและช่องทางรับ OTP)
 export interface PasswordResetRequestPayload {
   identifier: string;
-  channel: "email" | "sms";
+  channel: "email";
 }
 
 // ข้อมูลตอบกลับเมื่อส่งคำขอ OTP สำหรับรีเซ็ตรหัสผ่าน

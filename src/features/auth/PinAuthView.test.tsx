@@ -191,7 +191,7 @@ describe("PinAuthView", () => {
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
-  it("recovers PIN via OTP to the registered phone (no re-typing)", async () => {
+  it("recovers PIN via OTP to the registered email (no re-typing)", async () => {
     window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
     vi.stubGlobal("fetch", okFetch());
     savePairedPatient({
@@ -200,16 +200,15 @@ describe("PinAuthView", () => {
     });
     render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess: vi.fn() }));
 
-    expect(screen.getByText("กู้คืนรหัส PIN ผ่านเบอร์โทร / อีเมล")).toBeInTheDocument();
-    // Masked registered phone is shown; there is no free-text input.
-    expect(screen.getByText("081-xxx-xx78")).toBeInTheDocument();
+    expect(screen.getByText("กู้คืนรหัส PIN ทางอีเมล")).toBeInTheDocument();
+    expect(screen.getByText("ki•••@example.com")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("08xxxxxxxx")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /ขอรหัส OTP ทาง SMS/ }));
+    fireEvent.click(screen.getByRole("button", { name: /ขอรหัสยืนยันทางอีเมล/ }));
     expect(await screen.findByRole("heading", { name: "ยืนยันรหัส OTP" })).toBeInTheDocument();
 
     const [, init] = vi.mocked(fetch).mock.calls[0];
-    expect(JSON.parse(init?.body as string)).toMatchObject({ channel: "phone", target: "0812345678" });
+    expect(JSON.parse(init?.body as string)).toMatchObject({ channel: "email", target: "kitti@example.com" });
 
     fireEvent.change(screen.getByPlaceholderText("123456"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /ยืนยันรหัส OTP/ }));
@@ -225,8 +224,7 @@ describe("PinAuthView", () => {
     });
     render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess: vi.fn() }));
 
-    fireEvent.click(screen.getByRole("tab", { name: /อีเมล/ }));
-    expect(screen.getByText("ki•••@example.com")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /เบอร์โทรศัพท์/ })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /ขอรหัสยืนยันทางอีเมล/ }));
     expect(await screen.findByRole("heading", { name: "ยืนยันรหัส OTP" })).toBeInTheDocument();
@@ -236,7 +234,7 @@ describe("PinAuthView", () => {
     expect(screen.getByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
   });
 
-  it("falls back to national-ID verification when the OTP endpoint is unavailable", async () => {
+  it("does not bypass email OTP when the endpoint is unavailable", async () => {
     window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
     vi.stubGlobal(
       "fetch",
@@ -258,21 +256,16 @@ describe("PinAuthView", () => {
     const onSuccess = vi.fn();
     render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess }));
 
-    fireEvent.click(screen.getByRole("button", { name: /ขอรหัส OTP ทาง SMS/ }));
-
-    // OTP request 404s -> identity verified via /login/ -> straight to "set new PIN"
-    expect(await screen.findByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
-
-    const enter = (d: string[]) => d.forEach((n) => fireEvent.click(screen.getByRole("button", { name: n })));
-    enter(["9", "5", "1", "7", "5", "3"]); // new PIN
-    enter(["9", "5", "1", "7", "5", "3"]); // confirm
-
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: /ขอรหัสยืนยันทางอีเมล/ }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("กู้คืนรหัส PIN ทางอีเมล")).toBeInTheDocument();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/api/patient/login/"))).toBe(false);
   });
 
-  it("blocks recovery only when the national ID is also missing", () => {
+  it("blocks recovery when the account has no email", () => {
     render(createElement(PinAuthView, { mode: "reset", onSuccess: vi.fn() }));
-    fireEvent.click(screen.getByRole("button", { name: /ยืนยันตัวตนด้วยเลขบัตรประชาชน/ }));
-    expect(screen.getByText(/ไม่พบเลขบัตรประชาชนสำหรับการกู้คืนรหัส/)).toBeInTheDocument();
+    expect(screen.getByText(/ยังไม่มีอีเมลสำหรับกู้ PIN/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ขอรหัสยืนยันทางอีเมล/ })).toBeDisabled();
   });
 });

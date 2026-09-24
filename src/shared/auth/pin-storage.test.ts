@@ -165,6 +165,7 @@ describe("pin-storage", () => {
 
     savePin("123456", natId1);
     expect(hasPin(natId1)).toBe(true);
+    expect(hasPin(natId2)).toBe(false);
     expect(verifyPin("123456", natId1)).toBe(true);
     expect(verifyPin("654321", natId1)).toBe(false);
 

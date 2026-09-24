@@ -146,7 +146,7 @@ export const patientApi = {
   }),
 
   /**
-   * ส่งคำขอรับรหัส OTP สำหรับรีเซ็ตรหัสผ่าน ทาง SMS หรือ อีเมล
+   * ส่งคำขอรับรหัส OTP สำหรับรีเซ็ตรหัสผ่านทางอีเมล
    * Endpoint: POST /api/patient/password/reset/request/
    */
   requestPasswordReset: (payload: PasswordResetRequestPayload) => request<PasswordResetRequestResult>("/api/patient/password/reset/request/", {

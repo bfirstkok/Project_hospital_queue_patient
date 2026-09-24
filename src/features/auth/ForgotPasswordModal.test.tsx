@@ -38,6 +38,7 @@ describe("ForgotPasswordModal", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /ยืนยันรหัส OTP/ })).toBeDefined();
     });
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)).toMatchObject({ channel: "email" });
 
     // Step 2: Verify OTP response
     vi.mocked(fetch).mockResolvedValueOnce(

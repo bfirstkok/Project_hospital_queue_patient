@@ -5,7 +5,8 @@ const output = resolve("out");
 const dist = resolve("dist");
 const distPatient = resolve("dist/patient");
 
-// คัดลอกไฟล์จาก Next.js Static Export (โฟลเดอร์ out) ไปยัง dist และ dist/patient เพื่อรองรับทั้ง Base URL และ Subpath /patient
+// อัปเดตไฟล์ใน dist เดิมโดยไม่เปลี่ยนตัวโฟลเดอร์ เพราะ Caddy bind mount โฟลเดอร์นี้อยู่
+// หาก build ล้มเหลวสคริปต์นี้จะไม่ถูกเรียก และ dist ที่ใช้งานอยู่จะยังคงอยู่
 await cp(output, dist, { recursive: true });
 await cp(output, distPatient, { recursive: true });
 await rm(output, { force: true, recursive: true });
@@ -19,7 +20,7 @@ try {
     content = content.replace("<head>", `<head>${redirectScript}`);
     await writeFile(rootHtmlPath, content, "utf8");
   }
-} catch {
-  // ไม่ต้องดำเนินการใดหากไม่พบไฟล์ root index.html
+} catch (error) {
+  throw new Error(`Missing published index.html: ${rootHtmlPath}`, { cause: error });
 }
 

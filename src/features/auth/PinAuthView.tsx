@@ -25,16 +25,6 @@ function formatLockoutDuration(seconds: number): string {
 }
 
 /**
- * ซ่อนเบอร์โทรศัพท์บางส่วน (Masking) ตามมาตรฐาน PDPA
- * ตัวอย่าง: "0812345678" -> "081-xxx-xx78"
- */
-function maskPhone(raw: string): string {
-  const d = raw.replace(/\D/g, "");
-  if (d.length < 4) return d;
-  return `${d.slice(0, 3)}-xxx-xx${d.slice(-2)}`;
-}
-
-/**
  * ซ่อนอีเมลบางส่วน (Masking) ตามมาตรฐาน PDPA
  * ตัวอย่าง: "somchai@gmail.com" -> "so•••••@gmail.com"
  */
@@ -67,7 +57,7 @@ interface PinAuthViewProps {
  * 1. 'unlock': ปลดล็อกเข้าใช้งานระบบ มีระบบล็อกบัญชีอัตโนมัติ (Lockout) เมื่อกรอกผิดเกิน 3 ครั้ง
  * 2. 'setup': ตัวช่วยสร้างรหัส PIN ใหม่ 2 ขั้นตอน (กรอกครั้งที่ 1 + ยืนยันครั้งที่ 2)
  * 3. 'change': เปลี่ยนรหัส PIN เดิมเป็นรหัสใหม่ 3 ขั้นตอน (ยืนยันรหัสเดิม -> กรอกรหัสใหม่ -> ยืนยันรหัสใหม่)
- * 4. 'reset': กู้คืนรหัส PIN ผ่านรหัส OTP ทางเบอร์โทรศัพท์ (SMS) หรืออีเมลที่ลงทะเบียนไว้
+ * 4. 'reset': กู้คืนรหัส PIN ผ่านรหัส OTP ทางอีเมลที่ลงทะเบียนไว้
  */
 export function PinAuthView({
   mode: initialMode,
@@ -89,15 +79,13 @@ export function PinAuthView({
   const [isShaking, setIsShaking] = useState<boolean>(false);
   const [lockoutSeconds, setLockoutSeconds] = useState<number>(() => getLockoutRemainingSeconds());
 
-  // ตัวแปรสำหรับระบบกู้คืน PIN ด้วย OTP (ส่งตรงไปยังเบอร์หรืออีเมลที่ลงทะเบียนไว้)
-  const [recoveryMethod, setRecoveryMethod] = useState<"phone" | "email">("phone");
+  // ตัวแปรสำหรับระบบกู้คืน PIN ด้วย OTP ทางอีเมล
   const [otpCode, setOtpCode] = useState<string>("");
   const [otpSent, setOtpSent] = useState<boolean>(false);
   const [otpCountdown, setOtpCountdown] = useState<number>(60);
   const [sendingOtp, setSendingOtp] = useState<boolean>(false);
   const [confirmingReset, setConfirmingReset] = useState<boolean>(false);
   const [verifyingPin, setVerifyingPin] = useState<boolean>(false);
-  const [otpUnavailable, setOtpUnavailable] = useState<boolean>(false);
 
   // ข้อมูลระบุตัวตนของผู้ป่วยที่ผูกกับเครื่องนี้
   const [pairedInfo, setPairedInfo] = useState<{
@@ -110,12 +98,8 @@ export function PinAuthView({
     setEnteredPin("");
     setErrorMessage("");
     setLockoutSeconds(getLockoutRemainingSeconds());
-    setOtpUnavailable(false);
     const paired = readPairedPatient();
     setPairedInfo(paired);
-    if (initialMode === "reset") {
-      setRecoveryMethod(paired?.phone ? "phone" : "email");
-    }
   }, [initialMode]);
 
   useEffect(() => {
@@ -157,9 +141,7 @@ export function PinAuthView({
     (typeof window !== "undefined" ? window.localStorage.getItem("patient_national_id") || "" : "");
 
   // ช่องทางปลายทางสำหรับส่ง OTP (ดึงจากบัญชีผู้ป่วย ไม่ต้องพิมพ์เอง เพื่อป้องกันการสวมรอย)
-  const registeredPhone = (pairedInfo?.phone || "").replace(/\D/g, "");
-  const registeredEmail = (pairedInfo?.email || "").trim();
-  const recoveryTarget = recoveryMethod === "phone" ? registeredPhone : registeredEmail;
+  const registeredEmail = pairedInfo?.nationalId === resetNationalId ? (pairedInfo.email || "").trim() : "";
 
   /**
    * แสดงข้อความเตือน พร้อมแอนิเมชันสั่นปุ่ม (Shake) และสั่นโทรศัพท์ (Haptic Feedback)
@@ -338,9 +320,7 @@ export function PinAuthView({
         if (confirmingReset) return;
         setConfirmingReset(true);
         try {
-          if (!otpUnavailable) {
-            await patientApi.confirmPinReset({ national_id: resetNationalId, otp: otpCode, pin });
-          }
+          await patientApi.confirmPinReset({ national_id: resetNationalId, otp: otpCode, pin });
           savePin(pin, nationalId);
           if (onPinConfigured) {
             void onPinConfigured(pin);
@@ -364,10 +344,9 @@ export function PinAuthView({
   }
 
   /**
-   * ส่งคำขอรับรหัส OTP สำหรับรีเซ็ต PIN ทาง SMS หรืออีเมล
+   * ส่งคำขอรับรหัส OTP สำหรับรีเซ็ต PIN ทางอีเมล
    */
-  async function handleSendOtp(e: React.FormEvent) {
-    e.preventDefault();
+  async function requestResetOtp() {
     if (sendingOtp) return;
 
     if (!resetNationalId) {
@@ -378,11 +357,11 @@ export function PinAuthView({
     setErrorMessage("");
     setSendingOtp(true);
     try {
-      if (!recoveryTarget) throw new ApiError("no-registered-contact", 404);
+      if (!registeredEmail) throw new ApiError("บัญชีนี้ยังไม่มีอีเมลสำหรับกู้ PIN กรุณาติดต่อเจ้าหน้าที่");
       await patientApi.requestPinReset({
         national_id: resetNationalId,
-        channel: recoveryMethod,
-        target: recoveryTarget,
+        channel: "email",
+        target: registeredEmail,
       });
       setOtpSent(true);
       setOtpCountdown(60);
@@ -392,26 +371,7 @@ export function PinAuthView({
       const apiError = reason instanceof ApiError
         ? reason
         : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถส่งรหัส OTP ได้");
-      const endpointMissing =
-        !apiError.status || apiError.status === 404 || apiError.status === 405 || apiError.message === "Failed to fetch";
-      if (!endpointMissing) {
-        setErrorMessage(apiError.message);
-        setSendingOtp(false);
-        return;
-      }
-      // หาก API ฝั่ง OTP ยังไม่พร้อมใช้งาน ให้ยืนยันตัวตนด้วยเลขบัตรประชาชนแทน
-      try {
-        await patientApi.login(resetNationalId);
-        setOtpUnavailable(true);
-        setStep(3);
-      } catch (loginReason) {
-        const le = loginReason instanceof ApiError ? loginReason : new ApiError("");
-        setErrorMessage(
-          le.message === "Failed to fetch"
-            ? "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง"
-            : "ยืนยันตัวตนไม่สำเร็จ กรุณาตรวจสอบเลขบัตรประชาชน หรือเข้าสู่ระบบใหม่",
-        );
-      }
+      setErrorMessage(apiError.message === "Failed to fetch" ? "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง" : apiError.message);
     } finally {
       setSendingOtp(false);
     }
@@ -473,26 +433,20 @@ export function PinAuthView({
     if (currentMode === "reset") {
       if (step === 1) {
         return {
-          title: "กู้คืนรหัส PIN ผ่านเบอร์โทร / อีเมล",
-          subtitle: recoveryTarget
-            ? "เลือกช่องทางรับรหัสยืนยัน OTP ระบบจะส่งไปยังเบอร์โทรหรืออีเมลที่ลงทะเบียนไว้"
-            : "ระบบจะยืนยันตัวตนด้วยเลขบัตรประชาชนที่เข้าสู่ระบบไว้ แล้วให้ตั้งรหัส PIN ใหม่",
+          title: "กู้คืนรหัส PIN ทางอีเมล",
+          subtitle: "ระบบจะส่งรหัส OTP ไปยังอีเมลที่ลงทะเบียนไว้",
         };
       }
       if (step === 2) {
-        const targetDesc =
-          recoveryMethod === "phone" ? `เบอร์โทรศัพท์ ${maskPhone(registeredPhone)}` : `อีเมล ${maskEmail(registeredEmail)}`;
         return {
           title: "ยืนยันรหัส OTP",
-          subtitle: `กรอกรหัส OTP 6 หลักที่ส่งไปยัง ${targetDesc}`,
+          subtitle: `กรอกรหัส OTP 6 หลักที่ส่งไปยังอีเมล ${maskEmail(registeredEmail)}`,
         };
       }
       if (step === 3) {
         return {
           title: "ตั้งรหัส PIN ใหม่ 6 หลัก",
-          subtitle: otpUnavailable
-            ? "ยืนยันตัวตนด้วยเลขบัตรประชาชนเรียบร้อย กำหนดรหัส PIN ใหม่ที่คุณต้องการ"
-            : "กำหนดรหัส PIN ใหม่ที่คุณต้องการ",
+          subtitle: "กำหนดรหัส PIN ใหม่ที่คุณต้องการ",
         };
       }
       return {
@@ -511,7 +465,7 @@ export function PinAuthView({
     <section id="pinAuthView" className="page-shell pin-auth-view">
       <div className="pin-card">
         <div className="pin-lock-icon" aria-hidden="true">
-          {currentMode === "reset" && step <= 2 ? "📱" : "🔒"}
+          {currentMode === "reset" && step <= 2 ? "✉️" : "🔒"}
         </div>
 
         {/* แถบทักทายชื่อผู้ป่วยสไตล์ Mobile Banking */}
@@ -546,65 +500,32 @@ export function PinAuthView({
           </div>
         )}
 
-        {/* โหมดรีเซ็ต ขั้นตอนที่ 1: เลือกช่องทางรับ OTP (เบอร์มือถือ หรือ อีเมล) */}
+        {/* โหมดรีเซ็ต ขั้นตอนที่ 1: ขอ OTP ทางอีเมล */}
         {currentMode === "reset" && step === 1 && (
-          <form onSubmit={handleSendOtp} className="reset-pin-form">
-            {registeredPhone && registeredEmail && (
-              <div className="recovery-method-tabs" role="tablist" aria-label="ช่องทางรับรหัสยืนยัน">
-                <button
-                  type="button" role="tab" aria-selected={recoveryMethod === "phone"}
-                  className={`recovery-tab-btn ${recoveryMethod === "phone" ? "active" : ""}`}
-                  onClick={() => {
-                    setRecoveryMethod("phone");
-                    setErrorMessage("");
-                  }}
-                >
-                  <span>📱 เบอร์โทรศัพท์ (SMS)</span>
-                </button>
-                <button
-                  type="button" role="tab" aria-selected={recoveryMethod === "email"}
-                  className={`recovery-tab-btn ${recoveryMethod === "email" ? "active" : ""}`}
-                  onClick={() => {
-                    setRecoveryMethod("email");
-                    setErrorMessage("");
-                  }}
-                >
-                  <span>✉️ อีเมล (Email)</span>
-                </button>
-              </div>
-            )}
-
-            {recoveryTarget ? (
+          <form onSubmit={(event) => { event.preventDefault(); void requestResetOtp(); }} className="reset-pin-form">
+            {registeredEmail ? (
               <div className="recovery-target-box">
                 <span className="recovery-target-label">
-                  {recoveryMethod === "phone" ? "ส่งรหัส OTP ไปยังเบอร์โทรศัพท์" : "ส่งรหัส OTP ไปยังอีเมล"}
+                  ส่งรหัส OTP ไปยังอีเมล
                 </span>
                 <strong className="recovery-target-value">
-                  {recoveryMethod === "phone" ? maskPhone(registeredPhone) : maskEmail(registeredEmail)}
+                  {maskEmail(registeredEmail)}
                 </strong>
                 <small>หากข้อมูลติดต่อไม่ถูกต้อง สามารถแก้ไขได้ที่หน้าข้อมูลของฉัน หลังเข้าสู่ระบบ</small>
               </div>
             ) : (
               <div className="recovery-target-box">
-                <span className="recovery-target-label">ยืนยันตัวตนเพื่อตั้งรหัส PIN ใหม่</span>
-                <small>
-                  ยังไม่พบเบอร์โทรหรืออีเมลที่ยืนยันได้ ระบบจะตรวจสอบตัวตนด้วยเลขบัตรประชาชนที่เข้าสู่ระบบไว้ แล้วให้ตั้งรหัส PIN ใหม่
-                </small>
+                <span className="recovery-target-label">ยังไม่มีอีเมลสำหรับกู้ PIN</span>
+                <small>กรุณาติดต่อเจ้าหน้าที่เพื่อเพิ่มอีเมลในบัญชี</small>
               </div>
             )}
 
             <button
               type="submit" className="primary-button full-width-btn"
-              style={{ marginTop: "10px" }} disabled={sendingOtp}
+              style={{ marginTop: "10px" }} disabled={sendingOtp || !registeredEmail}
             >
               <span>
-                {sendingOtp
-                  ? "กำลังตรวจสอบ..."
-                  : recoveryTarget
-                    ? recoveryMethod === "phone"
-                      ? "ขอรหัส OTP ทาง SMS"
-                      : "ขอรหัสยืนยันทางอีเมล"
-                    : "ยืนยันตัวตนด้วยเลขบัตรประชาชน"}
+                {sendingOtp ? "กำลังส่งรหัส..." : "ขอรหัสยืนยันทางอีเมล"}
               </span>
               <i aria-hidden="true">→</i>
             </button>
@@ -617,7 +538,7 @@ export function PinAuthView({
             <div className="otp-info-badge">
               <span>
                 ระบบได้ส่งรหัส OTP 6 หลักไปยัง{" "}
-                {recoveryMethod === "phone" ? `เบอร์ ${maskPhone(registeredPhone)}` : `อีเมล ${maskEmail(registeredEmail)}`}{" "}
+                อีเมล {maskEmail(registeredEmail)}{" "}
                 แล้ว กรุณากรอกรหัสภายในเวลาที่กำหนด
               </span>
             </div>
@@ -640,14 +561,8 @@ export function PinAuthView({
                 <button
                   type="button"
                   className="text-button"
-                  onClick={() => {
-                    setOtpCountdown(60);
-                    setErrorMessage(
-                      recoveryMethod === "phone"
-                        ? "ส่งรหัส OTP ทาง SMS ใหม่เรียบร้อยแล้ว"
-                        : "ส่งรหัส OTP ทางอีเมลใหม่เรียบร้อยแล้ว"
-                    );
-                  }}
+                  onClick={() => void requestResetOtp()}
+                  disabled={sendingOtp}
                 >
                   ส่งรหัสใหม่อีกครั้ง
                 </button>
@@ -730,12 +645,10 @@ export function PinAuthView({
                 onClick={() => {
                   setCurrentMode("reset");
                   setStep(1);
-                  setRecoveryMethod(registeredPhone ? "phone" : "email");
-                  setOtpUnavailable(false);
                   setErrorMessage("");
                 }}
               >
-                ลืมรหัส PIN? กู้คืนรหัสผ่านอีเมล / เบอร์โทรศัพท์ (OTP)
+                ลืมรหัส PIN? กู้คืนด้วย OTP ทางอีเมล
               </button>
               {onSwitchAccount ? (
                 <button type="button" className="text-button text-muted-sub" onClick={onSwitchAccount}>
