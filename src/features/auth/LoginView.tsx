@@ -94,10 +94,22 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
           cancel_on_tap_outside: true,
         });
 
-        googleIdentity.renderButton(googleBtnRef.current, {
+        const buttonHost = googleBtnRef.current;
+        const measuredWidth = Math.floor(buttonHost.getBoundingClientRect().width || 320);
+        const buttonWidth = Math.max(200, Math.min(400, measuredWidth));
+
+        // Google may append a new rendered button if this effect is re-run.
+        // Keep exactly one instance and constrain the official button to the
+        // available auth-card width so it cannot expand into an oversized logo.
+        buttonHost.replaceChildren();
+        googleIdentity.renderButton(buttonHost, {
           type: "standard",
           theme: "outline",
           size: "large",
+          shape: "rectangular",
+          text: "signin_with",
+          logo_alignment: "left",
+          width: buttonWidth,
         });
       } catch (err) {
         console.warn("Failed to initialize Google Identity Services:", err);
