@@ -9,9 +9,6 @@ try {
   // ข้ามหากไม่มีไฟล์ .env (จะใช้ค่าจาก Environment Variables ของระบบ หรือค่าเริ่มต้นแทน)
 }
 
-<<<<<<< HEAD
-// ฟังก์ชันดึงค่า Environment Variable จาก process.env หรือจากไฟล์ .env พร้อมกำหนดค่าเริ่มต้น (Fallback)
-=======
 let existingRuntimeConfig = "";
 try {
   existingRuntimeConfig = await readFile(resolve("public", "runtime-config.js"), "utf8");
@@ -26,7 +23,6 @@ function getExistingRuntimeValue(key) {
   return match ? match[1].trim() : "";
 }
 
->>>>>>> 96a0cf62c16669447fee14d9b22268b0c1f96be3
 function getEnvVal(key, fallback) {
   if (process.env[key]) return process.env[key];
   const match = envFileContent.match(new RegExp(`^${key}=(.*)$`, "m"));
