@@ -95,6 +95,18 @@ export function QueueStatusView({
   const statusLabel = queue?.status_label || "";
   const isNearQueue = (typeof position === "number" && position > 0 && position <= 3) || statusLabel.includes("เรียก");
   const estimatedWaitText = calculateEstimatedWaitTime(position, statusLabel);
+  const patientCancellableStatuses = new Set([
+    "WAITING_VITALS",
+    "WAITING_CONFIRMATION",
+    "WAITING_QUEUE",
+    "WAITING",
+    "CALLED",
+  ]);
+  const rawQueueStatus = queue?.status || "";
+  const canCancelQueue = !rawQueueStatus || patientCancellableStatuses.has(rawQueueStatus);
+  const cancelUnavailableText = rawQueueStatus
+    ? "คิวอยู่ในขั้นตอนที่ไม่สามารถยกเลิกด้วยตนเองได้ กรุณาติดต่อเจ้าหน้าที่"
+    : "";
 
   /**
    * Generates and downloads a PNG image of the queue slip via Canvas.
@@ -218,17 +230,24 @@ export function QueueStatusView({
               บันทึกบัตรคิวเป็นรูปภาพ
             </button>
             <button className="secondary-button" type="button" onClick={onAccount}>ดูข้อมูลและประวัติการรักษา</button>
-            <button
-              className="cancel-queue-btn"
-              type="button"
-              onClick={() => {
-                setCancelMessage("");
-                setCancelStep(1);
-                setShowCancelModal(true);
-              }}
-            >
-              ยกเลิกคิวรับบริการ
-            </button>
+            {canCancelQueue ? (
+              <button
+                className="cancel-queue-btn"
+                type="button"
+                onClick={() => {
+                  setCancelMessage("");
+                  setCancelStep(1);
+                  setShowCancelModal(true);
+                }}
+              >
+                ยกเลิกคิวรับบริการ
+              </button>
+            ) : (
+              <div className="cancel-queue-unavailable" role="status">
+                <strong>ไม่สามารถยกเลิกคิวด้วยตนเองในขั้นตอนนี้</strong>
+                <span>{cancelUnavailableText}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -279,7 +298,7 @@ export function QueueStatusView({
                   </h2>
                   
                   <div className="modal-warning-box">
-                    <strong>⚠️ คำเตือนสำคัญ:</strong> เมื่อยืนยันแล้ว คิวหมายเลข <b>{queue?.queue_number}</b> จะถูกยกเลิกทันทีและไม่สามารถกู้คืนได้ หากต้องการรับบริการในภายหลังจะต้องลงทะเบียนเพื่อจองคิวใหม่
+                    <strong>⚠️ คำเตือนสำคัญ:</strong> เมื่อยืนยันแล้ว คิวหมายเลข <b>{queue?.queue_number}</b> จะถูกยกเลิกทันทีและไม่สามารถกู้คืนได้ ประวัติการรับบริการจะยังถูกเก็บไว้ และหากต้องการรับบริการอีกครั้งให้เข้าสู่ระบบด้วยบัญชีเดิมแล้วกดรับบริการครั้งใหม่
                   </div>
 
                   {cancelMessage && (
@@ -354,7 +373,7 @@ export function QueueStatusView({
                 ยกเลิกคิวรับบริการเรียบร้อยแล้ว
               </strong>
               <span style={{ fontSize: "0.9rem", color: "#166534", lineHeight: 1.4 }}>
-                หากต้องการรับบริการใหม่ สามารถกดปุ่ม &quot;จองคิวรับบริการวันนี้&quot; ด้านล่างได้ทุกเมื่อ
+                ประวัติเดิมยังถูกเก็บไว้ หากต้องการรับบริการอีกครั้งให้ใช้บัญชีเดิมและกดปุ่ม &quot;จองคิวรับบริการวันนี้&quot; ด้านล่าง
               </span>
             </div>
           </div>
