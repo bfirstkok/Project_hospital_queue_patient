@@ -2,7 +2,7 @@
   "name": "hospital-queue-patient-portal",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/write-runtime-config.mjs && next dev",
     "build": "node scripts/clean-build.mjs && node scripts/write-runtime-config.mjs && next build && node scripts/publish-export.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

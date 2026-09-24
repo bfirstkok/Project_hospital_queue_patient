@@ -46,13 +46,13 @@
 
 ## 🔑 การตั้งค่า Google OAuth 2.0 (Google Identity Services)
 
-ระบบใช้ **Google Identity Services (GSI) OAuth 2.0 Token Client** เพื่อให้กดปุ่มแล้วเปิดหน้าต่าง Popup เลือกบัญชี Google ทันที:
+ระบบใช้ **Google Identity Services (GSI)** สำหรับเข้าสู่ระบบด้วย Google โดยตั้ง `GOOGLE_CLIENT_ID` ใน `.env` เพียงจุดเดียว:
 
 ### 1. การตั้งค่าใน `.env`
 ```env
-PATIENT_API_BASE_URL=http://127.0.0.1:8000
+PATIENT_API_BASE_URL=https://hospital.bfirstkok.me
 PATIENT_STATUS_REFRESH_MS=10000
-GOOGLE_CLIENT_ID=477244523835-vopgha7b47cohjn2ouk80ng1gsup5tl8.apps.googleusercontent.com
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 ```
 
 ### 2. การตั้งค่าใน Google Cloud Console
@@ -129,7 +129,7 @@ npm install
 ```
 
 ### 2. รันในโหมดพัฒนา (Development Mode)
-ตั้ง `PATIENT_API_BASE_URL=http://127.0.0.1:8000` ใน `.env` ก่อน แล้วกำหนดค่า SMTP สำหรับ mock backend ในไฟล์เดียวกัน:
+ตั้ง `PATIENT_API_BASE_URL=http://127.0.0.1:8000` ใน `.env` สำหรับ local mock แล้วกำหนดค่า SMTP สำหรับ mock backend ในไฟล์เดียวกัน:
 
 ```dotenv
 MOCK_PATIENT_EMAIL=your-real-inbox@example.com
@@ -150,7 +150,6 @@ Google Sign-In บน localhost ต้องมี `GOOGLE_CLIENT_ID` ที่�
 python mock_backend.py
 
 # Terminal 2: รัน Next.js Dev Server (Port 3000)
-node scripts/write-runtime-config.mjs
 npm run dev
 ```
 เปิดเบราว์เซอร์ที่: **`http://localhost:3000/patient`**
@@ -180,15 +179,7 @@ python -m http.server 5500 --bind 0.0.0.0 -d dist
 
 ## ⚙️ การตั้งค่าการเชื่อมต่อเซิร์ฟเวอร์ (Runtime Configuration)
 
-ระบบอ่านค่าการตั้งค่าจาก `window.PATIENT_APP_ENV` ในไฟล์ `public/runtime-config.js` (และ `dist/patient/runtime-config.js`):
-
-```javascript
-window.PATIENT_APP_ENV = {
-  "API_BASE_URL": "http://127.0.0.1:8000",       // สลับเป็น https://hospital.bfirstkok.me เมื่อต่อเซิร์ฟเวอร์จริง
-  "STATUS_REFRESH_MS": 10000,                    // ความถี่ในการอัปเดตสถานะคิวอัตโนมัติ (มิลลิวินาที)
-  "GOOGLE_CLIENT_ID": "477244523835-vopgha7b47cohjn2ouk80ng1gsup5tl8.apps.googleusercontent.com"
-};
-```
+แก้ค่าที่ `.env` เท่านั้น `npm run dev` และ `npm run build` จะสร้าง `public/runtime-config.js` จากค่าเหล่านั้นให้อัตโนมัติ ไฟล์ runtime นี้เป็นไฟล์ generated และไม่ต้องแก้หรือ commit เอง
 
 ---
 

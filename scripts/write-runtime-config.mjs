@@ -9,20 +9,6 @@ try {
   // ข้ามหากไม่มีไฟล์ .env (จะใช้ค่าจาก Environment Variables ของระบบ หรือค่าเริ่มต้นแทน)
 }
 
-let existingRuntimeConfig = "";
-try {
-  existingRuntimeConfig = await readFile(resolve("public", "runtime-config.js"), "utf8");
-} catch {
-  // A fresh checkout may not have the generated file yet.
-}
-
-function getExistingRuntimeValue(key) {
-  const match = existingRuntimeConfig.match(
-    new RegExp(`["']?${key}["']?\\s*:\\s*["']([^"']*)["']`)
-  );
-  return match ? match[1].trim() : "";
-}
-
 function getEnvVal(key, fallback) {
   if (process.env[key]) return process.env[key];
   const match = envFileContent.match(new RegExp(`^${key}=(.*)$`, "m"));
@@ -35,8 +21,7 @@ const refreshMs = Number(getEnvVal("PATIENT_STATUS_REFRESH_MS", "10000")) || 100
 const googleClientId = String(
   getEnvVal("GOOGLE_CLIENT_ID", "") ||
   getEnvVal("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "") ||
-  getEnvVal("PATIENT_GOOGLE_CLIENT_ID", "") ||
-  getExistingRuntimeValue("GOOGLE_CLIENT_ID")
+  getEnvVal("PATIENT_GOOGLE_CLIENT_ID", "")
 ).trim();
 if (!googleClientId) {
   console.warn(

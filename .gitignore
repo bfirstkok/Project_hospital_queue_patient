@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+public/runtime-config.js
 node_modules/
 .next/
 *.tsbuildinfo
