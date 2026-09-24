@@ -9,7 +9,24 @@ try {
   // ข้ามหากไม่มีไฟล์ .env (จะใช้ค่าจาก Environment Variables ของระบบ หรือค่าเริ่มต้นแทน)
 }
 
+<<<<<<< HEAD
 // ฟังก์ชันดึงค่า Environment Variable จาก process.env หรือจากไฟล์ .env พร้อมกำหนดค่าเริ่มต้น (Fallback)
+=======
+let existingRuntimeConfig = "";
+try {
+  existingRuntimeConfig = await readFile(resolve("public", "runtime-config.js"), "utf8");
+} catch {
+  // A fresh checkout may not have the generated file yet.
+}
+
+function getExistingRuntimeValue(key) {
+  const match = existingRuntimeConfig.match(
+    new RegExp(`["']?${key}["']?\\s*:\\s*["']([^"']*)["']`)
+  );
+  return match ? match[1].trim() : "";
+}
+
+>>>>>>> 96a0cf62c16669447fee14d9b22268b0c1f96be3
 function getEnvVal(key, fallback) {
   if (process.env[key]) return process.env[key];
   const match = envFileContent.match(new RegExp(`^${key}=(.*)$`, "m"));
@@ -22,8 +39,15 @@ const refreshMs = Number(getEnvVal("PATIENT_STATUS_REFRESH_MS", "10000")) || 100
 const googleClientId = String(
   getEnvVal("GOOGLE_CLIENT_ID", "") ||
   getEnvVal("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "") ||
-  getEnvVal("PATIENT_GOOGLE_CLIENT_ID", "")
+  getEnvVal("PATIENT_GOOGLE_CLIENT_ID", "") ||
+  getExistingRuntimeValue("GOOGLE_CLIENT_ID")
 ).trim();
+if (!googleClientId) {
+  console.warn(
+    "[runtime-config] GOOGLE_CLIENT_ID is empty; Google Sign-In will be unavailable."
+  );
+}
+
 const parsedUrl = new URL(apiBaseUrl);
 const localHosts = new Set(["localhost", "127.0.0.1"]);
 
