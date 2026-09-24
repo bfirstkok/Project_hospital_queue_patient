@@ -14,7 +14,7 @@ function getEnvVal(key, fallback) {
   return match ? match[1].trim() : fallback;
 }
 
-const apiBaseUrl = String(getEnvVal("PATIENT_API_BASE_URL", "http://127.0.0.1:8000")).replace(/\/$/, "");
+const apiBaseUrl = String(getEnvVal("PATIENT_API_BASE_URL", "https://hospital.bfirstkok.me")).replace(/\/$/, "");
 const refreshMs = Number(getEnvVal("PATIENT_STATUS_REFRESH_MS", "10000")) || 10000;
 const googleClientId = String(
   getEnvVal("GOOGLE_CLIENT_ID", "") ||
