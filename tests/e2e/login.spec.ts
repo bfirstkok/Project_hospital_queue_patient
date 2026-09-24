@@ -1,18 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { preparePatientE2E } from "./prepare-test";
 
 test.describe("Login System - E2E Tests", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.route("**/runtime-config.js", route => route.fulfill({
-      contentType: "application/javascript",
-      body: 'window.PATIENT_APP_ENV = { API_BASE_URL: "http://127.0.0.1:8000", GOOGLE_CLIENT_ID: "playwright-client-id" };',
-    }));
-    await page.route("https://accounts.google.com/gsi/client", route => route.abort());
-    await page.goto("/patient");
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    await page.reload();
+  test.beforeEach(async ({ page, request }) => {
+    await preparePatientE2E(page, request);
   });
 
   test("1. Invalid password displays error banner and keeps user on login page", async ({ page }) => {
@@ -25,7 +16,7 @@ test.describe("Login System - E2E Tests", () => {
 
     // Should display error alert
     await expect(page.locator(".alert")).toBeVisible();
-    await expect(page.locator(".alert")).toContainText("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+    await expect(page.locator(".alert")).toContainText(/ชื่อผู้ใช้(?:งาน)?หรือรหัสผ่านไม่ถูกต้อง/);
 
     // Ensure still on login page
     await expect(page.locator("h1")).toContainText("เข้าสู่ระบบผู้ป่วย");

@@ -150,6 +150,46 @@ class MockPatientApiTest(unittest.TestCase):
             self.assertEqual(self.post("/api/patient/login/", {"identifier": "somchai99", "password": "wrong"})[0], 401)
         self.assertEqual(self.post("/api/patient/login/", {"identifier": "somchai99", "password": "Password@2026"})[0], 429)
 
+    def test_e2e_mode_reset_restores_seed_data_and_clears_rate_limits(self):
+        patient = {
+            "national_id": "2222222222222", "username": "newpatient",
+            "password": "NewStrongPass#2026", "email": "new@example.com",
+            "first_name": "ผู้ป่วย", "last_name": "ใหม่", "consent": True,
+        }
+        self.assertEqual(self.post("/api/patient/register/", patient)[0], 201)
+        for _ in range(5):
+            self.post("/api/patient/login/", {"identifier": "somchai99", "password": "wrong"})
+
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "0"}):
+            self.assertEqual(self.post("/__test__/reset/", {})[0], 404)
+
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}):
+            status, result = self.post("/__test__/reset/", {})
+
+        self.assertEqual(status, 200)
+        self.assertTrue(result["ok"])
+        self.assertEqual(self.post("/api/patient/login/", {"identifier": "somchai99", "password": "Password@2026"})[0], 200)
+        self.assertEqual(self.post("/api/patient/login/", {"identifier": "newpatient", "password": patient["password"]})[0], 401)
+
+    def test_e2e_mode_uses_deterministic_email_otp_without_sending_mail(self):
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}), \
+                patch.object(backend, "send_password_reset_email", side_effect=AssertionError("test mode must not send real email")):
+            status, requested = self.post("/api/patient/password/reset/request/", {"identifier": "somchai99", "channel": "email"})
+            self.assertEqual(status, 200)
+            self.assertNotIn("otp", requested)
+            status, verified = self.post("/api/patient/password/reset/verify-otp/", {"identifier": "somchai99", "otp": "123456"})
+
+        self.assertEqual(status, 200)
+        self.assertTrue(verified["reset_token"])
+
+    def test_e2e_google_credential_uses_seeded_patient_without_google_network(self):
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}):
+            status, result = self.post("/api/patient/auth/google/", {"credential": "google_oauth_test_token"})
+
+        self.assertEqual(status, 200)
+        self.assertEqual(result["profile"]["national_id"], "1234567890123")
+        self.assertTrue(result["access_token"])
+
 
 if __name__ == "__main__":
     unittest.main()

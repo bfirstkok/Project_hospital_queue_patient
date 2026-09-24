@@ -1,13 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { preparePatientE2E } from "./prepare-test";
 
 test.describe("Hospital Queue Portal - E2E Tests", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/patient");
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    await page.reload();
+  test.beforeEach(async ({ page, request }) => {
+    await preparePatientE2E(page, request);
   });
 
   test("1. Root URL redirects properly to /patient without crashing", async ({ page }) => {

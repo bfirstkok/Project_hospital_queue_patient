@@ -3,6 +3,7 @@
 Data resets when this process stops. Never use this server for real patients.
 """
 
+import copy
 import json
 import os
 import re
@@ -18,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 
-PORT = 8000
+PORT = int(os.environ.get("MOCK_BACKEND_PORT", "8000"))
 ENV_KEYS = {
     "GOOGLE_CLIENT_ID", "MOCK_PATIENT_EMAIL", "MOCK_SMTP_HOST", "MOCK_SMTP_PORT",
     "MOCK_SMTP_USER", "MOCK_SMTP_PASSWORD", "MOCK_SMTP_FROM", "EMAIL_HOST",
@@ -71,11 +72,24 @@ ACCOUNTS = {
         "queue": MOCK_ACTIVE_QUEUE, "visits": MOCK_VISITS, "appointments": MOCK_APPOINTMENTS,
     }
 }
+SEED_ACCOUNTS = copy.deepcopy(ACCOUNTS)
 TOKENS = {}                  # bearer token -> {national_id, expires_at}
 PASSWORD_RESET = {}          # national_id -> one active OTP challenge
 PIN_RESET = {}               # national_id -> one active PIN OTP challenge
 GOOGLE_LINK_TOKENS = {}      # temporary registration token -> verified Google claims
 RATE_EVENTS = {}             # (operation, identifier) -> request timestamps
+
+
+def reset_mock_state():
+    ACCOUNTS.clear()
+    ACCOUNTS.update(copy.deepcopy(SEED_ACCOUNTS))
+    for state in (TOKENS, PASSWORD_RESET, PIN_RESET, GOOGLE_LINK_TOKENS, RATE_EVENTS):
+        state.clear()
+
+
+def is_local_test_mode(client_address):
+    return (os.environ.get("MOCK_BACKEND_TEST_MODE") == "1"
+            and client_address[0] in {"127.0.0.1", "::1"})
 
 
 def digits(value):
@@ -219,6 +233,12 @@ class MockBackendHandler(BaseHTTPRequestHandler):
         path = self.path.rstrip("/") + "/"
         body = self._read_json()
 
+        if path == "/__test__/reset/":
+            if not is_local_test_mode(self.client_address):
+                return self._send_json(404, {"ok": False, "error": "Not Found"})
+            reset_mock_state()
+            return self._send_json(200, {"ok": True})
+
         if path == "/api/patient/register/":
             if body.get("website"):
                 return self._send_json(202, {"ok": True})
@@ -311,7 +331,10 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             if not credential:
                 return self._send_json(400, {"ok": False, "error": "ไม่พบข้อมูลยืนยันจาก Google"})
             try:
-                claims = verify_google_id_token(credential)
+                if is_local_test_mode(self.client_address) and credential == "google_oauth_test_token":
+                    claims = {"sub": "playwright-test-user", "email": MOCK_PATIENT_PROFILE["email"]}
+                else:
+                    claims = verify_google_id_token(credential)
             except RuntimeError:
                 return self._send_json(503, {"ok": False, "error": "ระบบ Google Sign-In ยังไม่ได้ตั้งค่า"})
             except Exception:
@@ -348,12 +371,14 @@ class MockBackendHandler(BaseHTTPRequestHandler):
                 return self._send_json(200, generic)
             national_id = account["profile"]["national_id"]
             email = account["profile"]["email"]
-            otp = f"{secrets.randbelow(1_000_000):06d}"
-            try:
-                send_password_reset_email(email, otp)
-            except (OSError, smtplib.SMTPException, ValueError) as error:
-                print(f"[Mock SMTP] {error}")
-                return self._send_json(503, {"ok": False, "error": "ส่งอีเมล OTP ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า SMTP และหน้าต่างเซิร์ฟเวอร์"})
+            test_mode = is_local_test_mode(self.client_address)
+            otp = "123456" if test_mode else f"{secrets.randbelow(1_000_000):06d}"
+            if not test_mode:
+                try:
+                    send_password_reset_email(email, otp)
+                except (OSError, smtplib.SMTPException, ValueError) as error:
+                    print(f"[Mock SMTP] {error}")
+                    return self._send_json(503, {"ok": False, "error": "ส่งอีเมล OTP ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า SMTP และหน้าต่างเซิร์ฟเวอร์"})
             PASSWORD_RESET[national_id] = {"otp": otp, "expires_at": time.monotonic() + 300, "attempts": 0}
             generic["masked_target"] = mask_email(email)
             return self._send_json(200, generic)
@@ -458,12 +483,14 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             account = ACCOUNTS.get(national_id)
             if not account or not account["profile"].get("email"):
                 return self._send_json(200, generic)
-            otp = f"{secrets.randbelow(1_000_000):06d}"
-            try:
-                send_email(account["profile"]["email"], "รหัส OTP สำหรับตั้ง PIN ใหม่", f"รหัสยืนยันของคุณคือ {otp}\nใช้ได้ภายใน 5 นาที")
-            except (OSError, smtplib.SMTPException, ValueError) as error:
-                print(f"[Mock SMTP] {error}")
-                return self._send_json(503, {"ok": False, "error": "ส่งอีเมล OTP ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า SMTP"})
+            test_mode = is_local_test_mode(self.client_address)
+            otp = "123456" if test_mode else f"{secrets.randbelow(1_000_000):06d}"
+            if not test_mode:
+                try:
+                    send_email(account["profile"]["email"], "รหัส OTP สำหรับตั้ง PIN ใหม่", f"รหัสยืนยันของคุณคือ {otp}\nใช้ได้ภายใน 5 นาที")
+                except (OSError, smtplib.SMTPException, ValueError) as error:
+                    print(f"[Mock SMTP] {error}")
+                    return self._send_json(503, {"ok": False, "error": "ส่งอีเมล OTP ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า SMTP"})
             PIN_RESET[national_id] = {"otp": otp, "expires_at": time.monotonic() + 300, "attempts": 0}
             generic["masked_target"] = mask_email(account["profile"]["email"])
             return self._send_json(200, generic)

@@ -1,18 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { preparePatientE2E } from "./prepare-test";
 
 test.describe("Patient Registration Flow - E2E Tests", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.route("**/runtime-config.js", route => route.fulfill({
-      contentType: "application/javascript",
-      body: 'window.PATIENT_APP_ENV = { API_BASE_URL: "http://127.0.0.1:8000", GOOGLE_CLIENT_ID: "playwright-client-id" };',
-    }));
-    await page.route("https://accounts.google.com/gsi/client", route => route.abort());
-    await page.goto("/patient");
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    await page.reload();
+  test.beforeEach(async ({ page, request }) => {
+    await preparePatientE2E(page, request);
   });
 
   test("1. PDPA Consent Gate enforces agreement before showing registration form", async ({ page }) => {
@@ -62,7 +53,7 @@ test.describe("Patient Registration Flow - E2E Tests", () => {
     await expect(page.locator(".alert")).toContainText("โรคประจำตัว");
   });
 
-  test("3. Happy Path: New Patient registers, sets 6-digit PIN, and receives new Queue A015", async ({ page }) => {
+  test("3. Happy Path: New Patient registers, sets 6-digit PIN, and receives new Queue A013", async ({ page }) => {
     await page.goto("/patient");
     await page.evaluate(() => localStorage.setItem("hospital_patient_security_pin", "stale-pin-from-another-account"));
     await page.click("button.register-link-btn:has-text('ลงทะเบียนผู้ป่วยใหม่')");
@@ -103,10 +94,10 @@ test.describe("Patient Registration Flow - E2E Tests", () => {
       await page.click(`.keypad-btn:has-text('${digit}')`);
     }
 
-    // Should arrive at Queue Status View with new Queue number A015
+    // The seed account has queue A012, so the next new patient receives A013.
     await expect(page.locator(".site-header")).toBeVisible();
-    await expect(page.locator(".queue-number")).toContainText("A015");
-    await expect(page.getByText("ห้องตรวจ 1", { exact: true })).toBeVisible();
+    await expect(page.locator(".queue-number")).toContainText("A013");
+    await expect(page.locator(".instruction")).toContainText("จุดวัดสัญญาณชีพ");
   });
 
   test("4. Duplicate Queue Guard routes patient with active queue to Queue Status", async ({ page }) => {

@@ -254,9 +254,18 @@ export default function Page() {
    */
   function registrationSuccess(accessToken: string, result: RegistrationResult, nationalId: string) {
     setGoogleOnboarding(null);
-    setPendingAuth({ token: accessToken, nationalId });
     setInitialQueue(result);
     setQueueActive(true);
+
+    // ผู้ป่วยที่ล็อกอินอยู่แล้วกำลังจองคิว ไม่ใช่สมัครบัญชีใหม่ จึงคง session เดิมและข้ามขั้นตั้ง PIN
+    if (token) {
+      setPendingAuth(null);
+      fetchAndSavePairedProfile(token);
+      setView("status");
+      return;
+    }
+
+    setPendingAuth({ token: accessToken, nationalId });
     fetchAndSavePairedProfile(accessToken);
 
     setPinSetupReturnView("status");
