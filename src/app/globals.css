@@ -1261,6 +1261,29 @@ input:disabled {
   border-color: var(--danger);
 }
 
+.cancel-queue-unavailable {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #dbe3e6;
+  border-radius: var(--radius-md);
+  background: #f7f9fa;
+  color: var(--ink-secondary);
+  text-align: left;
+}
+
+.cancel-queue-unavailable strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.cancel-queue-unavailable span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
 .modal-step-badge {
   display: inline-block;
   font-size: 0.8rem;
