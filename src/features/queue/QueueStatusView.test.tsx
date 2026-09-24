@@ -165,6 +165,37 @@ describe("QueueStatusView", () => {
     expect(screen.getByText("ยังไม่มีคิวรับบริการในขณะนี้")).toBeInTheDocument();
   });
 
+  it("hides self-service cancellation after the queue enters a protected clinical stage", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          queue_number: "M009",
+          status: "OBSERVATION_MONITORING",
+          status_label: "กำลังเฝ้าระวัง",
+          instruction: "กรุณารอพยาบาลดูแล",
+          queue_position: null,
+          room: null,
+          updated_at: "2026-09-24T06:30:00Z",
+        }),
+        { headers: { "content-type": "application/json" } }
+      )
+    );
+
+    render(
+      createElement(QueueStatusView, {
+        token: "mock_token",
+        onAccount: vi.fn(),
+        onUnauthorized: vi.fn(),
+      })
+    );
+
+    await waitFor(() => expect(screen.getByText("M009")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "ยกเลิกคิวรับบริการ" })).toBeNull();
+    expect(screen.getByText("ไม่สามารถยกเลิกคิวด้วยตนเองในขั้นตอนนี้")).toBeInTheDocument();
+    expect(screen.getByText(/กรุณาติดต่อเจ้าหน้าที่/)).toBeInTheDocument();
+  });
+
   it("keeps the queue visible and shows the API error when cancellation fails", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
