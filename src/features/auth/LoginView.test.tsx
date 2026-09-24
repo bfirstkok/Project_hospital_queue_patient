@@ -65,7 +65,7 @@ describe("LoginView", () => {
     expect(onRegister).toHaveBeenCalledTimes(1);
   });
 
-  it("exchanges a real Google credential for an access token", async () => {
+  it("sends the Google Identity ID token as credential", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ ok: true, access_token: "google_token" }), {
         headers: { "content-type": "application/json" },
@@ -77,6 +77,8 @@ describe("LoginView", () => {
       onSuccess,
       onGoogleRegister: vi.fn(),
     }));
+
+    expect(document.querySelector("#googleSignInDiv")).toBeVisible();
 
     fireEvent.click(await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" }));
 

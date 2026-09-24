@@ -1,23 +1,24 @@
 import type { ReactNode } from "react";
 
+// รายชื่อแท็บมุมมองหลักของแอปพลิเคชัน (คิวของฉัน, จองคิว, ข้อมูลของฉัน, ตั้งค่า)
 export type NavView = "status" | "registration" | "account" | "settings";
 
 interface AppNavbarProps {
-  currentView: string;
-  onSelectView: (view: NavView) => void;
-  hasActiveQueue?: boolean;
-  queueNumber?: string | null;
-  hasToken: boolean;
+  currentView: string;                          // หน้าหรือมุมมองปัจจุบันที่ผู้ใช้เปิดอยู่
+  onSelectView: (view: NavView) => void;        // ฟังก์ชัน callback เมื่อผู้ใช้คลิกเปลี่ยนแท็บ
+  hasActiveQueue?: boolean;                     // แฟล็กบอกว่าผู้ป่วยมีคิวที่กำลังรอตรวจอยู่หรือไม่
+  queueNumber?: string | null;                  // หมายเลขคิวปัจจุบัน (ถ้ามี)
+  hasToken: boolean;                            // สถานะว่าเข้าสู่ระบบแล้วหรือไม่ (หากยังไม่ล็อกอินจะไม่แสดง Navbar)
 }
 
 /**
- * Responsive application navigation bar (`AppNavbar`).
+ * คอมโพเนนต์แถบเมนูนำทางหลักของระบบ (`AppNavbar`)
  *
- * Behavior:
- * - Mobile: Renders as a fixed bottom navigation bar with accessible touch targets.
- * - Desktop: Adapts into top navigation bar.
- * - Displays active badge and queue ticket number on "My Queue" tab when waiting in queue.
- * - Disables "Book Queue" tab when an active queue exists to prevent duplicate bookings.
+ * การทำงานและการแสดงผล (Responsive UI):
+ * - บนอุปกรณ์มือถือ: แสดงเป็นแถบเมนูด้านล่าง (Bottom Navigation Bar) สะดวกต่อการใช้นิ้วสัมผัส
+ * - บนคอมพิวเตอร์ Desktop: ปรับเป็นแถบเมนูด้านบน (Top Bar)
+ * - แสดง Badge แจ้งเตือนและหมายเลขคิวบนแท็บ "คิวของฉัน" หากผู้ป่วยมีคิวที่ยังไม่เสร็จสิ้น
+ * - ปิดการใช้งาน (Disable) แท็บ "จองคิว" ชั่วคราวหากผู้ป่วยมีคิวที่ยังตรวจไม่เสร็จ เพื่อป้องกันการจองคิวซ้ำซ้อน
  */
 export function AppNavbar({
   currentView,
@@ -26,10 +27,12 @@ export function AppNavbar({
   queueNumber,
   hasToken,
 }: AppNavbarProps) {
+  // หากยังไม่เข้าสู่ระบบ ไม่ต้องเรนเดอร์แถบนำทาง
   if (!hasToken) {
     return null;
   }
 
+  // รายการแท็บเมนูทั้งหมด
   const items: Array<{
     id: NavView;
     label: string;

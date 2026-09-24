@@ -1,21 +1,22 @@
 /**
- * Validates a 13-digit Thai National ID using the official Modulo 11 checksum algorithm.
+ * ตรวจสอบความถูกต้องของเลขประจำตัวประชาชนไทย 13 หลัก ด้วยอัลกอริทึม Modulo 11 ตามมาตรฐานกรมการปกครอง
+ * (หัวข้อสำคัญที่มักถูกถามในการสอบวิทยานิพนธ์เรื่องการตรวจสอบข้อมูลความถูกต้องฝั่งไคลเอนต์)
  *
- * Algorithm steps:
- * 1. Strips non-digit characters.
- * 2. Ensures length is exactly 13 digits.
- * 3. Rejects repeated identical digits (e.g., 0000000000000 or 1111111111111).
- * 4. Sums the first 12 digits multiplied by their descending weights (13 down to 2).
- * 5. Computes check digit: `(11 - (sum % 11)) % 10`.
- * 6. Compares computed check digit against the 13th digit.
+ * ขั้นตอนการทำงานของอัลกอริทึม Modulo 11:
+ * 1. ตัดตัวอักษรที่ไม่ใช่ตัวเลขออกทั้งหมด
+ * 2. ตรวจสอบความยาว ต้องมีความยาวครบ 13 หลักพอดี
+ * 3. ปฏิเสธกรณีที่เป็นเลขซ้ำตัวเดิมทั้ง 13 หลัก (เช่น 0000000000000 หรือ 1111111111111)
+ * 4. นำตัวเลข 12 หลักแรก คูณด้วยตัวคูณถอยหลังตามตำแหน่ง (ตั้งแต่ 13 ถอยลงไปจนถึง 2) แล้วหาผลรวม (Sum)
+ * 5. คำนวณหาเศษเหลือจากการหารด้วย 11: `(11 - (sum % 11)) % 10`
+ * 6. นำผลลัพธ์ที่ได้ไปเปรียบเทียบกับตัวเลขหลักที่ 13 (Check Digit) หากตรงกันแสดงว่าเป็นเลขบัตรประชาชนที่ถูกต้อง
  *
- * @param {string} input - National ID string to validate.
- * @returns {boolean} True if checksum is valid.
+ * @param {string} input - ข้อความเลขประจำตัวประชาชนที่ต้องการตรวจสอบ
+ * @returns {boolean} ส่งกลับค่า true หากเลขบัตรถูกต้องตามหลักการคำนวณ
  */
 export function isValidThaiNationalId(input: string): boolean {
   const digits = (input || "").replace(/\D/g, "");
   if (digits.length !== 13) return false;
-  if (/^(\d)\1{12}$/.test(digits)) return false; // reject 0000000000000, 1111111111111, ...
+  if (/^(\d)\1{12}$/.test(digits)) return false; // ปฏิเสธกรณีเลขซ้ำตัวเดิม เช่น 0000000000000, 1111111111111
 
   let sum = 0;
   for (let i = 0; i < 12; i++) {
@@ -26,8 +27,12 @@ export function isValidThaiNationalId(input: string): boolean {
 }
 
 /**
- * Formats a 13-digit Thai National ID with masking for PDPA privacy compliance.
- * Example: "1234567890123" -> "1-xxxx-xxxx0-12-3"
+ * แปลงรูปแบบการแสดงผลเลขประจำตัวประชาชน 13 หลัก โดยซ่อนบางตำแหน่ง (Data Masking)
+ * เพื่อให้สอดคล้องกับ พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA)
+ * ตัวอย่างผลลัพธ์: "1234567890123" -> "1-xxxx-xxxx0-12-3"
+ *
+ * @param {string | null} id - เลขประจำตัวประชาชน 13 หลัก
+ * @returns {string} ข้อความเลขบัตรประชาชนที่ทำการ Mask ข้อมูลแล้ว
  */
 export function formatMaskedNationalId(id?: string | null): string {
   if (!id) return "-";

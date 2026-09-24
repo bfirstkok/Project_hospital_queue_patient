@@ -1,18 +1,19 @@
 import type { QueueData } from "@/shared/api/types";
 
 /**
- * Renders an OPD queue slip onto an HTML5 2D Canvas and triggers a client-side PNG download.
+ * ฟังก์ชันวาดบัตรคิวตรวจรักษา (OPD Queue Slip) ลงบน HTML5 2D Canvas และส่งออกเป็นไฟล์ภาพ PNG ดาวน์โหลดลงเครื่อง
+ * (ฟังก์ชันอำนวยความสะดวกให้ผู้ป่วยสามารถบันทึกรูปบัตรคิวเก็บไว้ในมือถือได้)
  *
- * Render flow:
- * 1. Initializes an 800x1050 px canvas scaled 2x for crisp high-DPI displays.
- * 2. Draws rounded white background card with teal hospital header banner.
- * 3. Draws queue number, status badge, queue position, and examination room.
- * 4. Displays estimated wait time box and staff instructions.
- * 5. Stamps current Thai-localized timestamp and footer guidance.
- * 6. Generates PNG data URL and triggers browser download (`queue-card-{queue_number}.png`).
+ * ลำดับขั้นตอนการวาดภาพ (Canvas Drawing Flow):
+ * 1. กำหนดขนาด Canvas 800x1050 px พร้อมสเกลความละเอียด 2 เท่า (scale 2x) เพื่อให้ได้ภาพคมชัดสูง (High-DPI / Retina)
+ * 2. วาดการ์ดพื้นหลังสีขาวขอบมน พร้อมแถบแบนเนอร์สีเขียวด้านบนของโรงพยาบาล
+ * 3. วาดหมายเลขคิวตัวใหญ่ ป้ายสถานะคิว ลำดับคิว และห้องตรวจ
+ * 4. วาดกล่องแสดงเวลาโดยประมาณที่ต้องรอ และข้อแนะนำจากเจ้าหน้าที่
+ * 5. ประทับตราวันเวลาปัจจุบันตามรูปแบบภาษาไทย (Intl.DateTimeFormat th-TH)
+ * 6. แปลง Canvas เป็น Data URL (image/png) และสั่งดาวน์โหลดไฟล์ลงเครื่องอัตโนมัติ
  *
- * @param {Partial<QueueData>} queue - Current patient queue record.
- * @param {string} estimatedText - Formatted estimated wait text (e.g., "approx. 15 minutes").
+ * @param {Partial<QueueData>} queue - ข้อมูลคิวปัจจุบันของผู้ป่วย
+ * @param {string} estimatedText - ข้อความเวลาโดยประมาณ (เช่น "ประมาณ 15 นาที")
  */
 export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText: string): void {
   const canvas = document.createElement("canvas");
@@ -21,17 +22,17 @@ export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText:
 
   const width = 800;
   const height = 1050;
-  const scale = 2; // For crisp high-DPI output
+  const scale = 2; // เพิ่มความละเอียดเป็น 2 เท่าสำหรับจอภาพความละเอียดสูง
 
   canvas.width = width * scale;
   canvas.height = height * scale;
   ctx.scale(scale, scale);
 
-  // Background
+  // วาดพื้นหลังนอกการ์ด
   ctx.fillStyle = "#eff6f5";
   ctx.fillRect(0, 0, width, height);
 
-  // Main Card
+  // วาดตัวการ์ดหลักสีขาวขอบมน
   const cardX = 40;
   const cardY = 40;
   const cardW = width - 80;
@@ -46,24 +47,24 @@ export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText:
   ctx.fill();
   ctx.stroke();
 
-  // Top header banner
+  // วาดแถบแบนเนอร์ส่วนหัวสีเขียว
   ctx.fillStyle = "#0d8a7d";
   ctx.beginPath();
   ctx.roundRect(cardX, cardY, cardW, 110, [cardRadius, cardRadius, 0, 0]);
   ctx.fill();
 
-  // Header Title
+  // ข้อความหัวข้อหลัก
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 32px Sarabun, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("✚ โรงพยาบาล - บัตรคิวผู้ป่วย OPD", width / 2, cardY + 65);
 
-  // Subtitle
+  // ข้อความหัวข้อย่อย
   ctx.fillStyle = "#0d8a7d";
   ctx.font = "bold 22px Sarabun, sans-serif";
   ctx.fillText("หมายเลขคิวของคุณ", width / 2, cardY + 165);
 
-  // Queue Number Box
+  // กรอบแสดงหมายเลขคิว
   const qBoxW = 420;
   const qBoxH = 150;
   const qBoxX = (width - qBoxW) / 2;
@@ -77,12 +78,12 @@ export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText:
   ctx.fill();
   ctx.stroke();
 
-  // Big Queue Number
+  // ข้อความหมายเลขคิวขนาดใหญ่
   ctx.fillStyle = "#086e63";
   ctx.font = "bold 88px Sarabun, sans-serif";
   ctx.fillText(queue.queue_number || "-", width / 2, qBoxY + 105);
 
-  // Status Badge
+  // ป้ายแสดงสถานะคิว
   const statusBoxW = 340;
   const statusBoxH = 48;
   const statusBoxX = (width - statusBoxW) / 2;
@@ -97,11 +98,11 @@ export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText:
   ctx.font = "bold 22px Sarabun, sans-serif";
   ctx.fillText(`สถานะ: ${queue.status_label || "รอตรวจ"}`, width / 2, statusBoxY + 32);
 
-  // Details Grid Section
+  // ส่วนแสดงรายละเอียด (คอลัมน์คู่: ลำดับคิวก่อนหน้า และ ห้องตรวจ)
   const gridY = statusBoxY + statusBoxH + 30;
   const colW = (cardW - 60) / 2;
 
-  // Box 1: Position
+  // กล่องที่ 1: ลำดับคิวก่อนหน้า
   ctx.fillStyle = "#f7faf9";
   ctx.strokeStyle = "#d8e6e3";
   ctx.lineWidth = 1.5;
@@ -118,7 +119,7 @@ export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText:
   const posText = Number.isInteger(queue.queue_position) ? `อันดับที่ ${queue.queue_position}` : "รอจัดลำดับ";
   ctx.fillText(posText, cardX + 25 + colW / 2, gridY + 70);
 
-  // Box 2: Room
+  // กล่องที่ 2: ห้องตรวจ
   ctx.fillStyle = "#f7faf9";
   ctx.strokeStyle = "#d8e6e3";
   ctx.lineWidth = 1.5;
@@ -134,7 +135,7 @@ export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText:
   ctx.font = "bold 26px Sarabun, sans-serif";
   ctx.fillText(queue.room || "รอระบุห้อง", cardX + 35 + colW + colW / 2, gridY + 70);
 
-  // Estimated Wait Time Box
+  // กล่องแสดงเวลาโดยประมาณ
   const estY = gridY + 110;
   ctx.fillStyle = "#fffbeb";
   ctx.strokeStyle = "#fde68a";
@@ -148,13 +149,13 @@ export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText:
   ctx.font = "bold 20px Sarabun, sans-serif";
   ctx.fillText(`⏱️ ${estimatedText}`, width / 2, estY + 42);
 
-  // Instruction Box
+  // กล่องคำแนะนำจากเจ้าหน้าที่
   const insY = estY + 90;
   ctx.fillStyle = "#112624";
   ctx.font = "500 20px Sarabun, sans-serif";
   ctx.fillText(queue.instruction || "กรุณารอเรียกคิว ณ จุดพักคอย", width / 2, insY + 20);
 
-  // Footer Note & Date
+  // ส่วนท้ายการ์ด: วันที่พิมพ์ และคำแนะนำ
   const now = new Date();
   const dateStr = new Intl.DateTimeFormat("th-TH", {
     dateStyle: "medium",
@@ -169,7 +170,7 @@ export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText:
   ctx.fillStyle = "#8aa19e";
   ctx.fillText("โปรดแสดงบัตรนี้ต่อเจ้าหน้าที่เมื่อถึงคิวของท่าน", width / 2, cardY + cardH - 22);
 
-  // Download Trigger
+  // สร้าง Trigger ดาวน์โหลดไฟล์ PNG
   const dataUrl = canvas.toDataURL("image/png");
   const link = document.createElement("a");
   link.download = `บัตรคิว-${queue.queue_number || "OPD"}.png`;

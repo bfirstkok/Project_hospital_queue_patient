@@ -56,11 +56,11 @@ const CURRENT_YEAR = new Date().getFullYear();
 const DOB_YEARS = Array.from({ length: 121 }, (_, i) => CURRENT_YEAR - i);
 
 /**
- * Computes the total number of days in a given month/year (supports leap years).
+ * คำนวณจำนวนวันทั้งหมดในเดือนและปีที่กำหนด (รองรับปีก้าวจุฬาสมบัติ หรือ ปีอธิกสุรทิน Leap Year กุมภาพันธ์มี 29 วัน)
  *
- * @param {string} month - Month number string ("1" to "12").
- * @param {string} year - CE year string.
- * @returns {number} Days in month (28 - 31).
+ * @param {string} month - เลขลำดับเดือน ("1" ถึง "12")
+ * @param {string} year - ปี ค.ศ.
+ * @returns {number} จำนวนวันในเดือนนั้น (28 - 31 วัน)
  */
 function daysInMonth(month: string, year: string): number {
   const m = Number(month);
@@ -70,39 +70,44 @@ function daysInMonth(month: string, year: string): number {
 
 type EmergencyContact = { id: string; name: string; relationship: string; phone: string };
 
+// โครงสร้างข้อมูลโปรไฟล์ผู้ป่วยที่ส่งออกไปยัง API
 export interface PatientProfilePayload extends ProfileUpdatePayload {
   national_id: string;
   username?: string | null;
   password?: string | null;
 }
 
+// Handle เมธอดที่เปิดให้ Component ภายนอกเรียกสั่งงานผ่าน React ref (Imperative Handle)
 export interface PatientProfileFormHandle {
-  /** First blocking error, or null when the profile section is valid. Focuses/scrolls to the field. */
+  /** ตรวจสอบความถูกต้องของข้อมูลทั้งหมด หากพบข้อผิดพลาดจะคืนค่าฟิลด์และข้อความเตือน พร้อมเลื่อนหน้าจอไปยังจุดนั้น */
   validate(): { field: string; message: string } | null;
+  /** ดึงข้อมูลทั้งหมดในฟอร์มในรูปแบบพร้อมส่งไปยัง API */
   getPayload(): PatientProfilePayload;
+  /** ล้างข้อมูลร่างทั้งหมดออกจากฟอร์มและ localStorage */
   clearDraft(): void;
+  /** ตรวจสอบว่าผู้ใช้มีการกรอกหรือแก้ไขข้อมูลค้างไว้หรือไม่ */
   isDirty(): boolean;
 }
 
 interface PatientProfileFormProps {
-  /** "register": part of the new-patient flow. "edit": inside the account edit modal. */
+  /** "register": หน้าลงทะเบียนรับบริการ/จองคิวใหม่, "edit": โหมดแก้ไขข้อมูลในหน้าบัญชี */
   mode: "register" | "edit";
-  /** Present in register/booking mode — used to prefill from the existing profile when initialProfile is absent. */
+  /** Token สำหรับดึงข้อมูลเดิมมาเติมอัตโนมัติ (กรณีผู้ป่วยเดิม) */
   token?: string;
-  /** In register mode, whether the user is already a known patient (locks the national ID). */
+  /** ระบุว่าผู้ป่วยมีบัญชีอยู่แล้วหรือไม่ (หากมีจะล็อกช่องเลขบัตรประชาชนไม่ให้แก้) */
   hasToken?: boolean;
-  /** When given, prefill from this instead of fetching. */
+  /** ข้อมูลโปรไฟล์เริ่มต้นสำหรับนำมาเติมลงในฟอร์ม */
   initialProfile?: PatientProfile | null;
-  /** When set, autosave/restore the section to localStorage under this key (guest onboarding only). */
+  /** คีย์สำหรับบันทึกข้อมูลร่างลงใน localStorage อัตโนมัติ (เฉพาะตอนลงทะเบียน) */
   draftKey?: string;
-  /** Rendered right after the personal-info fieldset (registration puts its symptom fieldset here). */
+  /** เนื้อหาเสริมที่แทรกหลังบล็อกข้อมูลส่วนตัว (เช่น ฟอร์มระบุอาการเจ็บป่วย) */
   children?: ReactNode;
   onUnauthorized?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
 }
 
 /**
- * Splits comma-separated values into matching predefined chips and custom free-text.
+ * แยกข้อความที่คั่นด้วยเครื่องหมายจุลภาค (Comma-separated) ออกเป็นช้อยส์ที่ตรงกับตัวเลือก และข้อความเพิ่มเติมที่ผู้ใช้พิมพ์เอง
  */
 function splitStored(value: string | null | undefined, options: string[]) {
   const items = (value || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -113,14 +118,14 @@ function splitStored(value: string | null | undefined, options: string[]) {
 }
 
 /**
- * Demographic and medical profile form component (`PatientProfileForm`).
+ * คอมโพเนนต์แบบฟอร์มข้อมูลส่วนตัวและข้อมูลสุขภาพของผู้ป่วย (`PatientProfileForm`)
  *
- * Capabilities:
- * 1. Personal & identity fields: Name, 13-digit ID, DOB (real-time age calculation), contact channels.
- * 2. 77-province address cascading selects (Province -> District -> Subdistrict -> Postal Code).
- * 3. Health & triage profile: Vitals (height, weight), chronic diseases, allergies, regular medications.
- * 4. Dynamic emergency contacts (up to 3 contacts).
- * 5. Local storage draft autosave/restore for onboarding patients.
+ * ฟังก์ชันหลัก (จุดเด่นที่ใช้อธิบายในการสอบวิทยานิพนธ์):
+ * 1. ข้อมูลบุคคลและระบุตัวตน: ชื่อ-สกุล, เลขประจำตัว ปชช. 13 หลัก, วันเกิด (คำนวณอายุ ปี-เดือน-วัน อัตโนมัติแบบ Real-time)
+ * 2. การเลือกที่อยู่แบบ Cascading Dropdown 77 จังหวัด (เลือกจังหวัด -> กรองอำเภอ -> กรองตำบล -> เติมรหัสไปรษณีย์อัตโนมัติ)
+ * 3. ข้อมูลคัดกรองสุขภาพ: ส่วนสูง, น้ำหนัก, กรุ๊ปเลือด, โรคประจำตัว, ประวัติแพ้ยา, ยาที่ใช้ประจำ (เป็นฟิลด์บังคับเพื่อความปลอดภัย)
+ * 4. จัดการผู้ติดต่อฉุกเฉินแบบไดนามิก (เพิ่ม/ลบ ได้สูงสุด 3 ท่าน)
+ * 5. ระบบบันทึกร่างข้อมูลอัตโนมัติลง LocalStorage (Autosave & Restore Draft) ป้องกันข้อมูลสูญหายเมื่อปิดแท็บ
  */
 export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientProfileFormProps>(
   function PatientProfileForm(
@@ -173,9 +178,9 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     ]);
 
     /**
-     * Calculates patient age in years, months, and days based on ISO date of birth string.
+     * คำนวณอายุของผู้ป่วยอย่างละเอียด (ปี, เดือน, วัน) อัตโนมัติตามวันเดือนปีเกิดแบบเรียลไทม์
      *
-     * @param {string} val - Date of birth string in ISO format (YYYY-MM-DD).
+     * @param {string} val - สตริงวันเกิดในรูปแบบ ISO (YYYY-MM-DD)
      */
     function calculateAge(val: string) {
       if (!val) {
@@ -202,7 +207,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     }
 
     /**
-     * Concatenates day, month, and year inputs into an ISO date string and triggers age calculation.
+     * รวมข้อมูล วัน, เดือน, ปี เข้าเป็นสตริงรูปแบบ ISO และสั่งให้คำนวณอายุอัตโนมัติ
      */
     function commitDob(day: string, month: string, year: string) {
       if (day && month && year) {
@@ -216,13 +221,13 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     }
 
     /**
-     * Handles changes to DOB part (day, month, or year) and adjusts days to fit month boundaries.
+     * จัดการเมื่อมีการเลือก วัน, เดือน หรือ ปี เกิดใหม่ พร้อมปรับจำนวนวันให้ถูกต้องตามรอบเดือน
      */
     function changeDobPart(part: "day" | "month" | "year", value: string) {
       let d = part === "day" ? value : dobDay;
       const m = part === "month" ? value : dobMonth;
       const y = part === "year" ? value : dobYear;
-      // Keep the day valid when month/year shrinks it (e.g. 31 -> Feb).
+      // ปรับลดวันหากเดือนใหม่มีจำนวนวันน้อยกว่า (เช่น วันที่ 31 เปลี่ยนเป็นเดือน กุมภาพันธ์)
       const max = daysInMonth(m, y);
       if (d && Number(d) > max) d = String(max);
       setDobDay(d);
@@ -232,9 +237,9 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     }
 
     /**
-     * Populates form fields with existing patient profile retrieved from the server.
+     * เติมข้อมูลผู้ป่วยที่มีอยู่เดิมจากเซิร์ฟเวอร์ลงในฟิลด์ต่าง ๆ ของแบบฟอร์ม
      *
-     * @param {PatientProfile} p - Patient profile object.
+     * @param {PatientProfile} p - ข้อมูลโปรไฟล์ผู้ป่วย
      */
     function applyProfile(p: PatientProfile) {
       if (p.username) setUsername(p.username);
@@ -322,7 +327,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       setHasLoadedProfile(true);
     }
 
-    // Prefill from initialProfile, or fetch it when only a token is available.
+    // เติมข้อมูลจาก initialProfile หรือดึงข้อมูลโปรไฟล์จากเซิร์ฟเวอร์เมื่อมี Token
     useEffect(() => {
       if (initialProfile) {
         applyProfile(initialProfile);
@@ -350,7 +355,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token, initialProfile, onUnauthorized]);
 
-    // Restore draft (guest onboarding only)
+    // กู้คืนข้อมูลร่างที่เคยกรอกไว้ (เฉพาะกรณีลงทะเบียนผู้ป่วยใหม่)
     useEffect(() => {
       if (!draftKey) return;
       try {
@@ -392,7 +397,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
         if (d.savedAt) setDraftSavedTime(d.savedAt);
         setHasRestoredDraft(true);
       } catch {
-        // ignore
+        // ข้ามข้อผิดพลาด storage
       }
     }, [draftKey]);
 
@@ -412,7 +417,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
       onDirtyChange?.(dirty);
     }, [dirty, onDirtyChange]);
 
-    // Autosave draft
+    // บันทึกข้อมูลร่างลง localStorage อัตโนมัติ (Autosave Debounce 500ms)
     useEffect(() => {
       if (!draftKey || !dirty) return;
       const timer = setTimeout(() => {
@@ -429,7 +434,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
           );
           setDraftSavedTime(now);
         } catch {
-          // ignore quota errors
+          // ข้ามข้อผิดพลาดพื้นที่เต็ม
         }
       }, 500);
       return () => clearTimeout(timer);
@@ -440,7 +445,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     ]);
 
     /**
-     * Clears persisted draft from local storage and resets all form state to defaults.
+     * ล้างข้อมูลร่างทั้งหมดออกจาก LocalStorage และรีเซ็ตค่าในฟอร์มเป็นค่าว่าง
      */
     function clearDraft() {
       if (draftKey) {
@@ -481,9 +486,9 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     }
 
     /**
-     * Aggregates and serializes form inputs into a `PatientProfilePayload` structure.
+     * รวมรวมข้อมูลจากทุกช่องในแบบฟอร์มแล้วแปลงเป็นออบเจกต์ `PatientProfilePayload` พร้อมส่งให้ Backend
      *
-     * @returns {PatientProfilePayload} Normalized profile payload ready for API update.
+     * @returns {PatientProfilePayload} ข้อมูลโปรไฟล์ที่จัดโครงสร้างเรียบร้อยแล้ว
      */
     function getPayload(): PatientProfilePayload {
       const contacts = emergencyContacts.filter((c) => c.name.trim() || c.phone.trim());
@@ -523,7 +528,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     }
 
     /**
-     * Focuses the input element with the matching `name` attribute.
+     * เลื่อนโฟกัสเคอร์เซอร์ไปยังช่องอินพุตตามชื่อ attribute `name`
      */
     function focusName(name: string) {
       const el = document.querySelector<HTMLElement>(`[name="${name}"]`);
@@ -531,29 +536,28 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     }
 
     /**
-     * Smoothly scrolls viewport to center on the specified element ID.
+     * เลื่อนหน้าจอแบบนุ่มนวล (Smooth Scroll) ไปยังตำแหน่งกลุ่มข้อมูลตาม ID ที่ระบุ
      */
     function scrollToGroup(id: string) {
       document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     }
 
     /**
-     * Validates form inputs and returns the first failing field error.
+     * ตรวจสอบความถูกต้องของข้อมูลทุกช่องในฟอร์ม (Form Validation)
+     * (จุดสำคัญสำหรับอธิบายเรื่อง Data Integrity และความปลอดภัยของข้อมูลผู้ป่วย)
      *
-     * Validation rules:
-     * - Edit mode: Validates email format.
-     * - Register mode: Validates username (>= 3 chars) and password (>= 8 chars).
-     * - National ID must contain 13 digits.
-     * - Phone number must contain at least 9 digits.
-     * - Email format must conform to standard regex.
-     * - Mandatory triage fields: Chronic diseases, allergies, and regular medications.
+     * กฎการตรวจสอบ:
+     * - โหมดแก้ไขข้อมูล: ตรวจสอบความถูกต้องของรูปแบบอีเมล
+     * - โหมดลงทะเบียนใหม่: ตรวจสอบ Username (อย่างน้อย 3 ตัว) และรหัสผ่าน (อย่างน้อย 8 ตัว)
+     * - เลขประจำตัวประชาชนต้องครบ 13 หลัก
+     * - เบอร์โทรศัพท์ต้องมีอย่างน้อย 9 หลัก
+     * - รูปแบบอีเมลต้องถูกต้องตามมาตรฐาน Regex
+     * - บังคับระบุข้อมูลสุขภาพสำคัญ: โรคประจำตัว, ประวัติแพ้ยา, ยาที่ใช้ประจำ (เพื่อความปลอดภัยในการรักษา)
      *
-     * @returns {{ field: string; message: string } | null} First blocking error or null if valid.
+     * @returns {{ field: string; message: string } | null} ข้อผิดพลาดจุดแรกที่ตรวจพบ หรือ null หากผ่านทั้งหมด
      */
     function validate(): { field: string; message: string } | null {
-      // Edit mode is a partial patch of an existing record: the national ID is
-      // read-only, and the health fields that are mandatory at registration are
-      // left optional here.
+      // โหมดแก้ไขข้อมูล: อนุญาตให้อัปเดตเฉพาะบางฟิลด์ โดยเลขบัตรประชาชนจะอ่านได้อย่างเดียว
       if (mode === "edit") {
         setInvalidField("");
         if (email.trim() && !EMAIL_RE.test(email.trim())) {
@@ -614,13 +618,12 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     const districtOptions = province ? getDistricts(province) : [];
     const subdistrictOptions = province && district ? getSubdistricts(province, district) : [];
     const fieldClass = (name: string) => (invalidField === name ? "invalid" : "");
-    // National ID is not editable from the account edit modal, and is locked once
-    // it has been pulled from a known patient record.
+    // ล็อกช่องเลขบัตรประชาชนหากอยู่ในโหมดแก้ไข หรือเป็นผู้ป่วยเดิมที่มีบัญชีอยู่แล้ว
     const idLocked = mode === "edit" || Boolean(hasToken && nationalId.length === 13 && !nationalId.includes("x"));
 
     /**
-     * Toggles chip selection state (e.g. chronic diseases, allergies).
-     * Automatically clears other selections if the "none" option is clicked.
+     * ฟังก์ชันสลับการเลือกปุ่มตัวเลือก (Choice Chip) เช่น โรคประจำตัว หรือ ประวัติแพ้ยา
+     * หากผู้ใช้กดเลือก "ไม่มี..." จะล้างตัวเลือกอื่นออกโดยอัตโนมัติ
      */
     function toggleChip(
       item: string,
@@ -639,7 +642,7 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
     }
 
     /**
-     * Updates an emergency contact entry by its unique ID.
+     * อัปเดตข้อมูลผู้ติดต่อฉุกเฉินตาม ID ของรายการนั้น
      */
     function updateContact(id: string, field: "name" | "relationship" | "phone", value: string) {
       setEmergencyContacts((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
@@ -1128,8 +1131,8 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
 );
 
 /**
- * Form field wrapper component.
- * Renders label text, required indicator (`*`), input children, and optional help text.
+ * คอมโพเนนต์ครอบฟิลด์อินพุต (`Field`)
+ * เรนเดอร์ป้ายชื่อ (Label), เครื่องหมายดอกจันสีแดงบังคับกรอก (`*`), คอมโพเนนต์ลูก (Input), และข้อความช่วยเหลือ (Help text)
  */
 function Field({
   label, required, wide, help, children,
@@ -1144,7 +1147,7 @@ function Field({
 }
 
 /**
- * Numeric input field with a trailing unit suffix (e.g. years, cm, kg).
+ * คอมโพเนนต์ช่องกรอกตัวเลขพร้อมหน่วยต่อท้าย เช่น ปี, ซม., กก. (`SuffixInput`)
  */
 function SuffixInput(props: React.InputHTMLAttributes<HTMLInputElement> & { name: string; suffix: string }) {
   const { suffix, ...inputProps } = props;

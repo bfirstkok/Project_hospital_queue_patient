@@ -1,17 +1,19 @@
 import { useState } from "react";
 
+// พร็อพส์สำหรับคอมโพเนนต์ยินยอม PDPA
 interface PdpaConsentGateProps {
-  onAccept: () => void;
-  onDecline: () => void;
+  onAccept: () => void;   // ฟังก์ชันเมื่อผู้ป่วยกดยินยอมและดำเนินการต่อ
+  onDecline: () => void;  // ฟังก์ชันเมื่อผู้ป่วยกดไม่ยินยอมหรือย้อนกลับ
 }
 
 /**
- * PDPA Consent Gate component.
+ * คอมโพเนนต์ประตูคัดกรองความยินยอมตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (`PdpaConsentGate`)
+ * (ฟังก์ชันทางกฎหมายและมาตรฐานสากลที่สำคัญมากในการนำเสนอวิทยานิพนธ์ทางการแพทย์)
  *
- * Responsibilities:
- * 1. Displays personal data consent terms complying with Thailand's PDPA B.E. 2562.
- * 2. Requires patient agreement via checkbox before unlocking the registration form.
- * 3. Handles decline action by navigating back to the previous screen.
+ * บทบาทหน้าที่:
+ * 1. แสดงหนังสือยินยอมการจัดเก็บ รวบรวม ใช้ และเปิดเผยข้อมูลส่วนบุคคลและข้อมูลสุขภาพ ตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
+ * 2. บังคับให้ผู้ป่วยอ่านและติ๊กถูกในช่อง Checkbox แสดงความยินยอมก่อน จึงจะปลดล็อกปุ่มเพื่อเข้าสู่แบบฟอร์มลงทะเบียนได้
+ * 3. หากผู้ป่วยกดไม่ยินยอม จะส่งกลับไปยังหน้าจอก่อนหน้าเพื่อเคารพสิทธิความเป็นส่วนตัว
  */
 export function PdpaConsentGate({ onAccept, onDecline }: PdpaConsentGateProps) {
   const [agreed, setAgreed] = useState(false);

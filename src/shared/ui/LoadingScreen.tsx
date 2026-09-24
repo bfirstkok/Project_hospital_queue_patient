@@ -1,19 +1,18 @@
 import React from "react";
 
 interface LoadingScreenProps {
-  title?: string;
-  subtitle?: string;
-  fullScreen?: boolean;
+  title?: string;         // ข้อความหัวข้อหลักของการโหลด
+  subtitle?: string;      // ข้อความอธิบายเพิ่มเติม
+  fullScreen?: boolean;   // แฟล็กกำหนดว่าต้องการให้แสดงเต็มหน้าจอ (Full-screen overlay) หรือไม่
 }
 
 /**
- * Accessible hospital loading screen component (`LoadingScreen`).
+ * คอมโพเนนต์หน้าจอแสดงสถานะกำลังโหลดข้อมูล (`LoadingScreen`)
  *
- * Capabilities:
- * - Animated medical cross icon with pulsating ring effect.
- * - Configurable title and subtitle messages.
- * - Supports fullscreen overlay or embedded container modes.
- * - Uses `role="status"` and `aria-live="polite"` for screen reader accessibility.
+ * คุณสมบัติเด่น (สำหรับอธิบายในงานวิจัย/วิทยานิพนธ์):
+ * - ออกแบบตามหลัก UX/UI สากลด้วยแอนิเมชันกากบาทพยาบาลพร้อมเอฟเฟกต์วงแหวนชีพจร (Pulsating Ring)
+ * - รองรับการแสดงผลทั้งแบบเต็มหน้าจอ (FullScreen Overlay) และแบบฝังในคอนเทนเนอร์ปกติ
+ * - ออกแบบรองรับการเข้าถึง (Accessibility) โดยมี `role="status"` และ `aria-live="polite"` สำหรับโปรแกรมอ่านหน้าจอ (Screen Reader)
  */
 export function LoadingScreen({
   title = "กำลังโหลด",

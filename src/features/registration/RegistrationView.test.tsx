@@ -162,7 +162,11 @@ describe("RegistrationView", () => {
     // Submit form
     fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
     
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("token", expect.objectContaining({ queue_number: "Q-1" })));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(
+      "token",
+      expect.objectContaining({ queue_number: "Q-1" }),
+      "1101700230708",
+    ));
     const registerCall = vi.mocked(fetch).mock.calls.find(([u]) => String(u).includes("/api/patient/register/"));
     const fetchBody = registerCall?.[1]?.body as string;
     expect(fetchBody).toContain('"age":30');

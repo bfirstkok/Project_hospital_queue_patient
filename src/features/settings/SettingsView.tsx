@@ -1,25 +1,26 @@
 import type { FontSize } from "@/shared/ui/SiteShell";
 
+// พร็อพส์สำหรับคอมโพเนนต์หน้าตั้งค่า
 interface SettingsViewProps {
-  fontSize: FontSize;
-  onChangeFontSize: (size: FontSize) => void;
-  hasToken: boolean;
-  onLogout: () => void;
-  onLogin?: () => void;
-  onChangePin: () => void;
-  onSetupPin?: () => void;
-  onResetPin?: () => void;
+  fontSize: FontSize;                           // ขนาดตัวอักษรปัจจุบัน
+  onChangeFontSize: (size: FontSize) => void;   // สลับขนาดตัวอักษร
+  hasToken: boolean;                            // สถานะเข้าสู่ระบบ
+  onLogout: () => void;                         // ออกจากระบบ
+  onLogin?: () => void;                         // นำทางไปหน้าเข้าสู่ระบบ
+  onChangePin: () => void;                      // เปลี่ยนรหัส PIN
+  onSetupPin?: () => void;                      // ตั้งค่ารหัส PIN ครั้งแรก
+  onResetPin?: () => void;                      // กู้คืนรหัส PIN
 }
 
 /**
- * Patient Portal Settings View component.
+ * คอมโพเนนต์หน้าจอตั้งค่าระบบและความปลอดภัยของผู้ป่วย (`SettingsView`)
  *
- * Capabilities:
- * 1. PIN Security management (change PIN or request recovery OTP).
- * 2. Accessibility font size scaling (Normal 16px, Large 18px, Extra Large 20px).
- * 3. Emergency hotline contacts (1669, Emergency Room ER, OPD Information).
- * 4. Privacy policy (PDPA) notice and application version banner.
- * 5. Secure session logout action.
+ * ฟังก์ชันหลัก (Capabilities):
+ * 1. จัดการความปลอดภัยรหัส PIN 6 หลัก (เปลี่ยนรหัส PIN และขอรับ OTP กู้คืนรหัสผ่าน)
+ * 2. ปรับขนาดตัวอักษรเพื่อการเข้าถึง (Accessibility UI): ขนาดปกติ (16px), ขนาดใหญ่ (18px), ขนาดใหญ่พิเศษ (20px) สำหรับผู้สูงอายุ
+ * 3. รวมเบอร์โทรฉุกเฉินและติดต่อโรงพยาบาล: 1669 กู้ชีพ, ห้องฉุกเฉิน ER 24 ชม., จุดประชาสัมพันธ์ OPD
+ * 4. ประกาศนโยบายคุ้มครองข้อมูลส่วนบุคคล (PDPA) และเวอร์ชันของระบบ
+ * 5. ปุ่มออกจากระบบ (Logout) แบบปลอดภัย ล้าง Token ใน Session ทันที
  */
 export function SettingsView({
   fontSize,
@@ -38,7 +39,7 @@ export function SettingsView({
         <p>จัดการความปลอดภัยรหัส PIN ขนาดตัวอักษร และข้อมูลการช่วยเหลือฉุกเฉิน</p>
       </div>
 
-      {/* Block 1: ความปลอดภัยและรหัส PIN */}
+      {/* บล็อกที่ 1: ความปลอดภัยและรหัส PIN */}
       <section className="account-card settings-card" aria-labelledby="securitySettingTitle">
         <div className="card-heading">
           <div>
@@ -70,7 +71,7 @@ export function SettingsView({
         </div>
       </section>
 
-      {/* Block 2: ขนาดตัวอักษร (Accessibility) */}
+      {/* บล็อกที่ 2: ขนาดตัวอักษรเพื่อผู้สูงอายุและการเข้าถึง (Accessibility) */}
       <section className="account-card settings-card" aria-labelledby="fontSettingTitle">
         <div className="card-heading">
           <div>
@@ -115,7 +116,7 @@ export function SettingsView({
         </div>
       </section>
 
-      {/* Block 3: เบอร์โทรฉุกเฉินและติดต่อโรงพยาบาล */}
+      {/* บล็อกที่ 3: เบอร์โทรฉุกเฉินและติดต่อโรงพยาบาล */}
       <section className="account-card settings-card" aria-labelledby="emergencyTitle">
         <div className="card-heading">
           <div>
@@ -151,7 +152,7 @@ export function SettingsView({
         </div>
       </section>
 
-      {/* Block 4: นโยบายความเป็นส่วนตัวและเวอร์ชัน */}
+      {/* บล็อกที่ 4: นโยบายความเป็นส่วนตัวและเวอร์ชันระบบ */}
       <section className="account-card settings-card" aria-labelledby="policyTitle">
         <div className="card-heading">
           <div>
@@ -169,7 +170,7 @@ export function SettingsView({
         </div>
       </section>
 
-      {/* Block 5: การจัดการเซสชันและการออกจากระบบ */}
+      {/* บล็อกที่ 5: การจัดการเซสชันและการออกจากระบบ */}
       <section className="account-card settings-card logout-setting-card" aria-labelledby="accountManageTitle">
         <div className="card-heading">
           <div>

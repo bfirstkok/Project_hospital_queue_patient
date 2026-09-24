@@ -1,9 +1,10 @@
+// ประกาศ Interface เพิ่มเติมใน Window Object ของเบราว์เซอร์ เพื่อรองรับตัวแปร Environment และ Google Identity Services
 declare global {
   interface Window {
     PATIENT_APP_ENV?: {
-      API_BASE_URL?: string;
-      STATUS_REFRESH_MS?: number | string;
-      GOOGLE_CLIENT_ID?: string;
+      API_BASE_URL?: string;             // Base URL ของ Backend API
+      STATUS_REFRESH_MS?: number | string; // ความถี่ในการดึงข้อมูลสถานะคิว (Polling Interval หน่วย ms)
+      GOOGLE_CLIENT_ID?: string;          // Google OAuth Client ID สำหรับระบบ Login ด้วย Google
     };
     google?: {
       accounts?: {
@@ -20,36 +21,28 @@ declare global {
           ) => void;
           prompt?: (notification?: (notification: unknown) => void) => void;
         };
-        oauth2?: {
-          initTokenClient: (config: {
-            client_id: string;
-            scope: string;
-            callback: (response: { access_token?: string; error?: string }) => void;
-          }) => {
-            requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
-          };
-        };
       };
     };
   }
 }
 
+// โครงสร้างข้อมูลคอนฟิกระบบขณะรันไทม์ (Runtime Configuration)
 export interface RuntimeConfig {
-  apiBaseUrl: string;
-  statusRefreshMs: number;
-  googleClientId: string;
+  apiBaseUrl: string;       // URL หลักสำหรับติดต่อ Backend API
+  statusRefreshMs: number;  // ระยะเวลาหน่วงในการดึงข้อมูลคิวอัตโนมัติ (หน่วยมิลลิวินาที)
+  googleClientId: string;   // รหัส Client ID สำหรับ Google Sign-In
 }
 
 /**
- * Retrieves the application's runtime configuration.
+ * ดึงค่าการตั้งค่าระบบ (Configuration) ขณะที่โปรแกรมกำลังทำงาน (Runtime)
  *
- * Responsibilities:
- * 1. Checks if running in browser or SSR environment.
- * 2. Reads `API_BASE_URL` from `window.PATIENT_APP_ENV` (injected via runtime-config.js); falls back to current origin.
- * 3. Reads queue status refresh polling interval (`statusRefreshMs`), defaulting to 10,000 ms (10 seconds).
- * 4. Reads Google OAuth Client ID for Google Sign-In.
+ * ประโยชน์สำหรับการทดสอบ/นำเสนอวิทยานิพนธ์:
+ * 1. รองรับการรันแบบ 12-Factor App โดยอ่านค่าคอนฟิกจาก `window.PATIENT_APP_ENV` (ฉีดผ่าน runtime-config.js ตอน deploy)
+ * 2. หากไม่ได้ระบุ URL จะใช้ Origin เดียวกันกับเว็บเบราว์เซอร์ (Same-origin API)
+ * 3. กำหนดรอบเวลาอัปเดตสถานะคิว (Polling) อัตโนมัติ โดยมีค่าตั้งต้นที่ 10,000 มิลลิวินาที (10 วินาที)
+ * 4. รองรับการดึง Client ID สำหรับล็อกอินด้วย Google จาก Environment Variables
  *
- * @returns {RuntimeConfig} Object containing `apiBaseUrl`, `statusRefreshMs`, and `googleClientId`.
+ * @returns {RuntimeConfig} ออบเจกต์ที่มี apiBaseUrl, statusRefreshMs และ googleClientId
  */
 export function getRuntimeConfig(): RuntimeConfig {
   const runtime = typeof window === "undefined" ? undefined : window.PATIENT_APP_ENV;

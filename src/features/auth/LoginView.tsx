@@ -8,19 +8,19 @@ import { ForgotPasswordModal } from "./ForgotPasswordModal";
 type GoogleSuggestedProfile = NonNullable<GoogleAuthResult["suggested_profile"]>;
 
 interface LoginViewProps {
-  onRegister: () => void;
-  onSuccess: (token: string, nationalId?: string) => void;
-  onGoogleRegister?: (tempToken: string, suggestedProfile?: GoogleSuggestedProfile) => void;
+  onRegister: () => void;                                                                           // นำทางไปหน้าลงทะเบียนใหม่
+  onSuccess: (token: string, nationalId?: string) => void;                                          // เมื่อเข้าสู่ระบบสำเร็จ
+  onGoogleRegister?: (tempToken: string, suggestedProfile?: GoogleSuggestedProfile) => void;        // กรณีล็อกอิน Google แล้วพบว่าเป็นผู้ใช้ใหม่
 }
 
 /**
- * Patient Login View component.
+ * คอมโพเนนต์หน้าจอเข้าสู่ระบบของผู้ป่วย (`LoginView`)
  *
- * Supported authentication methods:
- * 1. Standard authentication: Username / Email / 13-digit Thai National ID + Password.
- * 2. Google Identity Services (GSI) OAuth 2.0.
- * 3. Password recovery trigger (opens `ForgotPasswordModal`).
- * 4. Navigation redirect to patient registration.
+ * วิธีการยืนยันตัวตนที่รองรับ (Authentication Architecture):
+ * 1. การยืนยันตัวตนมาตรฐาน: กรอกชื่อผู้ใช้ (Username) หรือ อีเมล ร่วมกับรหัสผ่าน
+ * 2. เข้าสู่ระบบแบบบุคคลภายนอกด้วย Google OAuth 2.0 (Google Identity Services)
+ * 3. ปุ่มกดลืมรหัสผ่าน (เปิดหน้าต่าง Modal กู้คืนรหัสผ่านด้วย OTP)
+ * 4. ปุ่มนำทางไปยังหน้าลงทะเบียนผู้ป่วยใหม่
  */
 export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginViewProps) {
   const [identifier, setIdentifier] = useState("");
@@ -34,6 +34,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const { googleClientId } = getRuntimeConfig();
 
+  // ตรวจสอบว่ากำลังรันอยู่ในโหมดทดสอบอัตโนมัติ (Playwright / Test Mode) หรือไม่
   const isAutomatedTest =
     typeof window !== "undefined" &&
     (Boolean(window.navigator?.webdriver) ||
@@ -42,8 +43,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
       window.location.search.includes("playwright=true"));
 
   /**
-   * Handles Google OAuth ID token response from GSI client library.
-   * Exchanges token with backend for an application session token.
+   * ส่ง Credential Token ที่ได้จาก Google ไปยัง Backend API เพื่อยืนยันตัวตนและรับ JWT Token
    */
   const handleGoogleCredential = useCallback(async (credential?: string) => {
     if (!credential) {
@@ -56,10 +56,12 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
     setIsSuccessMsg(false);
     try {
       const result = await patientApi.loginWithGoogle(credential);
+      // กรณีเป็นผู้ป่วยเดิมที่มีประวัติในโรงพยาบาลอยู่แล้ว
       if (result.access_token) {
         onSuccess(result.access_token);
         return;
       }
+      // กรณีเป็นผู้ใช้ใหม่: ส่งข้อมูลโปรไฟล์ที่ดึงมาจาก Google ไปหน้าลงทะเบียน
       if (result.is_new_user && result.temp_token && onGoogleRegister) {
         onGoogleRegister(result.temp_token, result.suggested_profile);
         return;
@@ -73,37 +75,56 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
     }
   }, [onGoogleRegister, onSuccess]);
 
+  // เริ่มต้นการทำงานของปุ่ม Google Sign-In (Google Identity Services)
   useEffect(() => {
     if (!googleClientId || isAutomatedTest) return;
 
-    if (window.google?.accounts?.id) {
+    let attempts = 0;
+    const initializeGoogle = () => {
+      const googleIdentity = window.google?.accounts?.id;
+      if (!googleIdentity || !googleBtnRef.current) return false;
+
       try {
-        window.google.accounts.id.initialize({
+        googleIdentity.initialize({
           client_id: googleClientId,
           callback: (response: { credential?: string }) => {
-            if (response.credential) {
-              handleGoogleCredential(response.credential);
-            }
+            void handleGoogleCredential(response.credential);
           },
           auto_select: false,
           cancel_on_tap_outside: true,
         });
 
-        if (googleBtnRef.current && window.google.accounts.id.renderButton) {
-          window.google.accounts.id.renderButton(googleBtnRef.current, {
-            type: "standard",
-            theme: "outline",
-            size: "large",
-          });
-        }
+        googleIdentity.renderButton(googleBtnRef.current, {
+          type: "standard",
+          theme: "outline",
+          size: "large",
+        });
       } catch (err) {
         console.warn("Failed to initialize Google Identity Services:", err);
+        setMessage("ไม่สามารถโหลด Google Sign-In ได้ กรุณาลองใหม่อีกครั้ง");
       }
-    }
+
+      return true;
+    };
+
+    if (initializeGoogle()) return;
+
+    // ตั้งเวลาลองใหม่หากสคริปต์ Google SDK ยังโหลดไม่เสร็จ
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if (initializeGoogle()) {
+        window.clearInterval(timer);
+      } else if (attempts >= 20) {
+        window.clearInterval(timer);
+        setMessage("ไม่สามารถโหลดบริการ Google Sign-In ได้ กรุณาลองใหม่อีกครั้ง");
+      }
+    }, 250);
+
+    return () => window.clearInterval(timer);
   }, [googleClientId, handleGoogleCredential, isAutomatedTest]);
 
   /**
-   * Submits patient login credentials to backend API.
+   * ส่งคำขอเข้าสู่ระบบด้วยชื่อผู้ใช้/อีเมล และรหัสผ่าน
    */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -131,12 +152,12 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
       if (!result.access_token) throw new ApiError("เว็บหลักไม่ได้ส่ง access token กลับมา");
 
       const cleanDigits = cleanIdentifier.replace(/\D/g, "");
-      // Security: Do not persist PII (National ID) on client storage. Purge any legacy keys.
+      // ปฏิบัติตาม PDPA: ล้างข้อมูลเลขบัตรประชาชนที่อาจตกค้างในหน่วยความจำถาวร
       try {
         sessionStorage.removeItem("patient_national_id");
         localStorage.removeItem("patient_national_id");
       } catch {
-        // ignore
+        // ข้ามข้อผิดพลาด storage
       }
       onSuccess(result.access_token, cleanDigits.length === 13 ? cleanDigits : undefined);
     } catch (error) {
@@ -145,67 +166,6 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
     } finally {
       setLoading(false);
     }
-  }
-
-  /**
-   * Prompts Google OAuth popup or triggers mock authentication in automated test suites.
-   */
-  async function handleGoogleLogin() {
-    // If a test suite injected a mock button inside googleBtnRef, trigger its click handler
-    const testButton = googleBtnRef.current?.querySelector("button");
-    if (testButton) {
-      testButton.click();
-      return;
-    }
-
-    if (isAutomatedTest) {
-      const mockGoogleIdToken = `google_oauth_token_${Date.now()}`;
-      await handleGoogleCredential(mockGoogleIdToken);
-      return;
-    }
-
-    // Launch Google OAuth2 Account Chooser popup
-    if (window.google?.accounts?.oauth2 && googleClientId) {
-      try {
-        const tokenClient = window.google.accounts.oauth2.initTokenClient({
-          client_id: googleClientId,
-          scope: "openid email profile",
-          callback: async (tokenResponse: { access_token?: string; error?: string }) => {
-            if (tokenResponse.error) {
-              console.error("Google OAuth error:", tokenResponse.error);
-              setMessage("เข้าสู่ระบบด้วย Google ไม่สำเร็จ (" + tokenResponse.error + ")");
-              return;
-            }
-            if (tokenResponse.access_token) {
-              await handleGoogleCredential(tokenResponse.access_token);
-            }
-          },
-        });
-        tokenClient.requestAccessToken({ prompt: "select_account" });
-        return;
-      } catch (err) {
-        console.warn("Failed to trigger Google OAuth2 popup, falling back:", err);
-      }
-    }
-
-    // Fallback to Google One Tap prompt if GIS ID is available
-    if (window.google?.accounts?.id?.prompt && googleClientId) {
-      try {
-        window.google.accounts.id.prompt((notification: unknown) => {
-          const notif = notification as { isNotDisplayed?: () => boolean; isSkippedMoment?: () => boolean };
-          if (notif?.isNotDisplayed?.() || notif?.isSkippedMoment?.()) {
-            console.log("Google One Tap prompt skipped or not displayed");
-          }
-        });
-        return;
-      } catch (err) {
-        console.warn("Failed to prompt Google One Tap:", err);
-      }
-    }
-
-    // Fallback when GIS script is blocked, offline, or unavailable
-    const mockGoogleIdToken = `google_oauth_token_${Date.now()}`;
-    await handleGoogleCredential(mockGoogleIdToken);
   }
 
   return (
@@ -281,25 +241,22 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
           </button>
         </form>
 
-        {/* Social / Google Login */}
+        {/* เข้าสู่ระบบด้วยบุคคลภายนอก (Google Social Login) */}
         <div className="divider-line"><span>หรือเข้าสู่ระบบด้วย</span></div>
         <div className="google-auth-wrapper">
-          <div ref={googleBtnRef} id="googleSignInDiv" style={{ display: "none" }} />
           {googleClientId ? (
-            <button
-              type="button"
-              className="google-sign-in-btn"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-            >
-              <svg className="google-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-              <span>เข้าสู่ระบบด้วย Google</span>
-            </button>
+            isAutomatedTest ? (
+              <button
+                type="button"
+                className="google-sign-in-btn"
+                onClick={() => void handleGoogleCredential("google_oauth_test_token")}
+                disabled={loading}
+              >
+                <span>เข้าสู่ระบบด้วย Google</span>
+              </button>
+            ) : (
+              <div ref={googleBtnRef} id="googleSignInDiv" />
+            )
           ) : (
             <div className="alert" role="status">
               Google Sign-In ยังไม่ได้ตั้งค่า Client ID สำหรับระบบนี้
@@ -307,7 +264,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
           )}
         </div>
 
-        {/* Register link below login */}
+        {/* ลิงก์นำทางสำหรับผู้ป่วยใหม่ที่ยังไม่มีบัญชี */}
         <div className="register-redirect-box">
           <div className="divider-line"><span>หรือ</span></div>
           <p>ยังไม่มีประวัติหรือยังไม่เคยลงทะเบียน?</p>
@@ -323,6 +280,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
         <p className="privacy-note">ข้อมูลสุขภาพจะแสดงหลังยืนยันตัวตนถูกต้องตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
       </div>
 
+      {/* หน้าต่าง Modal กู้คืนรหัสผ่าน */}
       <ForgotPasswordModal
         isOpen={isForgotOpen}
         onClose={() => setIsForgotOpen(false)}

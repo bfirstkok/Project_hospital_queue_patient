@@ -3,18 +3,19 @@
 import { useEffect, useState } from "react";
 
 /**
- * Network offline warning banner component (`OfflineBanner`).
+ * คอมโพเนนต์แถบแจ้งเตือนสถานะการเชื่อมต่อเครือข่ายออฟไลน์/ออนไลน์ (`OfflineBanner`)
  *
- * Responsibilities:
- * Listens to browser `online` and `offline` network events.
- * Displays an amber alert banner informing the patient that queue polling is temporarily paused
- * until connectivity is restored.
+ * การทำงานและการตรวจจับ (สำคัญสำหรับโครงงานระบบเรียลไทม์):
+ * 1. ดักฟัง Event `online` และ `offline` จาก Web API ของเบราว์เซอร์
+ * 2. เมื่ออินเทอร์เน็ตหลุด (offline): แสดงแถบสีส้มเตือนว่าการดึงข้อมูลคิวถูกหยุดชั่วคราว เพื่อไม่ให้เกิดข้อผิดพลาดในการดึงข้อมูล
+ * 3. เมื่อสัญญาณอินเทอร์เน็ตกลับมา (online): แสดงแถบสีเขียวแจ้งว่ากลับมาเชื่อมต่อแล้ว พร้อมตั้งเวลาซ่อนอัตโนมัติใน 3.5 วินาที
  */
 export function OfflineBanner() {
   const [offline, setOffline] = useState(false);
   const [justReconnected, setJustReconnected] = useState(false);
 
   useEffect(() => {
+    // ฟังก์ชันทำงานเมื่อเน็ตกลับมาต่อติด
     const handleOnline = () => {
       setOffline(false);
       setJustReconnected(true);
@@ -24,6 +25,7 @@ export function OfflineBanner() {
       return () => clearTimeout(timer);
     };
 
+    // ฟังก์ชันทำงานเมื่อเน็ตหลุด
     const handleOffline = () => {
       setJustReconnected(false);
       setOffline(true);
@@ -41,6 +43,7 @@ export function OfflineBanner() {
 
   if (!offline && !justReconnected) return null;
 
+  // กรณีสัญญาณเพิ่งเชื่อมต่อกลับมาสำเร็จ
   if (justReconnected) {
     return (
       <aside className="offline-banner is-online" role="status" aria-live="polite">
@@ -55,6 +58,7 @@ export function OfflineBanner() {
     );
   }
 
+  // กรณีไม่มีสัญญาณอินเทอร์เน็ต
   return (
     <aside className="offline-banner" role="status" aria-live="assertive">
       <div className="offline-banner-icon">

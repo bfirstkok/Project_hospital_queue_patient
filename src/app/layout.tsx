@@ -4,22 +4,23 @@ import "./globals.css";
 import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
 import { OfflineBanner } from "@/shared/ui/OfflineBanner";
 
+// ข้อมูล Metadata ประจำเว็บ (SEO และหัวแท็บเบราว์เซอร์)
 export const metadata: Metadata = {
   title: "ลงทะเบียนผู้ป่วย | OPD Queue",
   description: "ลงทะเบียนและติดตามสถานะคิวผู้ป่วย OPD",
 };
 
 /**
- * RootLayout: Primary layout component for the application (Next.js App Router).
+ * RootLayout: โครงสร้างเค้าโครงหลักของแอปพลิเคชัน (Next.js App Router)
  *
- * Responsibilities:
- * 1. Defines basic HTML structure (`<html lang="th">`, `<body>`).
- * 2. Wraps application tree with `ErrorBoundary` to gracefully catch rendering crashes.
- * 3. Displays `OfflineBanner` when network connectivity is lost.
- * 4. Injects client runtime configuration (`runtime-config.js`) before interactive phase.
- * 5. Loads Google Identity Services (GSI) script for Google Sign-In.
+ * บทบาทหน้าที่ (Core Application Wrapper):
+ * 1. กำหนดภาษาหลักของเอกสาร HTML เป็นภาษาไทย (`<html lang="th">`)
+ * 2. ครอบคอมโพเนนต์ลูกด้วย `ErrorBoundary` เพื่อดักจับข้อผิดพลาดระดับ Runtime ป้องกันปัญหาจอขาว
+ * 3. ฝัง `OfflineBanner` แจ้งเตือนเมื่อการเชื่อมต่ออินเทอร์เน็ตขาดหาย
+ * 4. โหลดสคริปต์การตั้งค่ารันไทม์ (`/patient/runtime-config.js`) แบบ `beforeInteractive` เพื่อให้ระบบมีคอนฟิกก่อนโหลด UI
+ * 5. โหลดไลบรารี Google Identity Services (GSI) สำหรับรองรับการล็อกอินผ่าน Google
  *
- * @param children - Child page/component nodes rendered inside this layout.
+ * @param children - คอมโพเนนต์หน้าเว็บที่อยู่ภายใต้ Layout นี้
  */
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

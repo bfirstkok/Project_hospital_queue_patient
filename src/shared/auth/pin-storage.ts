@@ -1,3 +1,4 @@
+// คีย์สำหรับบันทึกข้อมูลความปลอดภัยของ PIN ใน Web Storage (localStorage / sessionStorage)
 export const PIN_STORAGE_KEY = "hospital_patient_security_pin";
 export const PIN_ENABLED_KEY = "hospital_patient_pin_enabled";
 export const PIN_ATTEMPTS_KEY = "hospital_patient_pin_attempts";
@@ -5,38 +6,40 @@ export const PIN_LOCKOUT_UNTIL_KEY = "hospital_patient_pin_lockout_until";
 export const PIN_LOCKOUT_LEVEL_KEY = "hospital_patient_pin_lockout_level";
 export const PAIRED_PATIENT_KEY = "hospital_patient_paired_info";
 
+// จำนวนครั้งสูงสุดที่อนุญาตให้กรอก PIN ผิด ก่อนจะถูกระงับการใช้งานชั่วคราว (Lockout)
 export const MAX_FAILED_ATTEMPTS = 3;
+
 /**
- * Each run of MAX_FAILED_ATTEMPTS wrong PINs triggers the next tier: 1 min, then
- * 5 min, then 30 min (last tier repeats). The escalation level survives clearPin
- * (re-logging in with the national ID does NOT reset a lockout); only a correct
- * PIN entry clears it.
- *
- * Note: this is a client-side deterrent only — the real gate is the server-side
- * PIN store described in docs/BACKEND_HANDOFF.md §3 (pin/verify).
+ * ระดับขั้นของระยะเวลาล็อกบัญชีเมื่อกรอกผิดเกินกำหนด (Lockout Escalation Tiers):
+ * - ครั้งแรกที่ผิดครบ 3 ครั้ง: ระงับ 60 วินาที (1 นาที)
+ * - ครั้งที่สอง: ระงับ 300 วินาที (5 นาที)
+ * - ครั้งที่สามขึ้นไป: ระงับ 1800 วินาที (30 นาที)
+ * การออกจากระบบหรือล้างข้อมูลไม่ได้ช่วยรีเซ็ตเวลาล็อก (ต้องรอเวลาหมดหรือกรอกถูกเท่านั้น)
  */
 export const LOCKOUT_TIERS_SECONDS = [60, 300, 1800];
 
 /**
- * Calculates lockout duration in seconds based on escalation level.
+ * คำนวณระยะเวลาการถูกระงับใช้งาน (วินาที) ตามระดับขั้นความผิด (Lockout Tier)
  *
- * @param {number} level - Lockout escalation tier (0 = 60s, 1 = 300s, 2 = 1800s).
- * @returns {number} Wait time in seconds.
+ * @param {number} level - ระดับขั้นการล็อก (0 = 60วิ, 1 = 300วิ, 2 = 1800วิ)
+ * @returns {number} ระยะเวลาที่ต้องรอในหน่วยวินาที
  */
 function lockoutSecondsForLevel(level: number): number {
   return LOCKOUT_TIERS_SECONDS[Math.min(Math.max(level, 0), LOCKOUT_TIERS_SECONDS.length - 1)];
 }
 
+// ค่า Salt สำหรับใช้ประกอบการเข้ารหัสแฮช PIN ป้องกันการโจมตีแบบ Rainbow Table
 const SALT = "hospital_patient_pin_salt_v1:";
 
 /**
- * Hashes a 6-digit PIN using salted SHA-256 algorithm.
- * Prevents storing plaintext PINs in client-side storage.
+ * เข้ารหัสแฮชรหัส PIN 6 หลัก ด้วยอัลกอริทึม SHA-256 ร่วมกับการเติม Salt
+ * ป้องกันไม่ให้มีการบันทึก PIN ในรูปแบบข้อความธรรมดา (Plaintext) ในเครื่องฝั่งไคลเอนต์
  *
- * @param {string} pin - 6-digit PIN entered by user.
- * @returns {string} 64-character hexadecimal SHA-256 hash.
+ * @param {string} pin - รหัส PIN 6 หลักที่ผู้ใช้กรอก
+ * @returns {string} ข้อความแฮชฐาน 16 (Hexadecimal) ความยาว 64 ตัวอักษร
  */
 export function hashPin(pin: string): string {
+  // ฟังก์ชันหมุนบิตไปทางขวา (Bitwise Right Rotate) ในอัลกอริทึม SHA-256
   function rightRotate(value: number, amount: number) {
     return (value >>> amount) | (value << (32 - amount));
   }
@@ -55,6 +58,7 @@ export function hashPin(pin: string): string {
   const k: number[] = [];
   let primeCounter = 0;
 
+  // คำนวณค่าคงที่เริ่มต้นจากจำนวนเฉพาะ (Initial hash values & constants)
   const isComposite: Record<number, boolean> = {};
   for (let candidate = 2; primeCounter < 64; candidate++) {
     if (!isComposite[candidate]) {
@@ -69,6 +73,7 @@ export function hashPin(pin: string): string {
     }
   }
 
+  // ทำ Padding ข้อมูลตามมาตรฐาน SHA-256
   words[asciiBitLength >> 5] |= 0x80 << (24 - (asciiBitLength % 32));
   words[(((asciiBitLength + 64) >> 9) << 4) + 15] = asciiBitLength;
 
@@ -76,6 +81,7 @@ export function hashPin(pin: string): string {
     words[i >> 2] |= ascii.charCodeAt(i) << ((3 - (i % 4)) * 8);
   }
 
+  // วนลูปประมวลผลบล็อกละ 512 บิต (Main SHA-256 computation loop)
   for (j = 0; j < words.length; j += 16) {
     const w = words.slice(j, j + 16);
     const oldHash = [...hash];
@@ -118,6 +124,7 @@ export function hashPin(pin: string): string {
     }
   }
 
+  // แปลงผลลัพธ์เป็นรหัสเลขฐาน 16 (Hex String)
   for (i = 0; i < 8; i++) {
     for (j = 3; j >= 0; j--) {
       const b = (hash[i] >> (j * 8)) & 255;
@@ -128,10 +135,10 @@ export function hashPin(pin: string): string {
 }
 
 /**
- * Generates local storage key for PIN data scoped to patient's national ID.
+ * สร้างชื่อคีย์ Storage สำหรับ PIN โดยผูกเข้ากับเลขประจำตัวประชาชนของผู้ป่วย (Scoped Key)
  *
- * @param {string} [nationalId] - 13-digit Thai national ID.
- * @returns {string} Storage key string.
+ * @param {string} [nationalId] - เลขประจำตัวประชาชน 13 หลัก
+ * @returns {string} ชื่อคีย์สำหรับเรียกอ่านหรือบันทึก
  */
 export function getPinKey(nationalId?: string): string {
   if (nationalId && nationalId.trim()) {
@@ -141,10 +148,10 @@ export function getPinKey(nationalId?: string): string {
 }
 
 /**
- * Reads stored PIN hash from browser storage.
+ * อ่านค่ารหัส PIN ที่ผ่านการแฮชแล้วจาก Storage ของเบราว์เซอร์
  *
- * @param {string} [nationalId] - Patient national ID.
- * @returns {string | null} Stored PIN hash, or null if unconfigured.
+ * @param {string} [nationalId] - เลขประจำตัวประชาชนของผู้ป่วย
+ * @returns {string | null} ค่าแฮชของ PIN หรือ null หากยังไม่ได้ตั้งค่า
  */
 export function readPin(nationalId?: string): string | null {
   if (typeof window === "undefined") return null;
@@ -156,11 +163,11 @@ export function readPin(nationalId?: string): string | null {
 }
 
 /**
- * Stores a new hashed PIN for the patient.
- * Automatically enables PIN protection and clears current lockout state.
+ * บันทึกรหัส PIN ใหม่ของผู้ป่วย (จะทำการเข้ารหัสแฮชก่อนบันทึกลง LocalStorage เสมอ)
+ * พร้อมเปิดใช้งานระบบ PIN และล้างสถานะล็อกชั่วคราว
  *
- * @param {string} pin - 6-digit numeric PIN.
- * @param {string} [nationalId] - Associated patient national ID.
+ * @param {string} pin - รหัสตัวเลข 6 หลัก
+ * @param {string} [nationalId] - เลขประจำตัวประชาชนของผู้ป่วย
  */
 export function savePin(pin: string, nationalId?: string): void {
   if (typeof window === "undefined") return;
@@ -174,19 +181,19 @@ export function savePin(pin: string, nationalId?: string): void {
 }
 
 /**
- * Checks whether a PIN is configured for the given patient.
+ * ตรวจสอบว่าผู้ป่วยคนนี้มีการตั้งรหัส PIN ไว้ในระบบแล้วหรือไม่
  *
- * @param {string} [nationalId] - Patient national ID.
- * @returns {boolean} True if PIN exists in storage.
+ * @param {string} [nationalId] - เลขประจำตัวประชาชน
+ * @returns {boolean} true หากมี PIN อยู่ในระบบ
  */
 export function hasPin(nationalId?: string): boolean {
   return Boolean(readPin(nationalId));
 }
 
 /**
- * Checks whether PIN authentication is globally enabled and a PIN exists.
+ * ตรวจสอบว่าระบบเปิดใช้งานการล็อกอินด้วย PIN และผู้ใช้มีรหัส PIN อยู่แล้วหรือไม่
  *
- * @returns {boolean} True if enabled and PIN exists.
+ * @returns {boolean} true หากเปิดใช้งาน PIN และมีรหัสบันทึกอยู่
  */
 export function isPinEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -195,9 +202,9 @@ export function isPinEnabled(): boolean {
 }
 
 /**
- * Toggles PIN authentication enabled flag.
+ * สลับสถานะเปิดหรือปิดการใช้งานรหัส PIN
  *
- * @param {boolean} enabled - True to enable, false to disable.
+ * @param {boolean} enabled - true เพื่อเปิดใช้งาน, false เพื่อปิด
  */
 export function setPinEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
@@ -205,9 +212,9 @@ export function setPinEnabled(enabled: boolean): void {
 }
 
 /**
- * Reads cumulative failed PIN attempts in the current lockout cycle.
+ * ดึงจำนวนครั้งสะสมที่ผู้ใช้กรอก PIN ผิดในรอบปัจจุบัน
  *
- * @returns {number} Count of failed attempts.
+ * @returns {number} จำนวนครั้งที่กรอกผิด
  */
 export function getFailedAttempts(): number {
   if (typeof window === "undefined") return 0;
@@ -216,9 +223,9 @@ export function getFailedAttempts(): number {
 }
 
 /**
- * Calculates remaining allowed failed attempts before lockout triggers.
+ * คำนวณจำนวนครั้งที่เหลือที่ผู้ใช้สามารถกรอก PIN ผิดได้ ก่อนที่จะถูกล็อกระบบ
  *
- * @returns {number} Remaining attempts (0 to 3).
+ * @returns {number} จำนวนครั้งที่เหลือ (0 ถึง 3)
  */
 export function getRemainingAttempts(): number {
   const attempts = getFailedAttempts();
@@ -226,9 +233,9 @@ export function getRemainingAttempts(): number {
 }
 
 /**
- * Reads the current lockout escalation level for calculating penalty duration.
+ * ดึงระดับขั้นความผิดปัจจุบัน (Lockout Escalation Level) เพื่อใช้คำนวณระยะเวลาลงโทษ
  *
- * @returns {number} Tier index (0-indexed).
+ * @returns {number} ระดับขั้น (0, 1, 2, ...)
  */
 export function getLockoutLevel(): number {
   if (typeof window === "undefined") return 0;
@@ -237,19 +244,19 @@ export function getLockoutLevel(): number {
 }
 
 /**
- * Gets duration in seconds for the next lockout penalty (1m -> 5m -> 30m).
+ * ดึงระยะเวลาที่ต้องถูกระงับในรอบถัดไป (หน่วยวินาที: 1นาที -> 5นาที -> 30นาที)
  *
- * @returns {number} Penalty duration in seconds.
+ * @returns {number} ระยะเวลาเป็นวินาที
  */
 export function getNextLockoutSeconds(): number {
   return lockoutSecondsForLevel(getLockoutLevel());
 }
 
 /**
- * Calculates remaining active lockout duration in seconds.
- * Automatically clears expired lockout timestamp while preserving escalation tier.
+ * คำนวณเวลาที่เหลือของการถูกระงับใช้งานในปัจจุบัน (หน่วยวินาที)
+ * หากหมดเวลาแล้ว จะล้างเวลาหมดอายุออกโดยอัตโนมัติ แต่ยังคงรักษาระดับขั้นการลงโทษไว้
  *
- * @returns {number} Remaining seconds in lockout (0 if not locked out).
+ * @returns {number} เวลาที่เหลือ (0 หากไม่ได้ถูกระงับ)
  */
 export function getLockoutRemainingSeconds(): number {
   if (typeof window === "undefined") return 0;
@@ -258,7 +265,7 @@ export function getLockoutRemainingSeconds(): number {
   const until = parseInt(lockoutUntil, 10);
   const now = Date.now();
   if (now >= until) {
-    // Lockout window expired: reset the attempt counter but KEEP the escalation level.
+    // เมื่อหมดเวลาการระงับ: รีเซ็ตจำนวนครั้งที่กรอกผิด แต่ยังคงระดับขั้นการลงโทษไว้
     window.localStorage.removeItem(PIN_LOCKOUT_UNTIL_KEY);
     window.localStorage.setItem(PIN_ATTEMPTS_KEY, "0");
     return 0;
@@ -267,16 +274,16 @@ export function getLockoutRemainingSeconds(): number {
 }
 
 /**
- * Checks whether the user is currently locked out from entering a PIN.
+ * ตรวจสอบว่าขณะนี้ผู้ใช้กำลังติดสถานะถูกระงับการกรอก PIN (Lockout) อยู่หรือไม่
  *
- * @returns {boolean} True if lockout is active.
+ * @returns {boolean} true หากอยู่ในช่วงถูกระงับ
  */
 export function isLockedOut(): boolean {
   return getLockoutRemainingSeconds() > 0;
 }
 
 /**
- * Resets all lockout and failure counters upon successful PIN entry.
+ * รีเซ็ตสถานะการระงับและจำนวนครั้งที่ผิดทั้งหมดเมื่อกรอก PIN สำเร็จถูกต้อง
  */
 export function resetLockout(): void {
   if (typeof window === "undefined") return;
@@ -286,7 +293,7 @@ export function resetLockout(): void {
 }
 
 /**
- * Clears current cycle failure counters while preserving lockout escalation tier.
+ * ล้างจำนวนครั้งที่กรอกผิดและเวลาล็อกในรอบปัจจุบัน แต่ยังคงระดับบทลงโทษไว้
  */
 export function clearActiveLockout(): void {
   if (typeof window === "undefined") return;
@@ -295,8 +302,8 @@ export function clearActiveLockout(): void {
 }
 
 /**
- * Records a failed PIN attempt.
- * Triggers a timed lockout when threshold reaches `MAX_FAILED_ATTEMPTS` (3).
+ * บันทึกการกรอก PIN ผิด 1 ครั้ง
+ * หากครบกำหนด `MAX_FAILED_ATTEMPTS` (3 ครั้ง) จะเริ่มตั้งเวลาถูกระงับใช้งานตามระดับขั้น
  */
 export function recordFailedAttempt(): void {
   if (typeof window === "undefined") return;
@@ -311,17 +318,17 @@ export function recordFailedAttempt(): void {
 }
 
 /**
- * Verifies entered PIN against stored salted hash.
+ * ตรวจสอบความถูกต้องของรหัส PIN ที่ผู้ใช้กรอก เทียบกับรหัสแฮชที่บันทึกไว้
  *
- * Flow:
- * 1. Checks lockout status; rejects immediately if locked out.
- * 2. Hashes input and compares with stored hash (or legacy plaintext).
- * 3. On success: calls `resetLockout()`, upgrades legacy plaintext if needed, returns true.
- * 4. On failure: calls `recordFailedAttempt()`, returns false.
+ * ขั้นตอนการทำงาน:
+ * 1. ตรวจสอบสถานะ Lockout: หากกำลังถูกระงับจะไม่อนุญาตและปฏิเสธทันที
+ * 2. นำ PIN ที่กรอกไปเข้ารหัสแฮช แล้วเปรียบเทียบกับแฮชในระบบ
+ * 3. หากถูกต้อง: ล้างสถานะ Lockout และส่งค่ากลับเป็น true
+ * 4. หากไม่ถูกต้อง: บันทึกความผิดพลาด 1 ครั้ง (`recordFailedAttempt`) และส่งค่ากลับเป็น false
  *
- * @param {string} enteredPin - PIN entered by patient.
- * @param {string} [nationalId] - Patient national ID.
- * @returns {boolean} True if PIN matches and user is not locked out.
+ * @param {string} enteredPin - รหัส PIN ที่ผู้ป่วยกรอก
+ * @param {string} [nationalId] - เลขประจำตัวประชาชนของผู้ป่วย
+ * @returns {boolean} true หาก PIN ถูกต้องและไม่ติดสถานะระงับ
  */
 export function verifyPin(enteredPin: string, nationalId?: string): boolean {
   if (isLockedOut()) {
@@ -332,12 +339,12 @@ export function verifyPin(enteredPin: string, nationalId?: string): boolean {
   if (!saved) return false;
 
   const enteredHash = hashPin(enteredPin);
-  // Match either hashed pin or legacy plain-text pin
+  // ตรวจสอบทั้งกรณีแฮชหรือข้อมูลแบบเก่า (Backward compatibility)
   const isMatch = saved === enteredHash || saved === enteredPin;
 
   if (isMatch) {
     resetLockout();
-    // Auto-migrate legacy plain text to hash if needed
+    // หากเป็นข้อมูลแบบเก่าที่ยังไม่แฮช ให้อัปเกรดเป็นแฮชทันที
     if (saved === enteredPin) {
       savePin(enteredPin, nationalId);
     }
@@ -349,10 +356,10 @@ export function verifyPin(enteredPin: string, nationalId?: string): boolean {
 }
 
 /**
- * Removes PIN credentials from device storage.
- * Note: Does not reset lockout tier to prevent bypass via re-login.
+ * ลบรหัส PIN ออกจากหน่วยความจำของอุปกรณ์
+ * ข้อสังเกต: จะไม่ล้างระดับการถูกระงับ (Lockout Level) เพื่อป้องกันผู้ใช้พยายามบายพาสด้วยการล้างเครื่องแล้วเข้าใหม่
  *
- * @param {string} [nationalId] - Patient national ID.
+ * @param {string} [nationalId] - เลขประจำตัวประชาชนของผู้ป่วย
  */
 export function clearPin(nationalId?: string): void {
   if (typeof window === "undefined") return;
@@ -361,8 +368,6 @@ export function clearPin(nationalId?: string): void {
   }
   window.localStorage.removeItem(PIN_STORAGE_KEY);
   window.localStorage.removeItem(PIN_ENABLED_KEY);
-  // Intentionally NOT clearing the lockout: signing back in with the national ID
-  // must not let a locked-out user skip the wait.
 }
 
 export const hasPinForPatient = hasPin;
@@ -370,41 +375,41 @@ export const savePinForPatient = savePin;
 export const verifyPinForPatient = verifyPin;
 export const clearPinForPatient = clearPin;
 
+// โครงสร้างข้อมูลระบุตัวตนของผู้ป่วยที่ผูกกับอุปกรณ์นี้
 export interface PairedPatientInfo {
   name: string;
   nationalId: string;
   maskedId?: string;
-  /** Registered contact channels, cached from /me so PIN recovery can target them without re-typing. */
+  // ช่องทางติดต่อของผู้ป่วย สำหรับใช้ส่งรหัส OTP กู้คืน PIN โดยไม่ต้องกรอกใหม่
   phone?: string;
   email?: string;
 }
 
+// ตัวแปรหน่วยความจำชั่วคราวขณะแอปทำงาน (In-Memory Cache)
 let inMemoryPairedPatient: PairedPatientInfo | null = null;
 
 /**
- * Caches paired patient identity temporarily in sessionStorage.
+ * บันทึกข้อมูลระบุตัวตนของผู้ป่วยไว้ชั่วคราวใน sessionStorage
+ * เพื่อความปลอดภัยและปฏิบัติตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA)
+ * โดยไม่บันทึกข้อมูลส่วนบุคคลที่ระบุตัวตนได้ (PII) ลงใน LocalStorage ถาวร
  *
- * Prevents Personally Identifiable Information (PII) leakage by avoiding permanent disk storage.
- * Data remains active only during the browser session.
- *
- * @param {PairedPatientInfo} info - Patient profile info (name, nationalId, phone, email).
+ * @param {PairedPatientInfo} info - ข้อมูลผู้ป่วย (ชื่อ, เลขบัตร, เบอร์โทร, อีเมล)
  */
 export function savePairedPatient(info: PairedPatientInfo): void {
   inMemoryPairedPatient = info;
   if (typeof window === "undefined") return;
   try {
-    // Security: Do not persist PII in permanent disk localStorage. Keep session-scoped.
     window.sessionStorage.setItem(PAIRED_PATIENT_KEY, JSON.stringify(info));
     window.localStorage.removeItem(PAIRED_PATIENT_KEY);
   } catch {
-    // ignore
+    // ป้องกันกรณีติดข้อจำกัดด้านความปลอดภัยของเบราว์เซอร์
   }
 }
 
 /**
- * Reads paired patient profile cached from device storage.
+ * อ่านข้อมูลผู้ป่วยที่บันทึกไว้ในเบราว์เซอร์
  *
- * @returns {PairedPatientInfo | null} Paired patient info, or null if none.
+ * @returns {PairedPatientInfo | null} ข้อมูลผู้ป่วย หรือ null หากไม่มี
  */
 export function readPairedPatient(): PairedPatientInfo | null {
   if (inMemoryPairedPatient) return inMemoryPairedPatient;
@@ -419,7 +424,7 @@ export function readPairedPatient(): PairedPatientInfo | null {
 }
 
 /**
- * Purges paired patient data from memory and sessionStorage.
+ * ล้างข้อมูลผู้ป่วยที่ผูกไว้ทั้งหมดออกจากหน่วยความจำและ sessionStorage
  */
 export function clearPairedPatient(): void {
   inMemoryPairedPatient = null;
@@ -428,27 +433,27 @@ export function clearPairedPatient(): void {
     window.sessionStorage.removeItem(PAIRED_PATIENT_KEY);
     window.localStorage.removeItem(PAIRED_PATIENT_KEY);
   } catch {
-    // ignore
+    // ป้องกันกรณีติดข้อจำกัดด้านความปลอดภัยของเบราว์เซอร์
   }
 }
 
 /**
- * Validates PIN complexity by rejecting trivial or easily guessable patterns:
- * - Repeated identical digits (000000, 111111, ..., 999999)
- * - Sequential ascending or descending digits (012345, 123456, ..., 654321, 543210)
+ * ตรวจสอบความปลอดภัยของรหัส PIN โดยปฏิเสธรูปแบบตัวเลขที่คาดเดาได้ง่าย:
+ * - ตัวเลขซ้ำกันทั้งหมด 6 หลัก (เช่น 000000, 111111, ..., 999999)
+ * - ตัวเลขเรียงลำดับจากหน้าไปหลังหรือหลังมาหน้า (เช่น 123456, 654321)
  *
- * @param {string} pin - 6-digit PIN string.
- * @returns {boolean} True if PIN is considered weak or trivial.
+ * @param {string} pin - ข้อความรหัส PIN 6 หลัก
+ * @returns {boolean} true ถ้ารหัส PIN อ่อนแอและเดาง่ายเกินไป (ไม่ปลอดภัย)
  */
 export function isWeakPin(pin: string): boolean {
   if (!pin || typeof pin !== "string" || !/^\d{6}$/.test(pin)) {
     return true;
   }
-  // Repeated digits (e.g. 000000, 111111, ..., 999999)
+  // ดักจับกรณีเป็นเลขซ้ำตัวเดิม 6 ตัว
   if (/^(\d)\1{5}$/.test(pin)) {
     return true;
   }
-  // Sequential numbers (ascending & descending)
+  // ดักจับรูปแบบตัวเลขเรียงลำดับ
   const sequentialPatterns = [
     "012345", "123456", "234567", "345678", "456789", "567890",
     "987654", "876543", "765432", "654321", "543210", "098765",

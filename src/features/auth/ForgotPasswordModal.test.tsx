@@ -85,4 +85,24 @@ describe("ForgotPasswordModal", () => {
     );
     expect(container.firstChild).toBeNull();
   });
+
+  it("stays on the request step when SMTP delivery fails", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: false, error: "ส่งอีเมล OTP ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า SMTP" }), {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    render(createElement(ForgotPasswordModal, {
+      isOpen: true,
+      onClose: vi.fn(),
+      onSuccess: vi.fn(),
+    }));
+    fireEvent.change(screen.getByPlaceholderText(/เช่น somchai99/), {
+      target: { value: "somchai@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /ส่งรหัส OTP/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("ส่งอีเมล OTP ไม่สำเร็จ");
+    expect(screen.getByRole("heading", { name: /ลืมรหัสผ่าน/ })).toBeInTheDocument();
+  });
 });

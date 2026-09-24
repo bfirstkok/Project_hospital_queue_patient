@@ -1,51 +1,51 @@
+// คีย์สำหรับจัดเก็บ Access Token (JWT) ของผู้ป่วยใน Web Storage
 export const TOKEN_STORAGE_KEY = "hospital_patient_access_token";
 
+// ตัวแปรเก็บ Token ในหน่วยความจำชั่วคราว (In-Memory Cache) เพื่อให้เข้าถึงได้รวดเร็ว
 let inMemoryToken: string | null = null;
 
 /**
- * Reads the cached access token for API authentication.
+ * อ่านค่า Access Token สำหรับใช้ยืนยันตัวตนกับ Backend API
  *
- * Responsibilities:
- * 1. Checks in-memory cache (`inMemoryToken`) first.
- * 2. If running in a browser, reads from `sessionStorage` (with legacy `localStorage` fallback).
+ * ลำดับการทำงาน:
+ * 1. ตรวจสอบในตัวแปร In-Memory (`inMemoryToken`) ก่อนเป็นอันดับแรก
+ * 2. หากทำงานบนเบราว์เซอร์ จะอ่านจาก `sessionStorage` (และสำรองอ่านจาก `localStorage` สำหรับระบบเดิม)
  *
- * @returns {string | null} Access token string, or null if unauthenticated.
+ * @returns {string | null} ข้อความ Token หรือ null หากยังไม่ได้เข้าสู่ระบบ
  */
 export function readToken(): string | null {
   if (inMemoryToken) return inMemoryToken;
   if (typeof window === "undefined") return null;
-  // Read from session storage or legacy local fallback
   return window.sessionStorage.getItem(TOKEN_STORAGE_KEY) || window.localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
 /**
- * Persists the access token after successful authentication.
+ * บันทึก Access Token เมื่อผู้ป่วยเข้าสู่ระบบสำเร็จ
  *
- * Responsibilities:
- * 1. Stores token in memory (`inMemoryToken`).
- * 2. Stores token in `sessionStorage` for enhanced security (automatically cleared on tab close).
- * 3. Removes any legacy token remnant from persistent `localStorage`.
+ * การรักษาความปลอดภัยตามหลัก PDPA & Security Best Practices:
+ * 1. บันทึกลงตัวแปร `inMemoryToken` เพื่อใช้งานในหน่วยความจำ
+ * 2. บันทึกลง `sessionStorage` เพื่อให้ Token ถูกล้างทิ้งอัตโนมัติเมื่อปิดแท็บเบราว์เซอร์
+ * 3. ล้าง Token ออกจาก `localStorage` เพื่อป้องกันการฝังตัวถาวรในฮาร์ดดิสก์
  *
- * @param {string} token - Access token returned from authentication API.
+ * @param {string} token - Access Token ที่ได้รับจากการล็อกอินหรือลงทะเบียน
  */
 export function saveToken(token: string): void {
   inMemoryToken = token;
   if (typeof window === "undefined") return;
   try {
-    // Cloud-first security: Store session-scoped only, clear persistent disk storage
     window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   } catch {
-    // ignore
+    // ป้องกันกรณีเบราว์เซอร์ปิดกั้น Storage
   }
 }
 
 /**
- * Clears the access token upon logout or session expiration.
+ * ล้างข้อมูล Access Token เมื่อผู้ใช้ออกจากระบบ (Logout) หรือ Session หมดอายุ
  *
- * Responsibilities:
- * 1. Resets `inMemoryToken` to null.
- * 2. Purges token from both `sessionStorage` and `localStorage`.
+ * ขั้นตอนการทำงาน:
+ * 1. รีเซ็ตตัวแปร `inMemoryToken` ให้เป็น null
+ * 2. ลบ Token ออกจากทั้ง `sessionStorage` และ `localStorage`
  */
 export function clearToken(): void {
   inMemoryToken = null;
@@ -54,6 +54,6 @@ export function clearToken(): void {
     window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   } catch {
-    // ignore
+    // ป้องกันกรณีเบราว์เซอร์ปิดกั้น Storage
   }
 }

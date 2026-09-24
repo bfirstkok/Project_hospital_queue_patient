@@ -8,25 +8,25 @@ import {
 } from "@/features/patient-profile/PatientProfileForm";
 import { PdpaConsentGate } from "./PdpaConsentModal";
 
+// พร็อพส์สำหรับคอมโพเนนต์หน้าลงทะเบียนและจองคิว
 interface RegistrationViewProps {
-  token?: string;
-  hasToken?: boolean;
-  initialPdpaAccepted?: boolean;
-  googleTempToken?: string;
-  initialProfile?: PatientProfile | null;
-  onLogin: () => void;
-  onCancel?: () => void;
-  onSuccess: (token: string, result: RegistrationResult) => void;
-  onUnauthorized?: () => void;
-  /** Called instead of registering when the national ID already has an active queue. */
-  onDuplicateQueue?: (token: string, nationalId: string) => void;
+  token?: string;                                 // Access Token (กรณีล็อกอินอยู่แล้ว)
+  hasToken?: boolean;                             // แฟล็กบอกสถานะว่ามี Token หรือไม่
+  initialPdpaAccepted?: boolean;                  // ผ่านการยินยอม PDPA มาแล้วหรือไม่
+  googleTempToken?: string;                       // โทเค็นชั่วคราวจากการล็อกอิน Google OAuth
+  initialProfile?: PatientProfile | null;         // ข้อมูลโปรไฟล์เริ่มต้น
+  onLogin: () => void;                            // ฟังก์ชันสลับไปหน้าเข้าสู่ระบบ
+  onCancel?: () => void;                          // ฟังก์ชันกรณีกดยกเลิก
+  onSuccess: (token: string, result: RegistrationResult, nationalId: string) => void; // ฟังก์ชันเมื่อลงทะเบียนสำเร็จและได้คิว
+  onUnauthorized?: () => void;                    // ฟังก์ชันเมื่อ Token หมดอายุ
+  onDuplicateQueue?: (token: string, nationalId: string) => void; // ฟังก์ชันจัดการเมื่อตรวจพบคิวเดิมที่ยังไม่เสร็จสิ้น
 }
 
 /**
- * Checks whether an active access token already exists for the given National ID.
+ * ฟังก์ชันตรวจสอบค้นหา Token ที่มีอยู่เดิมจากเลขประจำตัวประชาชน 13 หลัก
  *
- * @param {string} nationalId - 13-digit Thai national ID.
- * @returns {Promise<string>} Access token or empty string if patient does not exist.
+ * @param {string} nationalId - เลขประจำตัวประชาชน 13 หลัก
+ * @returns {Promise<string>} Access Token หรือข้อความว่างหากยังไม่มีประวัติ
  */
 async function probeExistingToken(nationalId: string): Promise<string> {
   try {
@@ -38,24 +38,26 @@ async function probeExistingToken(nationalId: string): Promise<string> {
 }
 
 /**
- * Checks whether the patient already has an active (uncompleted/uncancelled) OPD queue ticket.
+ * ฟังก์ชันตรวจสอบว่าผู้ป่วยมีคิวตรวจที่ยังดำเนินอยู่ (ยังไม่เสร็จสิ้นและยังไม่ได้ยกเลิก) หรือไม่
+ * (Duplicate Queue Guard: ป้องกันการออกบัตรคิวซ้ำซ้อนในวันเดียวกัน)
  *
- * @param {string} token - Patient access token.
- * @returns {Promise<boolean>} True if patient has an active queue today.
+ * @param {string} token - Access Token ของผู้ป่วย
+ * @returns {Promise<boolean>} true หากมีคิวตรวจค้างอยู่
  */
 async function probeActiveQueue(token: string): Promise<boolean> {
   try {
     const q = await patientApi.queue(token);
     return Boolean(q && q.queue_number);
   } catch {
-    return false; // 404 / no queue today
+    return false; // ตอบกลับ 404 แสดงว่ายังไม่มีคิวในวันนี้
   }
 }
 
+// รายชื่อฟิลด์ที่เป็นตัวเลข (ต้องแปลงชนิดข้อมูลจาก string เป็น number ก่อนส่งให้ API)
 const numericFields = new Set(["age", "height_cm", "weight_kg"]);
 
 /**
- * Normalizes FormData entry to trimmed string or null if empty.
+ * ตัดช่องว่างส่วนเกินและคืนค่าเป็น null หากเป็นค่าว่างเปล่า
  */
 function valueOrNull(value: FormDataEntryValue | null): string | null {
   const text = typeof value === "string" ? value.trim() : "";
@@ -63,16 +65,16 @@ function valueOrNull(value: FormDataEntryValue | null): string | null {
 }
 
 /**
- * Aggregates and normalizes registration form fields into a typed `RegistrationPayload`.
+ * รวบรวมข้อมูลทั้งหมดจากแบบฟอร์มแล้วจัดโครงสร้างเป็น `RegistrationPayload`
  *
- * Responsibilities:
- * 1. Reads all form inputs via `FormData`.
- * 2. Joins up to 3 emergency contacts with commas.
- * 3. Casts numeric fields (`age`, `height_cm`, `weight_kg`) to numbers or null.
- * 4. Cleans national ID to 13 pure digits.
+ * ลำดับการทำงาน:
+ * 1. อ่านค่าทุกฟิลด์จาก HTML Form ผ่าน `FormData`
+ * 2. รวบรวมผู้ติดต่อฉุกเฉินสูงสุด 3 ท่าน คั่นด้วยเครื่องหมายจุลภาค
+ * 3. แปลงฟิลด์ตัวเลข (`age`, `height_cm`, `weight_kg`) เป็น Number หรือ null
+ * 4. ทำความสะอาดเลขประจำตัวประชาชนให้เป็นตัวเลขล้วน 13 หลัก
  *
- * @param {HTMLFormElement} form - Target HTML form element.
- * @returns {RegistrationPayload} Typed payload ready for API dispatch.
+ * @param {HTMLFormElement} form - อิลีเมนต์แบบฟอร์ม HTML
+ * @returns {RegistrationPayload} ข้อมูลสำหรับส่งไปยัง API ลงทะเบียน
  */
 export function collectRegistrationPayload(form: HTMLFormElement): RegistrationPayload {
   const data = new FormData(form);
@@ -82,6 +84,7 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
 
   payload.phone = valueOrNull(data.get("phone"));
 
+  // รวบรวมข้อมูลผู้ติดต่อฉุกเฉิน
   const emergencyNames = [data.get("emergency_name_1"), data.get("emergency_name_2"), data.get("emergency_name_3"), data.get("emergency_name")]
     .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
   const emergencyPhones = [data.get("emergency_phone_1"), data.get("emergency_phone_2"), data.get("emergency_phone_3"), data.get("emergency_phone")]
@@ -93,10 +96,12 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
   payload.emergency_phone = emergencyPhones.length > 0 ? emergencyPhones.join(", ") : null;
   payload.emergency_relationship = emergencyRels.length > 0 ? emergencyRels[0] : null;
 
+  // แปลงค่าฟิลด์ตัวเลข
   for (const field of numericFields) {
     payload[field] = payload[field] === null ? null : String(Number(payload[field]));
   }
 
+  // ทำความสะอาดเลขประจำตัวประชาชน 13 หลัก
   if (payload.national_id) {
     let cleanId = payload.national_id.replace(/\D/g, "");
     if (cleanId.length !== 13) {
@@ -104,7 +109,7 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
         const saved = (sessionStorage.getItem("patient_national_id") || localStorage.getItem("patient_national_id") || "").replace(/\D/g, "");
         if (saved.length === 13) cleanId = saved;
       } catch {
-        // ignore
+        // ข้ามข้อผิดพลาด storage
       }
     }
     payload.national_id = cleanId;
@@ -119,6 +124,7 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
   } as RegistrationPayload;
 }
 
+// รายการตัวเลือกอาการสำคัญยอดนิยมสำหรับคัดกรองเบื้องต้น
 const SYMPTOM_OPTIONS = [
   "มีไข้ / หนาวสั่น",
   "ไอ / เจ็บคอ / มีน้ำมูก",
@@ -131,13 +137,14 @@ const SYMPTOM_OPTIONS = [
 ];
 
 /**
- * Patient Registration & OPD Queue Booking View component.
+ * คอมโพเนนต์หน้าจอลงทะเบียนผู้ป่วยและจองคิวตรวจ OPD (`RegistrationView`)
  *
- * Features:
- * 1. PDPA Consent Gate (`PdpaConsentGate`).
- * 2. Demographic & Medical Profile Form (`PatientProfileForm`).
- * 3. Chief Complaint & Symptom Checklist.
- * 4. Duplicate Queue Guard (prevents double ticket issuance).
+ * กระบวนการทำงานที่สำคัญ (Workflow):
+ * 1. ประตูคัดกรองความยินยอม PDPA (`PdpaConsentGate`): บังคับยินยอมก่อนเข้ากรอกข้อมูล
+ * 2. ฟอร์มข้อมูลผู้ป่วยและสุขภาพ (`PatientProfileForm`): รองรับทั้งผู้ป่วยใหม่และดึงข้อมูลเดิมของผู้ป่วยเก่า
+ * 3. คัดกรองอาการสำคัญ (Chief Complaint): เลือกช้อยส์ด่วนหรือพิมพ์บรรยายอาการเพิ่มเติม
+ * 4. ระบบป้องกันการจองคิวซ้ำ (Duplicate Queue Guard): เช็คว่ามีคิวเดิมค้างอยู่หรือไม่ หากมีจะนำทางไปดูคิวเดิมทันที
+ * 5. ป้องกันข้อมูลสูญหาย: มี Modal เตือนยืนยันหากผู้ใช้กดยกเลิกขณะกรอกข้อมูลค้างไว้
  */
 export function RegistrationView({
   token,
@@ -170,14 +177,14 @@ export function RegistrationView({
   const isFormDirty = profileDirty || symptomDirty;
 
   /**
-   * Toggles selection state of a symptom chip item.
+   * สลับการเลือกช้อยส์อาการสำคัญ
    */
   function toggleSymptom(item: string) {
     setSelectedSymptoms((prev) => (prev.includes(item) ? prev.filter((s) => s !== item) : [...prev, item]));
   }
 
   /**
-   * Clears form inputs and cached browser draft.
+   * ล้างข้อมูลในฟอร์มและข้อมูลร่างในเครื่อง
    */
   function resetForm() {
     profileRef.current?.clearDraft();
@@ -186,7 +193,7 @@ export function RegistrationView({
   }
 
   /**
-   * Handles user cancel click; prompts confirmation if unsaved changes exist.
+   * จัดการเมื่อผู้ใช้กดปุ่มยกเลิก: หากมีข้อมูลกรอกค้างไว้ จะเปิด Modal ยืนยันก่อน
    */
   function handleCancelClick() {
     if (isFormDirty) {
@@ -198,7 +205,7 @@ export function RegistrationView({
   }
 
   /**
-   * Confirms cancellation and navigates back to previous screen.
+   * ยืนยันการยกเลิกและนำทางกลับไปยังหน้าก่อนหน้า
    */
   function handleConfirmCancel() {
     setShowCancelConfirm(false);
@@ -207,14 +214,14 @@ export function RegistrationView({
   }
 
   /**
-   * Submits patient registration form to book an OPD queue.
+   * ส่งแบบฟอร์มลงทะเบียนเพื่อออกบัตรคิวตรวจ OPD
    *
-   * Flow:
-   * 1. Validates form constraints and required medical fields.
-   * 2. Serializes data using `collectRegistrationPayload`.
-   * 3. Runs duplicate queue check to avoid double bookings.
-   * 4. Dispatches `patientApi.register()` and clears draft.
-   * 5. Notifies parent component via `onSuccess()`.
+   * ขั้นตอนการทำงาน:
+   * 1. ตรวจสอบความถูกต้องของข้อมูลทุกช่อง และฟิลด์สุขภาพสำคัญ
+   * 2. รวบรวมข้อมูลด้วย `collectRegistrationPayload`
+   * 3. รันระบบตรวจสอบคิวซ้ำ (Duplicate Queue Guard) ป้องกันการออกคิวซ้ำซ้อน
+   * 4. ยิง API `patientApi.register()` และล้างดราฟต์ออกจากเครื่อง
+   * 5. แจ้งคอมโพเนนต์แม่ด้วย `onSuccess()` เพื่อเปิดหน้าบัตรคิว
    */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -239,9 +246,7 @@ export function RegistrationView({
 
     setLoading(true);
     try {
-      // Duplicate-queue guard: the backend does not reject re-registering a
-      // national ID that already has an active queue — it creates a second one
-      // and both break. Detect it here and route the patient to their queue.
+      // ตรวจสอบป้องกันการจองคิวซ้ำ: หากเลขบัตรประชาชนนี้มีคิวที่ยังไม่เสร็จสิ้น จะพาไปหน้าคิวเดิมทันที
       const probeToken = token || (nationalId ? await probeExistingToken(nationalId) : "");
       if (probeToken && (await probeActiveQueue(probeToken))) {
         setLoading(false);
@@ -262,9 +267,9 @@ export function RegistrationView({
         sessionStorage.removeItem("patient_national_id");
         localStorage.removeItem("patient_national_id");
       } catch {
-        // ignore
+        // ข้ามข้อผิดพลาด storage
       }
-      onSuccess(result.access_token, result);
+      onSuccess(result.access_token, result, nationalId);
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "ไม่สามารถบันทึกข้อมูลได้");
       const [field, errors] = Object.entries(apiError.errors || {})[0] || [];
@@ -282,6 +287,7 @@ export function RegistrationView({
     }
   }
 
+  // หากยังไม่กดยินยอมข้อตกลง PDPA ให้แสดงหน้าต่างยินยอมข้อมูลส่วนบุคคลก่อน
   if (!isPdpaAccepted) {
     return (
       <section id="registrationView" className="page-shell">
@@ -297,6 +303,7 @@ export function RegistrationView({
           )}
         </div>
 
+        {/* แถบขั้นตอน 3 สเต็ป */}
         <ol className="steps" aria-label="ขั้นตอนรับบริการ">
           <li className="active"><span>1</span>ยินยอม PDPA & ลงทะเบียน</li>
           <li><span>2</span>วัดสัญญาณชีพ</li>
@@ -310,6 +317,7 @@ export function RegistrationView({
 
   return (
     <section id="registrationView" className="page-shell">
+      {/* Modal เปิดอ่านนโยบาย PDPA ซ้ำ */}
       {showPdpaReview && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="หน้านโยบาย PDPA">
           <div className="modal-inner">
@@ -318,6 +326,7 @@ export function RegistrationView({
         </div>
       )}
 
+      {/* Modal ยืนยันกรณีกดยกเลิกขณะที่กรอกข้อมูลค้างไว้ */}
       {showCancelConfirm && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cancelConfirmTitle">
           <div className="modal-content" style={{ maxWidth: "440px", textAlign: "center" }}>
@@ -376,6 +385,7 @@ export function RegistrationView({
       )}
 
       <form ref={formRef} className="form-card" autoComplete="on" onSubmit={submit}>
+        {/* ฟิลด์ Honeypot ซ่อนไว้เพื่อดักจับ Bot อัตโนมัติ */}
         <input name="website" className="honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" />
 
         <PatientProfileForm
@@ -388,7 +398,7 @@ export function RegistrationView({
           onUnauthorized={onUnauthorized}
           onDirtyChange={setProfileDirty}
         >
-          {/* Block 2: อาการที่มารับบริการ */}
+          {/* บล็อกที่ 2: ระบุอาการสำคัญที่มารับบริการ */}
           <fieldset>
             <legend>
               <span className="section-number">2</span>
@@ -421,6 +431,7 @@ export function RegistrationView({
           </fieldset>
         </PatientProfileForm>
 
+        {/* แถบระบุว่าผ่านการยินยอมตาม PDPA แล้ว */}
         <div className="pdpa-verified-box">
           <div className="pdpa-verified-badge">
             <span className="pdpa-check-icon">✓</span>

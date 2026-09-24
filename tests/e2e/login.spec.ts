@@ -2,6 +2,11 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Login System - E2E Tests", () => {
   test.beforeEach(async ({ page }) => {
+    await page.route("**/runtime-config.js", route => route.fulfill({
+      contentType: "application/javascript",
+      body: 'window.PATIENT_APP_ENV = { API_BASE_URL: "http://127.0.0.1:8000", GOOGLE_CLIENT_ID: "playwright-client-id" };',
+    }));
+    await page.route("https://accounts.google.com/gsi/client", route => route.abort());
     await page.goto("/patient");
     await page.evaluate(() => {
       localStorage.clear();
@@ -69,7 +74,7 @@ test.describe("Login System - E2E Tests", () => {
     await expect(page.locator(".queue-number")).toContainText("A012");
   });
 
-  test("4. Google OAuth login seamlessly signs in and routes to PIN setup", async ({ page }) => {
+  test("4. Google test mode signs in and routes to PIN setup", async ({ page }) => {
     await page.goto("/patient");
 
     const googleBtn = page.locator("button.google-sign-in-btn");

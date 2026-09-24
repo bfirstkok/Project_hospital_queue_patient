@@ -22,19 +22,20 @@ import type { NavView } from "@/shared/ui/AppNavbar";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 import { formatMaskedNationalId } from "@/shared/data/thai-id";
 
+// รายชื่อมุมมองหน้าจอทั้งหมดในระบบ Single Page Application (SPA State Machine)
 type View =
-  | "login"
-  | "pin_unlock"
-  | "pin_setup"
-  | "pin_change"
-  | "pin_reset"
-  | "status"
-  | "registration"
-  | "account"
-  | "settings";
+  | "login"          // หน้าเข้าสู่ระบบด้วยรหัสผ่าน / Google
+  | "pin_unlock"     // หน้าปลดล็อกด้วยรหัส PIN 6 หลัก
+  | "pin_setup"      // หน้าตั้งค่ารหัส PIN 6 หลักครั้งแรก
+  | "pin_change"     // หน้าเปลี่ยนรหัส PIN
+  | "pin_reset"      // หน้ารีเซ็ตรหัส PIN ด้วย OTP
+  | "status"         // หน้าแสดงบัตรคิวและสถานะคิวสด
+  | "registration"   // หน้าลงทะเบียนและจองคิวตรวจ OPD
+  | "account"        // หน้าประวัติผู้ป่วยและผลตรวจ
+  | "settings";      // หน้าตั้งค่าระบบ ขนาดตัวอักษร และความปลอดภัย
 
 /**
- * Reads initial font size preference from local storage.
+ * ดึงค่าขนาดตัวอักษรเริ่มต้นที่ผู้ใช้เคยตั้งค่าไว้จาก localStorage
  */
 function getInitialFontSize(): FontSize {
   if (typeof window === "undefined") return "normal";
@@ -44,7 +45,7 @@ function getInitialFontSize(): FontSize {
       return saved;
     }
   } catch {
-    // Ignore localStorage errors
+    // ข้ามข้อผิดพลาด storage
   }
   return "normal";
 }
@@ -52,13 +53,14 @@ function getInitialFontSize(): FontSize {
 const VIEW_STORAGE_KEY = "patient_app_current_view";
 
 /**
- * Main Single Page Application (SPA) orchestrator and state controller.
+ * คอมโพเนนต์หน้าหลักของแอปพลิเคชัน (`Page`) - ทำหน้าที่เป็น Central State Controller & Router
+ * (หัวใจหลักของสถาปัตยกรรม Frontend SPA ที่ต้องอธิบายในเล่มวิทยานิพนธ์และการสอบ)
  *
- * Responsibilities:
- * 1. Controls application view routing (state-based navigation).
- * 2. Manages authentication lifecycle: access token, unlocked session flag, 401 expiration, and logout.
- * 3. Enforces 2-step security verification flow (Credentials -> 6-Digit PIN).
- * 4. Synchronizes live queue status with `AppNavbar` badges.
+ * บทบาทหน้าที่หลัก:
+ * 1. ควบคุมการสลับหน้าจอ (State-based Navigation Routing) โดยไม่ต้องโหลดหน้าเว็บใหม่
+ * 2. วงจรความปลอดภัยแบบ 2 ชั้น (Two-Step Verification): เข้าสู่ระบบ -> ยืนยันรหัส PIN 6 หลัก
+ * 3. บริหารจัดการวงจรชีวิตของเซสชัน (Token Lifecycle, ปลดล็อก Session, จัดการกรณี Token หมดอายุ 401, และการออกจากระบบ)
+ * 4. ซิงค์สถานะคิวสดกับ Badge บนแถบเมนูนำทาง (`AppNavbar`)
  */
 export default function Page() {
   const [view, setView] = useState<View>("login");
@@ -71,12 +73,13 @@ export default function Page() {
   const [fontSize, setFontSize] = useState<FontSize>(getInitialFontSize);
   const [initialized, setInitialized] = useState(false);
 
+  // ตรวจสอบสถานะการเข้าสู่ระบบและเซสชันเมื่อเปิดแอปพลิเคชันขึ้นมาครั้งแรก
   useEffect(() => {
     let isUnlocked = false;
     try {
       isUnlocked = sessionStorage.getItem("patient_session_unlocked") === "true";
     } catch {
-      // Ignore
+      // ข้ามข้อผิดพลาด storage
     }
 
     const savedToken = readToken() || "";
@@ -84,9 +87,10 @@ export default function Page() {
     try {
       savedView = localStorage.getItem(VIEW_STORAGE_KEY) as View | null;
     } catch {
-      // Ignore
+      // ข้ามข้อผิดพลาด storage
     }
 
+    // หากมี Token และเซสชันปลดล็อกเรียบร้อยแล้ว ให้เปิดหน้าที่เคยเข้าไว้
     if (savedToken && isUnlocked) {
       setToken(savedToken);
       if (
@@ -98,12 +102,13 @@ export default function Page() {
         setView("status");
       }
     } else {
-      // Starting on website -> always choose login method first
+      // หากยังไม่ได้ปลดล็อกเซสชัน ให้เริ่มต้นที่หน้าเข้าสู่ระบบเสมอ
       setView("login");
     }
     setInitialized(true);
   }, []);
 
+  // ซิงค์มุมมองปัจจุบันกับ Body Dataset และจัดเก็บหน้าจอล่าสุดไว้ใน Storage
   useEffect(() => {
     if (
       !token &&
@@ -123,13 +128,13 @@ export default function Page() {
       try {
         localStorage.setItem(VIEW_STORAGE_KEY, view);
       } catch {
-        // Ignore
+        // ข้ามข้อผิดพลาด storage
       }
     }
   }, [view, token, pendingAuth]);
 
   /**
-   * Completes authentication: stores the access token in memory and sets the unlocked session flag.
+   * ยืนยันการเข้าสู่ระบบสำเร็จ: บันทึก Token ลงหน่วยความจำ และตั้งค่าแฟล็กปลดล็อกเซสชันใน sessionStorage
    */
   const authenticate = useCallback((accessToken: string) => {
     saveToken(accessToken);
@@ -137,12 +142,12 @@ export default function Page() {
     try {
       sessionStorage.setItem("patient_session_unlocked", "true");
     } catch {
-      // Ignore
+      // ข้ามข้อผิดพลาด storage
     }
   }, []);
 
   /**
-   * Synchronizes live queue active state to control badges and enable/disable booking actions.
+   * ซิงค์สถานะว่ามีคิวตรวจที่ยังดำเนินอยู่หรือไม่ เพื่อเปิด/ปิดการแจ้งเตือนและปุ่มจองคิว
    */
   const handleQueueStateChange = useCallback((active: boolean) => {
     setQueueActive(active);
@@ -150,9 +155,9 @@ export default function Page() {
   }, []);
 
   /**
-   * Clears state and redirects the patient back to the login view.
+   * ล้างข้อมูลเซสชันและนำผู้ป่วยกลับสู่หน้าเข้าสู่ระบบ
    *
-   * @param {boolean} clearPinData - If true, clears PIN and paired patient cache as well (e.g. account switching).
+   * @param {boolean} clearPinData - หากเป็น true จะล้างรหัส PIN และข้อมูลผู้ป่วยที่จับคู่ไว้ด้วย (เช่น กรณีสลับบัญชี)
    */
   const resetToLogin = useCallback(
     (clearPinData: boolean) => {
@@ -165,7 +170,7 @@ export default function Page() {
         sessionStorage.removeItem("patient_session_unlocked");
         localStorage.removeItem(VIEW_STORAGE_KEY);
       } catch {
-        // Ignore
+        // ข้ามข้อผิดพลาด storage
       }
       setToken("");
       setPendingAuth(null);
@@ -177,17 +182,13 @@ export default function Page() {
     [pendingAuth],
   );
 
-  /** Clears the session after logout or an expired/unauthorized request. */
+  // ล้างเซสชันเมื่อออกจากระบบ หรือเมื่อ Token หมดอายุ (HTTP 401 Unauthorized)
   const resetSession = useCallback(() => resetToLogin(false), [resetToLogin]);
   const expireSession = resetSession;
-
   const logout = resetSession;
 
-  /**
-   * Handles forgotten PIN scenario (clears existing PIN data and redirects to login).
-   */
+  // จัดการเมื่อผู้ป่วยลืมรหัส PIN: ล้างข้อมูล PIN เดิม แล้วนำทางไปยืนยันตัวตนใหม่
   const handleForgotPin = useCallback(() => resetToLogin(true), [resetToLogin]);
-
   const handleSwitchAccount = handleForgotPin;
 
   const activeQueueNumber = initialQueue?.queue_number || null;
@@ -195,13 +196,14 @@ export default function Page() {
   const hasActiveQueue = Boolean(activeQueueNumber || queueActive);
 
   /**
-   * Switches view when the user selects a tab in the navigation bar (`AppNavbar`).
+   * สลับหน้าจอเมื่อผู้ใช้คลิกเลือกแท็บบนแถบนำทาง (`AppNavbar`)
    */
   function handleSelectNav(navView: NavView) {
     if (!token && navView !== "registration") {
       setView("login");
       return;
     }
+    // หากมีคิวตรวจอยู่แล้ว จะไม่อนุญาตให้เปิดหน้าจองคิวซ้ำ แต่จะพาไปดูคิวสดแทน
     if (navView === "registration" && hasActiveQueue) {
       setView("status");
       return;
@@ -210,7 +212,7 @@ export default function Page() {
   }
 
   /**
-   * Returns patient to home view (status view when authenticated, or login view when guest).
+   * จัดการเมื่อผู้ใช้กดโลโก้หน้าหลัก: หากเข้าสู่ระบบแล้วจะไปหน้าคิว หากยังไม่เข้าสู่ระบบจะไปหน้าแรก
    */
   const handleHomeClick = useCallback(() => {
     if (hasSavedAccount) {
@@ -223,7 +225,7 @@ export default function Page() {
   }, [hasSavedAccount]);
 
   /**
-   * Fetches patient profile from API and caches it in sessionStorage to show greeting name on PIN screen.
+   * ดึงข้อมูลโปรไฟล์ผู้ป่วยจากเซิร์ฟเวอร์มาบันทึกไว้ใน sessionStorage เพื่อนำชื่อมาแสดงทักทายในหน้า PIN
    */
   function fetchAndSavePairedProfile(accessToken: string) {
     patientApi
@@ -245,33 +247,27 @@ export default function Page() {
         }
       })
       .catch((reason) => {
-        // Non-fatal: PIN greeting just won't show a name. Surface for debugging.
         console.warn("Could not cache paired patient profile:", reason);
       });
   }
 
   /**
-   * Handles successful registration and queue booking.
-   * Checks if PIN exists; if not, navigates to PIN setup (`pin_setup`).
+   * ผู้สมัครใหม่ต้องตั้ง PIN เสมอ ไม่ขึ้นกับ PIN เก่าที่อาจค้างอยู่บนอุปกรณ์นี้
    */
-  function registrationSuccess(accessToken: string, result: RegistrationResult) {
+  function registrationSuccess(accessToken: string, result: RegistrationResult, nationalId: string) {
     setGoogleOnboarding(null);
-    setPendingAuth({ token: accessToken });
+    setPendingAuth({ token: accessToken, nationalId });
     setInitialQueue(result);
     setQueueActive(true);
     fetchAndSavePairedProfile(accessToken);
 
-    if (!hasPin()) {
-      setPinSetupReturnView("status");
-      setView("pin_setup");
-    } else {
-      setView("pin_unlock");
-    }
+    setPinSetupReturnView("status");
+    setView("pin_setup");
   }
 
   /**
-   * Handles successful login via credentials or Google OAuth.
-   * Navigates to PIN unlock or PIN setup view.
+   * จัดการเมื่อเข้าสู่ระบบด้วยรหัสผ่านหรือ Google สำเร็จ:
+   * นำทางไปยังหน้าปลดล็อก PIN หรือหน้าตั้งรหัส PIN ใหม่
    */
   function loginSuccess(accessToken: string, nationalId?: string) {
     setPendingAuth({ token: accessToken, nationalId });
@@ -289,8 +285,8 @@ export default function Page() {
   }
 
   /**
-   * Handles completion of PIN authentication (successful unlock).
-   * Authenticates session with token and navigates to target view (e.g., 'status').
+   * ทำงานเมื่อผ่านการยืนยันรหัส PIN 6 หลักถูกต้อง:
+   * ยืนยันเซสชันด้วย Token และนำทางไปยังหน้าปลายทาง เช่น หน้าสถานะคิว
    */
   function finishPinFlow(nextView: View) {
     const finalToken = pendingAuth?.token || token || readToken() || "";
@@ -302,7 +298,7 @@ export default function Page() {
   }
 
   /**
-   * Synchronizes newly configured 6-digit security PIN to backend server.
+   * ซิงค์รหัส PIN 6 หลักที่ตั้งใหม่ไปยัง Backend API
    */
   async function persistPin(pin: string) {
     const activeTok = pendingAuth?.token || token;
@@ -310,15 +306,13 @@ export default function Page() {
       try {
         await patientApi.setupPin(pin, activeTok);
       } catch (reason) {
-        // ponytail: local PIN stays usable offline; once the backend PIN is
-        // authoritative this should hard-fail and roll back the local PIN.
         console.warn("Could not sync PIN to backend:", reason);
       }
     }
   }
 
   /**
-   * Changes application font size and persists preference to localStorage.
+   * ปรับเปลี่ยนขนาดตัวอักษรของทั้งระบบ และบันทึกลงใน localStorage
    */
   function changeFontSize(size: FontSize) {
     setFontSize(size);
@@ -326,14 +320,14 @@ export default function Page() {
       localStorage.setItem("app_font_size", size);
       document.documentElement.dataset.fontSize = size;
     } catch {
-      // Ignore
+      // ข้ามข้อผิดพลาด storage
     }
   }
 
-  // Same identity for every PIN view — whether entered from the unlock gate
-  // (pendingAuth set) or from Settings after login (pendingAuth null).
+  // ดึงเลขบัตรประชาชนสำหรับใช้ระบุตัวตนในทุกหน้าจอ PIN
   const pinNationalId = pendingAuth?.nationalId || readPairedPatient()?.nationalId || undefined;
 
+  // ตรวจสอบว่าหน้าจอปัจจุบันเป็นหน้าจอด่านความปลอดภัย (Authentication Gate) หรือไม่ เพื่อสั่งซ่อน Navbar
   const isAuthGateView =
     !hasSavedAccount ||
     Boolean(pendingAuth) ||
@@ -343,6 +337,7 @@ export default function Page() {
     view === "pin_change" ||
     view === "pin_reset";
 
+  // กรณีระบบกำลังโหลดค่าเริ่มต้น
   if (!initialized) {
     return (
       <LoadingScreen
@@ -353,7 +348,7 @@ export default function Page() {
     );
   }
 
-  // Test hook: Allows testers to verify Error Boundary recovery UI by visiting ?simulate_crash=true
+  // ฮุคสำหรับทดสอบระบบ Error Boundary (พิมพ์ URL ?simulate_crash=true เพื่อจำลองกรณีแอปขัดข้อง)
   if (typeof window !== "undefined" && window.location.search.includes("simulate_crash=true")) {
     throw new Error("Simulated Test Crash for Error Boundary Verification");
   }
@@ -368,7 +363,7 @@ export default function Page() {
       queueNumber={activeQueueNumber}
       hideNav={isAuthGateView}
     >
-      {/* 1. Login Gate */}
+      {/* 1. หน้าต่างเข้าสู่ระบบ (Login Gate) */}
       {view === "login" && (
         <LoginView
           onRegister={() => {
@@ -390,7 +385,7 @@ export default function Page() {
         />
       )}
 
-      {/* 2. PIN Security Views */}
+      {/* 2. หน้าจอยืนยันความปลอดภัยด้วย PIN 6 หลัก */}
       {view === "pin_unlock" && (
         <PinAuthView
           mode="unlock"
@@ -406,6 +401,7 @@ export default function Page() {
         />
       )}
 
+      {/* หน้าจอตั้งรหัส PIN ใหม่ครั้งแรก */}
       {view === "pin_setup" && (
         <PinAuthView
           mode="setup"
@@ -420,6 +416,7 @@ export default function Page() {
         />
       )}
 
+      {/* หน้าจอเปลี่ยนรหัส PIN */}
       {view === "pin_change" && (
         <PinAuthView
           mode="change"
@@ -430,6 +427,7 @@ export default function Page() {
         />
       )}
 
+      {/* หน้าจอกู้คืนรหัส PIN ผ่าน OTP */}
       {view === "pin_reset" && (
         <PinAuthView
           mode="reset"
@@ -445,7 +443,8 @@ export default function Page() {
         />
       )}
 
-      {/* 4. Main Portal Views */}
+      {/* 3. หน้าจอหลักของพอร์ทัลผู้ป่วย */}
+      {/* หน้าจอสถานะบัตรคิวสด */}
       {view === "status" && (
         <QueueStatusView
           token={token}
@@ -458,6 +457,7 @@ export default function Page() {
         />
       )}
 
+      {/* หน้าจอลงทะเบียนผู้ป่วยและจองคิว */}
       {view === "registration" && (
         <RegistrationView
           token={token}
@@ -478,6 +478,7 @@ export default function Page() {
         />
       )}
 
+      {/* หน้าจอบัญชีผู้ป่วย ประวัติการรักษา และนัดหมาย */}
       {view === "account" && (
         <AccountView
           token={token}
@@ -487,6 +488,7 @@ export default function Page() {
         />
       )}
 
+      {/* หน้าจอตั้งค่าระบบ ขนาดตัวอักษร และความปลอดภัย */}
       {view === "settings" && (
         <SettingsView
           fontSize={fontSize}

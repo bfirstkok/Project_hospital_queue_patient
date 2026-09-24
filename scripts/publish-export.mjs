@@ -5,11 +5,12 @@ const output = resolve("out");
 const dist = resolve("dist");
 const distPatient = resolve("dist/patient");
 
+// คัดลอกไฟล์จาก Next.js Static Export (โฟลเดอร์ out) ไปยัง dist และ dist/patient เพื่อรองรับทั้ง Base URL และ Subpath /patient
 await cp(output, dist, { recursive: true });
 await cp(output, distPatient, { recursive: true });
 await rm(output, { force: true, recursive: true });
 
-// Ensure root index.html in dist/ redirects to /patient to prevent Next.js basePath mismatch crash
+// เพิ่มสคริปต์ Redirect อัตโนมัติใน dist/index.html ให้วิ่งไปยัง /patient เพื่อป้องกันปัญหา basePath ไม่ตรงกันใน Next.js Static Export
 const rootHtmlPath = resolve(dist, "index.html");
 try {
   let content = await readFile(rootHtmlPath, "utf8");
@@ -19,6 +20,6 @@ try {
     await writeFile(rootHtmlPath, content, "utf8");
   }
 } catch {
-  // Ignore if root index.html not found
+  // ไม่ต้องดำเนินการใดหากไม่พบไฟล์ root index.html
 }
 

@@ -6,28 +6,30 @@ import { useQueueNotification } from "./useQueueNotification";
 import { generateQueueCardImage } from "./queue-card-canvas";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
+// พร็อพส์สำหรับคอมโพเนนต์แสดงสถานะคิว (QueueStatusViewProps)
 interface QueueStatusViewProps {
-  token: string;
-  initialQueue?: Partial<QueueData> | null;
-  onBookQueue?: () => void;
-  onLogin?: () => void;
-  onAccount: () => void;
-  onUnauthorized: () => void;
-  onQueueStateChange?: (hasActiveQueue: boolean) => void;
+  token: string;                                          // Access Token ของผู้ป่วย
+  initialQueue?: Partial<QueueData> | null;               // ข้อมูลคิวเริ่มต้น
+  onBookQueue?: () => void;                               // ฟังก์ชันนำทางไปหน้าจองคิว
+  onLogin?: () => void;                                   // ฟังก์ชันนำทางไปหน้าเข้าสู่ระบบ
+  onAccount: () => void;                                  // ฟังก์ชันนำทางไปหน้าบัญชี/ข้อมูลผู้ป่วย
+  onUnauthorized: () => void;                             // ฟังก์ชันจัดการเมื่อ Token หมดอายุ
+  onQueueStateChange?: (hasActiveQueue: boolean) => void; // ฟังก์ชันแจ้งการเปลี่ยนแปลงว่ามีคิวตรวจค้างอยู่หรือไม่
 }
 
 /**
- * Calculates estimated wait duration based on current position and status.
+ * คำนวณระยะเวลารอตรวจโดยประมาณ (Estimated Wait Time) ตามลำดับคิวและสถานะปัจจุบัน
+ * (สูตรการคำนวณที่ใช้นำเสนอต่อคณะกรรมการสอบวิทยานิพนธ์)
  *
- * Rules:
- * - Completed / Pharmacy: Finished examination.
- * - In progress / Position 0: Currently inside examination room.
- * - Position 1: Next up (approx 1 - 5 mins).
- * - Position > 1: Multiplies remaining count by 5 to 7 mins per patient.
+ * กฎการประเมินระยะเวลา:
+ * - หากสถานะระบุว่า "ตรวจเสร็จ" หรือ "รับยา" -> ผู้ป่วยตรวจเสร็จสิ้นแล้ว
+ * - หากสถานะระบุว่า "กำลังตรวจ" หรือลำดับคิว = 0 -> ผู้ป่วยกำลังอยู่ในห้องตรวจ
+ * - หากลำดับคิว = 1 -> เป็นคิวถัดไป ให้เตรียมตัวเข้าตรวจ (ประมาณ 1 - 5 นาที)
+ * - หากลำดับคิว > 1 -> คำนวณจากอัตราเฉลี่ย 5 ถึง 7 นาทีต่อคนไข้ 1 คน (min = n * 5, max = n * 7 นาที)
  *
- * @param {number | null | undefined} position - Queue position number.
- * @param {string} statusLabel - Current status text.
- * @returns {string} Formatted wait time estimate string.
+ * @param {number | null | undefined} position - ลำดับคิวที่เหลือก่อนถึงผู้ป่วย
+ * @param {string} statusLabel - ข้อความแสดงสถานะคิว
+ * @returns {string} ข้อความแสดงผลระยะเวลารอโดยประมาณ
  */
 function calculateEstimatedWaitTime(position: number | null | undefined, statusLabel: string): string {
   if (statusLabel.includes("ตรวจเสร็จ") || statusLabel.includes("รับยา")) return "ตรวจเสร็จสิ้นแล้ว";
@@ -42,13 +44,14 @@ function calculateEstimatedWaitTime(position: number | null | undefined, statusL
 }
 
 /**
- * OPD Patient Queue Status view component.
+ * คอมโพเนนต์หน้าจอแสดงสถานะบัตรคิวตรวจผู้ป่วยนอก (`QueueStatusView`)
  *
- * Handles 3 main display states:
- * 1. Initial Loading: Displays `LoadingScreen`.
- * 2. Active Queue: Displays live queue card, position, exam room, wait estimate,
- *    save image button, and 2-step safe cancellation modal.
- * 3. No Queue: Displays empty state with button to request a new queue.
+ * จัดการมุมมองหลัก 3 กรณี (Core Views):
+ * 1. กำลังโหลดเริ่มต้น (Initial Loading): แสดงหน้าจอ `LoadingScreen`
+ * 2. มีคิวรอตรวจ (Active Queue): แสดงบัตรคิวสด, ลำดับคิว, ห้องตรวจ, เวลาโดยประมาณ,
+ *    ปุ่มบันทึกรูปภาพบัตรคิว, และหน้าต่างป๊อปอัปยืนยันการยกเลิกคิวแบบ 2 ขั้นตอน (2-Step Safety Modal)
+ * 3. ไม่มีคิวรอตรวจ (No Queue): แสดงสถานะว่างพร้อมปุ่มกดจองคิวใหม่
+ * 4. ผู้ใช้ทั่วไปที่ยังไม่ได้ล็อกอิน (Guest / Landing): แสดงปุ่มทางเลือกเข้าสู่ระบบหรือจองคิว
  */
 export function QueueStatusView({
   token,
@@ -59,25 +62,32 @@ export function QueueStatusView({
   onUnauthorized,
   onQueueStateChange,
 }: QueueStatusViewProps) {
+  // ดึงข้อมูลคิวอัตโนมัติด้วย Background Polling
   const { queue, error, loading, initialLoading, refresh, clearActiveQueue } = useQueuePolling({
     enabled: Boolean(token),
     token,
     initialQueue,
     onUnauthorized,
   });
+
+  // ระบบเสียงกริ่งสังเคราะห์และระบบสั่นเตือนเมื่อใกล้ถึงคิว
   const { enabled: soundEnabled, toggleNotification } = useQueueNotification(queue);
+
+  // สถานะจัดการ Modal ยืนยันยกเลิกคิวแบบ 2 ขั้นตอน ป้องกันผู้ป่วยกดผิดพลาด
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelStep, setCancelStep] = useState<1 | 2>(1);
   const [cancelling, setCancelling] = useState(false);
   const [cancelMessage, setCancelMessage] = useState("");
   const [cancelSuccess, setCancelSuccess] = useState(false);
 
+  // อัปเดตสถานะให้คอมโพเนนต์แม่รับรู้ว่ามีคิวตรวจอยู่หรือไม่ เพื่อปรับ UI แถบนำทาง (Navbar)
   useEffect(() => {
     if (!initialLoading) {
       onQueueStateChange?.(Boolean(queue?.queue_number));
     }
   }, [initialLoading, onQueueStateChange, queue?.queue_number]);
 
+  // ฟอร์แมตเวลาอัปเดตล่าสุดให้เป็นรูปแบบเวลาไทย (ชั่วโมง:นาที:วินาที)
   const updatedAt = (() => {
     if (!queue?.updated_at) return "กำลังอัปเดต...";
     try {
@@ -93,8 +103,11 @@ export function QueueStatusView({
 
   const position = queue?.queue_position;
   const statusLabel = queue?.status_label || "";
+  // ตรวจสอบเงื่อนไขว่าใกล้ถึงคิวหรือไม่ (เหลือ 1-3 คิว หรือ กำลังเรียก)
   const isNearQueue = (typeof position === "number" && position > 0 && position <= 3) || statusLabel.includes("เรียก");
   const estimatedWaitText = calculateEstimatedWaitTime(position, statusLabel);
+
+  // รายการสถานะคิวที่อนุญาตให้ผู้ป่วยกดยกเลิกได้ด้วยตนเอง
   const patientCancellableStatuses = new Set([
     "WAITING_VITALS",
     "WAITING_CONFIRMATION",
@@ -109,7 +122,7 @@ export function QueueStatusView({
     : "";
 
   /**
-   * Generates and downloads a PNG image of the queue slip via Canvas.
+   * บันทึกรูปภาพบัตรคิวลงเครื่องโดยใช้อัลกอริทึมวาด Canvas 2D
    */
   function handleSaveImage() {
     if (!queue) return;
@@ -117,7 +130,7 @@ export function QueueStatusView({
   }
 
   /**
-   * Sends queue cancellation request to API and updates UI state on success.
+   * ส่งคำขอยกเลิกบัตรคิวไปยัง API และอัปเดตสถานะหน้าจอเมื่อยกเลิกสำเร็จ
    */
   async function handleConfirmCancelQueue() {
     if (!token) return;
@@ -128,7 +141,7 @@ export function QueueStatusView({
       try {
         sessionStorage.setItem("opd_cancelled_queue_number", queue?.queue_number || "");
       } catch {
-        // Ignore storage errors
+        // ข้ามข้อผิดพลาด storage
       }
       clearActiveQueue();
       setShowCancelModal(false);
@@ -145,7 +158,7 @@ export function QueueStatusView({
     }
   }
 
-  // Initial Loading state
+  // กรณีที่ 1: กำลังโหลดข้อมูลคิวครั้งแรก
   if (initialLoading) {
     return (
       <section id="statusView" className="page-shell status-view">
@@ -157,10 +170,11 @@ export function QueueStatusView({
     );
   }
 
-  // Case 1: Has active queue
+  // กรณีที่ 2: มีคิวที่กำลังรอตรวจอยู่ในระบบ (Active Queue)
   if (queue && queue.queue_number) {
     return (
       <section id="statusView" className="page-shell status-view">
+        {/* แบนเนอร์สีส้มแจ้งเตือนพิเศษเมื่อใกล้ถึงคิว */}
         {isNearQueue && (
           <div className="near-queue-banner" role="alert">
             <div className="banner-badge">แจ้งเตือน</div>
@@ -172,6 +186,7 @@ export function QueueStatusView({
         )}
 
         <div className="status-card">
+          {/* ปุ่มสลับเปิด/ปิดเสียงและระบบสั่นเตือน */}
           <div className="card-top-actions">
             <button
               type="button"
@@ -190,6 +205,7 @@ export function QueueStatusView({
           <div className="queue-number">{queue?.queue_number || "-"}</div>
           <div className="status-pill"><span /><strong>{queue?.status_label || "กำลังโหลดสถานะ"}</strong></div>
           
+          {/* กล่องแสดงระยะเวลาประมาณการ */}
           <div className="wait-time-card">
             <div className="wait-icon-tag">รอตรวจ</div>
             <div>
@@ -199,6 +215,8 @@ export function QueueStatusView({
           </div>
 
           <p className="instruction">{queue?.instruction || "กรุณารอเรียกตรวจตามลำดับ"}</p>
+          
+          {/* รายละเอียด 3 คอลัมน์: ลำดับ, คิวก่อนหน้า, ห้องตรวจ */}
           <div className="queue-details three-col">
             <div>
               <span>ลำดับของคุณ</span>
@@ -222,6 +240,7 @@ export function QueueStatusView({
 
           <p className="last-updated" role={error ? "alert" : undefined}>{error || `อัปเดตล่าสุด ${updatedAt} น.`}</p>
 
+          {/* แผงปุ่มดำเนินการ: อัปเดต, บันทึกรูป, ดูประวัติ, ยกเลิกคิว */}
           <div className="queue-action-buttons">
             <button className="primary-button" type="button" onClick={() => void refresh()} disabled={loading}>
               <span>อัปเดตสถานะคิว</span><i aria-hidden="true">{loading ? "↻" : "⟳"}</i>
@@ -251,6 +270,7 @@ export function QueueStatusView({
           </div>
         </div>
 
+        {/* Modal ยืนยันการยกเลิกคิว 2 ขั้นตอน (Safety 2-Step Confirmation Modal) */}
         {showCancelModal && (
           <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cancelQueueTitle">
             <div className="modal-content" style={{ maxWidth: "460px", textAlign: "center", padding: "32px 28px" }}>
@@ -333,7 +353,7 @@ export function QueueStatusView({
           </div>
         )}
 
-        {/* Link to Full Hospital Queue Display Board */}
+        {/* ลิงก์เชื่อมโยงไปยังจอแสดงผลคิวรวมทั้งโรงพยาบาล (Live OPD Queue Board) */}
         <a
           href="https://hospital.bfirstkok.me/queues/display/"
           target="_blank"
@@ -355,7 +375,7 @@ export function QueueStatusView({
     );
   }
 
-  // Case 2: Logged in but no active queue today
+  // กรณีที่ 3: ผู้ป่วยเข้าสู่ระบบแล้ว แต่ยังไม่มีคิวตรวจในวันนี้
   if (token) {
     return (
       <section id="statusView" className="page-shell status-view">
@@ -365,6 +385,7 @@ export function QueueStatusView({
           <p>ขณะนี้คุณยังไม่มีคิวที่กำลังรอตรวจ สามารถกดจองคิวเพื่อรับบริการได้ทันที</p>
         </div>
 
+        {/* แถบแจ้งเตือนเมื่อเพิ่งยกเลิกคิวสำเร็จ */}
         {cancelSuccess && (
           <div className="success-banner" role="status">
             <span className="success-banner-icon" aria-hidden="true">✓</span>
@@ -403,7 +424,7 @@ export function QueueStatusView({
           </div>
         </div>
 
-        {/* Link to Full Hospital Queue Display Board */}
+        {/* ลิงก์เชื่อมโยงไปยังจอแสดงผลคิวรวม */}
         <a
           href="https://hospital.bfirstkok.me/queues/display/"
           target="_blank"
@@ -425,7 +446,7 @@ export function QueueStatusView({
     );
   }
 
-  // Case 3: Guest / Not logged in (Main Landing)
+  // กรณีที่ 4: ผู้ใช้ทั่วไปที่ยังไม่ได้เข้าสู่ระบบ (หน้าแรก Landing Portal)
   return (
     <section id="statusView" className="page-shell status-view">
       <div className="intro">
@@ -464,6 +485,7 @@ export function QueueStatusView({
         </div>
       </div>
 
+      {/* จุดเด่นของระบบ 3 ด้าน */}
       <div className="feature-highlights-grid">
         <div className="highlight-item">
           <span className="highlight-icon">⚡</span>

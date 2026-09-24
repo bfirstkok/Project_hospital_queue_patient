@@ -2,6 +2,11 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Patient Registration Flow - E2E Tests", () => {
   test.beforeEach(async ({ page }) => {
+    await page.route("**/runtime-config.js", route => route.fulfill({
+      contentType: "application/javascript",
+      body: 'window.PATIENT_APP_ENV = { API_BASE_URL: "http://127.0.0.1:8000", GOOGLE_CLIENT_ID: "playwright-client-id" };',
+    }));
+    await page.route("https://accounts.google.com/gsi/client", route => route.abort());
     await page.goto("/patient");
     await page.evaluate(() => {
       localStorage.clear();
@@ -59,6 +64,7 @@ test.describe("Patient Registration Flow - E2E Tests", () => {
 
   test("3. Happy Path: New Patient registers, sets 6-digit PIN, and receives new Queue A015", async ({ page }) => {
     await page.goto("/patient");
+    await page.evaluate(() => localStorage.setItem("hospital_patient_security_pin", "stale-pin-from-another-account"));
     await page.click("button.register-link-btn:has-text('ลงทะเบียนผู้ป่วยใหม่')");
     await page.check("input[aria-label='ยินยอมเงื่อนไข PDPA']");
     await page.click("button.pdpa-accept-btn");

@@ -1,19 +1,22 @@
+// ข้อมูลตำบล/แขวง พร้อมรหัสไปรษณีย์
 export interface SubdistrictData {
   name: string;
   postalCode: string;
 }
 
+// ข้อมูลอำเภอ/เขต พร้อมรายชื่อตำบล/แขวงในสังกัด
 export interface DistrictData {
   name: string;
   subdistricts: SubdistrictData[];
 }
 
+// ข้อมูลจังหวัด พร้อมรายชื่ออำเภอ/เขต
 export interface ProvinceData {
   name: string;
   districts: DistrictData[];
 }
 
-// 77 Provinces of Thailand with comprehensive district and subdistrict mapping
+// ฐานข้อมูล 77 จังหวัดของประเทศไทย พร้อมการจับคู่อำเภอ ตำบล และรหัสไปรษณีย์
 export const THAI_PROVINCES: ProvinceData[] = [
   {
     name: "กรุงเทพมหานคร",
@@ -1048,10 +1051,10 @@ export function getProvinces(): string[] {
 }
 
 /**
- * Retrieves all districts (Amphoe / Khet) belonging to a specified province.
+ * ดึงรายชื่ออำเภอ/เขต ทั้งหมดของจังหวัดที่ระบุ
  *
- * @param {string} provinceName - Thai province name.
- * @returns {string[]} Array of district names, or empty array if province not found.
+ * @param {string} provinceName - ชื่อจังหวัดภาษาไทย
+ * @returns {string[]} อาร์เรย์รายชื่ออำเภอ/เขต (เป็นอาร์เรย์ว่างหากไม่พบจังหวัด)
  */
 export function getDistricts(provinceName: string): string[] {
   const prov = THAI_PROVINCES.find((p) => p.name === provinceName);
@@ -1060,11 +1063,11 @@ export function getDistricts(provinceName: string): string[] {
 }
 
 /**
- * Retrieves all subdistricts (Tambon / Khwaeng) for a given province and district.
+ * ดึงรายชื่อตำบล/แขวง ทั้งหมดของอำเภอและจังหวัดที่ระบุ
  *
- * @param {string} provinceName - Thai province name.
- * @param {string} districtName - Thai district name.
- * @returns {string[]} Array of subdistrict names, or empty array if not found.
+ * @param {string} provinceName - ชื่อจังหวัดภาษาไทย
+ * @param {string} districtName - ชื่ออำเภอ/เขตภาษาไทย
+ * @returns {string[]} อาร์เรย์รายชื่อตำบล/แขวง
  */
 export function getSubdistricts(provinceName: string, districtName: string): string[] {
   const prov = THAI_PROVINCES.find((p) => p.name === provinceName);
@@ -1075,12 +1078,13 @@ export function getSubdistricts(provinceName: string, districtName: string): str
 }
 
 /**
- * Automatically looks up the 5-digit postal code for a specific province, district, and subdistrict.
+ * ค้นหารหัสไปรษณีย์ 5 หลัก โดยอัตโนมัติตามจังหวัด อำเภอ และตำบลที่เลือก
+ * ช่วยอำนวยความสะดวกให้ผู้ป่วยไม่ต้องจำและกรอกรหัสไปรษณีย์เอง
  *
- * @param {string} provinceName - Thai province name.
- * @param {string} districtName - Thai district name.
- * @param {string} subdistrictName - Thai subdistrict name.
- * @returns {string} 5-digit postal code (e.g. "10200"), or empty string if not found.
+ * @param {string} provinceName - ชื่อจังหวัดภาษาไทย
+ * @param {string} districtName - ชื่ออำเภอ/เขตภาษาไทย
+ * @param {string} subdistrictName - ชื่อตำบล/แขวงภาษาไทย
+ * @returns {string} รหัสไปรษณีย์ 5 หลัก (เช่น "10200") หรือข้อความว่างหากไม่พบ
  */
 export function getPostalCode(provinceName: string, districtName: string, subdistrictName: string): string {
   const prov = THAI_PROVINCES.find((p) => p.name === provinceName);

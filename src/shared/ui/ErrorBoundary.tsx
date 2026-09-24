@@ -12,18 +12,20 @@ interface State {
 }
 
 /**
- * React Error Boundary component.
+ * คอมโพเนนต์ดักจับข้อผิดพลาดของ React (Error Boundary)
  *
- * Responsibilities:
- * Catches unhandled runtime rendering exceptions and prevents blank white screens.
- * Displays a friendly fallback error card with recovery options:
- * "Go Home" (/patient), "Go Back", and "Reload Page".
+ * บทบาทหน้าที่ (สำคัญมากในการตอบคำถามเรื่องความเสถียรของระบบ):
+ * 1. ดักจับข้อผิดพลาดระดับ Runtime ที่เกิดขึ้นในการเรนเดอร์ UI เพื่อป้องกันปัญหาจอขาว (Blank Screen)
+ * 2. แสดงผลหน้าจอ Fallback UI แจ้งเตือนผู้ใช้ด้วยข้อความที่เข้าใจง่าย พร้อมปุ่มทางเลือกในการกู้คืนระบบ:
+ *    - กลับสู่หน้าหลัก (เข้าสู่ระบบใหม่)
+ *    - ย้อนกลับไปหน้าก่อนหน้า
+ *    - โหลดหน้าเว็บใหม่ (Reload)
  */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 
   /**
-   * Updates state when an error is thrown to render fallback UI.
+   * เมธอด Lifecycle สำหรับเปลี่ยน State เมื่อเกิดข้อผิดพลาดขึ้นใน Component ลูก เพื่อเรนเดอร์หน้าจอ Fallback
    */
   static getDerivedStateFromError(error: unknown): State {
     const msg = error instanceof Error ? error.message : String(error || "");
@@ -31,27 +33,29 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   /**
-   * Logs unhandled UI error details to console for debugging.
+   * บันทึกรายละเอียดข้อผิดพลาดลงใน Console Log เพื่อใช้ในการดีบักระบบ
    */
   componentDidCatch(error: unknown) {
     console.error("Unhandled UI error:", error);
   }
 
+  // จัดการเมื่อผู้ใช้กดกลับหน้าหลัก: ล้างสถานะหน้าเดิม และนำทางไปยัง /patient
   handleGoHome = () => {
     try {
       localStorage.removeItem("patient_app_current_view");
       sessionStorage.removeItem("patient_session_unlocked");
     } catch {
-      // Ignore
+      // ข้ามกรณีมีข้อผิดพลาดเรื่อง storage
     }
     window.location.href = "/patient";
   };
 
+  // จัดการเมื่อผู้ใช้กดโหลดหน้าใหม่
   handleReload = () => {
     try {
       localStorage.removeItem("patient_app_current_view");
     } catch {
-      // Ignore
+      // ข้ามกรณีมีข้อผิดพลาดเรื่อง storage
     }
     if (window.location.pathname === "/" || !window.location.pathname.startsWith("/patient")) {
       window.location.href = "/patient";
@@ -60,11 +64,12 @@ export class ErrorBoundary extends Component<Props, State> {
     }
   };
 
+  // จัดการเมื่อผู้ใช้กดย้อนกลับ
   handleGoBack = () => {
     try {
       localStorage.removeItem("patient_app_current_view");
     } catch {
-      // Ignore
+      // ข้ามกรณีมีข้อผิดพลาดเรื่อง storage
     }
     if (window.history.length > 1) {
       window.history.back();

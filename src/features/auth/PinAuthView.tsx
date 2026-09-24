@@ -13,10 +13,11 @@ import {
   verifyPin,
 } from "@/shared/auth/pin-storage";
 
+// โหมดการทำงานของระบบรหัส PIN (ปลดล็อก, ตั้งรหัสครั้งแรก, เปลี่ยนรหัส, กู้คืนรหัส)
 export type PinMode = "unlock" | "setup" | "change" | "reset";
 
 /**
- * Formats lockout duration into human-readable duration text.
+ * จัดรูปแบบระยะเวลาการระงับใช้งานให้อ่านง่าย (เช่น "1 นาที", "5 นาที")
  */
 function formatLockoutDuration(seconds: number): string {
   const mins = Math.max(1, Math.round(seconds / 60));
@@ -24,8 +25,8 @@ function formatLockoutDuration(seconds: number): string {
 }
 
 /**
- * Masks telephone number for PDPA privacy compliance.
- * e.g., "0812345678" -> "081-xxx-xx78"
+ * ซ่อนเบอร์โทรศัพท์บางส่วน (Masking) ตามมาตรฐาน PDPA
+ * ตัวอย่าง: "0812345678" -> "081-xxx-xx78"
  */
 function maskPhone(raw: string): string {
   const d = raw.replace(/\D/g, "");
@@ -34,8 +35,8 @@ function maskPhone(raw: string): string {
 }
 
 /**
- * Masks email address for PDPA privacy compliance.
- * e.g., "somchai@gmail.com" -> "so•••••@gmail.com"
+ * ซ่อนอีเมลบางส่วน (Masking) ตามมาตรฐาน PDPA
+ * ตัวอย่าง: "somchai@gmail.com" -> "so•••••@gmail.com"
  */
 function maskEmail(raw: string): string {
   const [user, domain] = raw.trim().split("@");
@@ -44,27 +45,29 @@ function maskEmail(raw: string): string {
   return `${head}${"•".repeat(Math.max(1, user.length - 2))}@${domain}`;
 }
 
+// พร็อพส์สำหรับคอมโพเนนต์ PinAuthView
 interface PinAuthViewProps {
-  mode: PinMode;
-  onSuccess: () => void;
-  onCancel?: () => void;
-  onForgotPin?: () => void;
-  onSwitchAccount?: () => void;
-  patientName?: string;
-  maskedNationalId?: string;
-  nationalId?: string;
-  isMandatory?: boolean;
-  onPinConfigured?: (pin: string) => Promise<void> | void;
+  mode: PinMode;                                            // โหมดเริ่มต้น
+  onSuccess: () => void;                                    // เมื่อยืนยัน PIN ถูกต้อง
+  onCancel?: () => void;                                    // กรณียกเลิก
+  onForgotPin?: () => void;                                 // นำทางไปหน้าลืม PIN
+  onSwitchAccount?: () => void;                             // สลับไปใช้บัญชีอื่น
+  patientName?: string;                                     // ชื่อผู้ป่วยสำหรับแสดงทักทาย
+  maskedNationalId?: string;                                // เลขบัตร ปชช. แบบ Masked
+  nationalId?: string;                                      // เลขบัตร ปชช. จริง
+  isMandatory?: boolean;                                    // บังคับตั้งค่า PIN หรือไม่
+  onPinConfigured?: (pin: string) => Promise<void> | void;  // Callback เมื่อบันทึก PIN สำเร็จ
 }
 
 /**
- * 6-digit PIN Authentication & Management View component.
+ * คอมโพเนนต์แป้นพิมพ์ตัวเลขและการยืนยันตัวตนด้วยรหัส PIN 6 หลัก (`PinAuthView`)
+ * (ฟังก์ชันความปลอดภัยระดับแอปพลิเคชันธนาคาร Mobile Banking)
  *
- * Supports 4 operation modes:
- * 1. 'unlock': System unlock with escalation lockout on consecutive failed attempts.
- * 2. 'setup': 2-step PIN setup wizard (enter + confirm).
- * 3. 'change': 3-step PIN rotation (verify current -> enter new -> confirm new).
- * 4. 'reset': Account recovery via OTP sent to registered phone/email.
+ * รองรับ 4 โหมดการทำงาน:
+ * 1. 'unlock': ปลดล็อกเข้าใช้งานระบบ มีระบบล็อกบัญชีอัตโนมัติ (Lockout) เมื่อกรอกผิดเกิน 3 ครั้ง
+ * 2. 'setup': ตัวช่วยสร้างรหัส PIN ใหม่ 2 ขั้นตอน (กรอกครั้งที่ 1 + ยืนยันครั้งที่ 2)
+ * 3. 'change': เปลี่ยนรหัส PIN เดิมเป็นรหัสใหม่ 3 ขั้นตอน (ยืนยันรหัสเดิม -> กรอกรหัสใหม่ -> ยืนยันรหัสใหม่)
+ * 4. 'reset': กู้คืนรหัส PIN ผ่านรหัส OTP ทางเบอร์โทรศัพท์ (SMS) หรืออีเมลที่ลงทะเบียนไว้
  */
 export function PinAuthView({
   mode: initialMode,
@@ -86,7 +89,7 @@ export function PinAuthView({
   const [isShaking, setIsShaking] = useState<boolean>(false);
   const [lockoutSeconds, setLockoutSeconds] = useState<number>(() => getLockoutRemainingSeconds());
 
-  // State for Reset with Phone/Email OTP — targets come from the registered account, not typed
+  // ตัวแปรสำหรับระบบกู้คืน PIN ด้วย OTP (ส่งตรงไปยังเบอร์หรืออีเมลที่ลงทะเบียนไว้)
   const [recoveryMethod, setRecoveryMethod] = useState<"phone" | "email">("phone");
   const [otpCode, setOtpCode] = useState<string>("");
   const [otpSent, setOtpSent] = useState<boolean>(false);
@@ -94,11 +97,9 @@ export function PinAuthView({
   const [sendingOtp, setSendingOtp] = useState<boolean>(false);
   const [confirmingReset, setConfirmingReset] = useState<boolean>(false);
   const [verifyingPin, setVerifyingPin] = useState<boolean>(false);
-  // Backend has no OTP endpoints yet — when the request fails we fall back to
-  // verifying identity with the real national-ID login, then set a new local PIN.
   const [otpUnavailable, setOtpUnavailable] = useState<boolean>(false);
 
-  // Paired patient details
+  // ข้อมูลระบุตัวตนของผู้ป่วยที่ผูกกับเครื่องนี้
   const [pairedInfo, setPairedInfo] = useState<{
     name: string; nationalId: string; maskedId?: string; phone?: string; email?: string;
   } | null>(null);
@@ -122,14 +123,14 @@ export function PinAuthView({
     setErrorMessage("");
   }, [step, currentMode]);
 
-  // Timer for Lockout Countdown
+  // ตัวนับเวลาถอยหลังการระงับสิทธิ์ (Lockout Timer Countdown)
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (lockoutSeconds > 0) {
       timer = setInterval(() => {
         setLockoutSeconds((prev) => {
           if (prev <= 1) {
-            // Clears the expired window + attempt counter, keeps the escalation level.
+            // เมื่อหมดเวลา: เคลียร์เวลาหมดอายุ แต่ยังคงระดับบทลงโทษไว้
             getLockoutRemainingSeconds();
             setErrorMessage("");
             return 0;
@@ -141,7 +142,7 @@ export function PinAuthView({
     return () => clearInterval(timer);
   }, [lockoutSeconds]);
 
-  // Timer for OTP Countdown
+  // ตัวนับเวลาถอยหลังการขอ OTP ใหม่ (60 วินาที)
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (otpSent && otpCountdown > 0) {
@@ -155,13 +156,13 @@ export function PinAuthView({
     pairedInfo?.nationalId ||
     (typeof window !== "undefined" ? window.localStorage.getItem("patient_national_id") || "" : "");
 
-  // PIN recovery targets — the phone/email registered on the account, never re-typed here.
+  // ช่องทางปลายทางสำหรับส่ง OTP (ดึงจากบัญชีผู้ป่วย ไม่ต้องพิมพ์เอง เพื่อป้องกันการสวมรอย)
   const registeredPhone = (pairedInfo?.phone || "").replace(/\D/g, "");
   const registeredEmail = (pairedInfo?.email || "").trim();
   const recoveryTarget = recoveryMethod === "phone" ? registeredPhone : registeredEmail;
 
   /**
-   * Displays an error message, triggers a UI shake effect, and vibrates the device.
+   * แสดงข้อความเตือน พร้อมแอนิเมชันสั่นปุ่ม (Shake) และสั่นโทรศัพท์ (Haptic Feedback)
    */
   function triggerError(msg: string) {
     setErrorMessage(msg);
@@ -176,8 +177,8 @@ export function PinAuthView({
   }
 
   /**
-   * Handles numeric keypad input (0-9).
-   * Automatically invokes `handleComplete` when 6 digits are reached.
+   * จัดการเมื่อผู้ใช้กดแป้นตัวเลข 0-9
+   * เมื่อกรอกครบ 6 หลัก จะเรียกฟังก์ชัน `handleComplete` ตรวจสอบทันทีอัตโนมัติ
    */
   function handleDigit(digit: string) {
     if (lockoutSeconds > 0 || verifyingPin) return;
@@ -192,7 +193,7 @@ export function PinAuthView({
   }
 
   /**
-   * Deletes the most recent digit (Backspace).
+   * ลบตัวเลขหลักล่าสุด (Backspace)
    */
   function handleDelete() {
     if (lockoutSeconds > 0) return;
@@ -201,7 +202,7 @@ export function PinAuthView({
   }
 
   /**
-   * Clears all entered PIN digits.
+   * ล้างตัวเลขทั้งหมดในช่อง PIN
    */
   function handleClear() {
     if (lockoutSeconds > 0) return;
@@ -210,14 +211,14 @@ export function PinAuthView({
   }
 
   /**
-   * Validates PIN against backend API with fallback to local salted hash.
+   * ตรวจสอบความถูกต้องของ PIN กับ Backend API หรือตรวจสอบกับ Local Hash
    *
-   * Flow:
-   * 1. Attempts verification with backend endpoint `POST /api/patient/pin/verify/`.
-   * 2. If endpoint is unavailable or network is offline, falls back to local storage hash.
+   * ขั้นตอนการทำงาน:
+   * 1. ตรวจสอบกับ API บนเซิร์ฟเวอร์ก่อนเป็นอันดับแรก (`POST /api/patient/pin/verify/`)
+   * 2. หากออฟไลน์หรือไม่พบ endpoint จะตรวจสอบกับรหัสแฮชที่เข้ารหัสไว้ในเครื่องไคลเอนต์ (Offline-tolerant)
    *
-   * @param {string} pin - 6-digit PIN to verify.
-   * @returns {"ok" | "wrong" | "locked"} Verification outcome.
+   * @param {string} pin - รหัส PIN 6 หลักที่กรอก
+   * @returns {"ok" | "wrong" | "locked"} ผลการตรวจสอบ
    */
   async function checkPin(pin: string): Promise<"ok" | "wrong" | "locked"> {
     const nid = (nationalId || pairedInfo?.nationalId || "").replace(/\D/g, "");
@@ -233,18 +234,17 @@ export function PinAuthView({
           recordFailedAttempt();
           return isLockedOut() ? "locked" : "wrong";
         }
-        // 404 / "Failed to fetch" / config missing -> fall through to local check
       }
     }
-    // verifyPin() records the failed attempt / resets lockout itself.
     return verifyPin(pin, nationalId) ? "ok" : isLockedOut() ? "locked" : "wrong";
   }
 
   /**
-   * Invoked when 6 digits are fully entered.
-   * Evaluates logic depending on current mode: unlock, setup, change, or reset.
+   * ฟังก์ชันประมวลผลเมื่อผู้ใช้กรอก PIN ครบ 6 หลัก
+   * ประมวลผลตามโหมดปัจจุบัน (ปลดล็อก, ตั้งรหัสใหม่, เปลี่ยนรหัส, รีเซ็ตรหัส)
    */
   async function handleComplete(pin: string) {
+    // 1. โหมดปลดล็อกเข้าสู่ระบบ
     if (currentMode === "unlock") {
       if (lockoutSeconds > 0) {
         triggerError(`ระบบระงับชั่วคราว กรุณารอ ${lockoutSeconds} วินาที`);
@@ -271,8 +271,10 @@ export function PinAuthView({
       } else {
         triggerError(`รหัส PIN ไม่ถูกต้อง (เหลือโอกาสอีก ${getRemainingAttempts()} ครั้ง)`);
       }
+    // 2. โหมดตั้งค่า PIN ครั้งแรก
     } else if (currentMode === "setup") {
       if (step === 1) {
+        // ตรวจสอบความปลอดภัยของรหัส PIN (ปฏิเสธรหัสอ่อนแอ เช่น 000000 หรือ 123456)
         if (isWeakPin(pin)) {
           triggerError("รหัส PIN ง่ายเกินไป ไม่อนุญาตให้ใช้ตัวเลขซ้ำหรือเรียงกัน");
           return;
@@ -291,6 +293,7 @@ export function PinAuthView({
           setTimeout(() => setStep(1), 700);
         }
       }
+    // 3. โหมดเปลี่ยนรหัส PIN
     } else if (currentMode === "change") {
       if (step === 1) {
         if (verifyPin(pin, nationalId)) {
@@ -317,8 +320,8 @@ export function PinAuthView({
           setTimeout(() => setStep(2), 700);
         }
       }
+    // 4. โหมดกู้คืนรหัส PIN ผ่าน OTP
     } else if (currentMode === "reset") {
-      // Step 3: Enter new PIN, Step 4: Confirm new PIN + verify OTP with backend
       if (step === 3) {
         if (isWeakPin(pin)) {
           triggerError("รหัส PIN ง่ายเกินไป ไม่อนุญาตให้ใช้ตัวเลขซ้ำหรือเรียงกัน");
@@ -335,8 +338,6 @@ export function PinAuthView({
         if (confirmingReset) return;
         setConfirmingReset(true);
         try {
-          // OTP path: confirm with the backend. Fallback path: identity was already
-          // verified via national-ID login, so just persist the new local PIN.
           if (!otpUnavailable) {
             await patientApi.confirmPinReset({ national_id: resetNationalId, otp: otpCode, pin });
           }
@@ -354,7 +355,7 @@ export function PinAuthView({
               ? "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง"
               : apiError.message,
           );
-          setTimeout(() => setStep(2), 700); // OTP may be wrong/expired — re-enter it
+          setTimeout(() => setStep(2), 700);
         } finally {
           setConfirmingReset(false);
         }
@@ -363,7 +364,7 @@ export function PinAuthView({
   }
 
   /**
-   * Dispatches PIN reset OTP to registered phone (SMS) or email.
+   * ส่งคำขอรับรหัส OTP สำหรับรีเซ็ต PIN ทาง SMS หรืออีเมล
    */
   async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -377,7 +378,6 @@ export function PinAuthView({
     setErrorMessage("");
     setSendingOtp(true);
     try {
-      // 1) Try real OTP delivery (only works once the backend implements it).
       if (!recoveryTarget) throw new ApiError("no-registered-contact", 404);
       await patientApi.requestPinReset({
         national_id: resetNationalId,
@@ -395,12 +395,11 @@ export function PinAuthView({
       const endpointMissing =
         !apiError.status || apiError.status === 404 || apiError.status === 405 || apiError.message === "Failed to fetch";
       if (!endpointMissing) {
-        // A real, actionable error (rate limit, server error) — show it and stay put.
         setErrorMessage(apiError.message);
         setSendingOtp(false);
         return;
       }
-      // 2) Fallback: prove identity with the real national-ID login, then let them set a new PIN.
+      // หาก API ฝั่ง OTP ยังไม่พร้อมใช้งาน ให้ยืนยันตัวตนด้วยเลขบัตรประชาชนแทน
       try {
         await patientApi.login(resetNationalId);
         setOtpUnavailable(true);
@@ -419,7 +418,7 @@ export function PinAuthView({
   }
 
   /**
-   * Validates 6-digit OTP length and advances wizard to new PIN entry step.
+   * ตรวจสอบความยาวของรหัส OTP 6 หลัก แล้วก้าวไปสู่ขั้นตอนตั้งรหัส PIN ใหม่
    */
   function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -427,14 +426,12 @@ export function PinAuthView({
       setErrorMessage("กรุณากรอกรหัส OTP 6 หลัก");
       return;
     }
-    // OTP is verified together with the new PIN at the confirm step
-    // (patientApi.confirmPinReset), so here we only advance the wizard.
     setErrorMessage("");
-    setStep(3); // Proceed to setting new PIN
+    setStep(3);
   }
 
   /**
-   * Returns contextual Title and Subtitle strings based on active Mode and Step.
+   * สร้างข้อความหัวเรื่องและคำอธิบายตามโหมดและขั้นตอนปัจจุบัน
    */
   function getTitleAndSubtitle(): { title: string; subtitle: string } {
     if (currentMode === "unlock") {
@@ -517,7 +514,7 @@ export function PinAuthView({
           {currentMode === "reset" && step <= 2 ? "📱" : "🔒"}
         </div>
 
-        {/* Banking-style User Greeting for Quick Unlock */}
+        {/* แถบทักทายชื่อผู้ป่วยสไตล์ Mobile Banking */}
         {currentMode === "unlock" && displayName && (
           <div className="pin-patient-greeting">
             <span className="greeting-pill">ยินดีต้อนรับ</span>
@@ -529,7 +526,7 @@ export function PinAuthView({
         <h1>{title}</h1>
         <p className="pin-subtitle">{subtitle}</p>
 
-        {/* Lockout Box when failed attempts exceed limit */}
+        {/* กล่องแจ้งเตือนเมื่อระบบถูกระงับชั่วคราว (Lockout Alert Box) */}
         {lockoutSeconds > 0 && (
           <div className="pin-lockout-box" role="alert">
             <strong>⚠️ ระบบถูกระงับชั่วคราว</strong>
@@ -549,7 +546,7 @@ export function PinAuthView({
           </div>
         )}
 
-        {/* Reset Mode Step 1: choose channel — targets are the registered phone / email */}
+        {/* โหมดรีเซ็ต ขั้นตอนที่ 1: เลือกช่องทางรับ OTP (เบอร์มือถือ หรือ อีเมล) */}
         {currentMode === "reset" && step === 1 && (
           <form onSubmit={handleSendOtp} className="reset-pin-form">
             {registeredPhone && registeredEmail && (
@@ -614,7 +611,7 @@ export function PinAuthView({
           </form>
         )}
 
-        {/* Reset Mode Step 2: Input OTP */}
+        {/* โหมดรีเซ็ต ขั้นตอนที่ 2: กรอกรหัส OTP */}
         {currentMode === "reset" && step === 2 && (
           <form onSubmit={handleVerifyOtp} className="reset-pin-form">
             <div className="otp-info-badge">
@@ -663,10 +660,10 @@ export function PinAuthView({
           </form>
         )}
 
-        {/* Keypad UI for Pin entry (Unlock, Setup, Change, or Reset step 3/4) */}
+        {/* แป้นพิมพ์ตัวเลข (Numeric Keypad) สำหรับกรอก PIN 6 หลัก */}
         {(currentMode !== "reset" || step >= 3) && lockoutSeconds === 0 && (
           <>
-            {/* 6 Dots Indicator */}
+            {/* จุดแสดงสถานะตัวเลข 6 หลัก (PIN Dots) */}
             <div
               className={`pin-dots-row ${isShaking ? "shake" : ""}`}
               aria-label={`กรอกแล้ว ${enteredPin.length} จาก 6 หลัก`}
@@ -682,7 +679,7 @@ export function PinAuthView({
               })}
             </div>
 
-            {/* Numeric Keypad */}
+            {/* แผงปุ่มตัวเลข 1-9, ล้าง, 0, ลบ */}
             <div className="pin-keypad" role="group" aria-label="แป้นตัวเลข PIN">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                 <button
@@ -723,7 +720,7 @@ export function PinAuthView({
           </>
         )}
 
-        {/* Action / Forgot links */}
+        {/* ลิงก์ตัวช่วยด้านล่าง (ลืม PIN, สลับบัญชี) */}
         <div className="pin-bottom-links">
           {currentMode === "unlock" && (
             <div className="unlock-actions-row">

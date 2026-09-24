@@ -1,7 +1,7 @@
 import type { SVGProps } from "react";
 
 /**
- * Eye icon indicating password visibility (reveals password).
+ * ไอคอนรูปดวงตา (Eye Icon) สำหรับกดแสดงรหัสผ่าน (Show Password)
  */
 export function EyeIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -28,7 +28,7 @@ export function EyeIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 /**
- * Slashed eye icon indicating password concealment (hides password).
+ * ไอคอนรูปดวงตามีขีดทับ (Eye Off Icon) สำหรับกดซ่อนรหัสผ่าน (Hide Password)
  */
 export function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
   return (

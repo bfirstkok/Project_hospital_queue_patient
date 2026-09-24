@@ -8,26 +8,28 @@ import {
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 import { formatMaskedNationalId } from "@/shared/data/thai-id";
 
+// พร็อพส์สำหรับคอมโพเนนต์หน้าบัญชีและประวัติผู้ป่วย
 interface AccountViewProps {
-  token: string;
-  onQueue: () => void;
-  onLogout: () => void;
-  onUnauthorized: () => void;
+  token: string;              // Access Token สำหรับเรียกดูข้อมูลส่วนตัว
+  onQueue: () => void;        // สลับไปยังหน้าแสดงสถานะคิวสด
+  onLogout: () => void;       // ฟังก์ชันออกจากระบบ
+  onUnauthorized: () => void; // ฟังก์ชันจัดการเมื่อ Token หมดอายุ
 }
 
+// ชนิดของแท็บในหน้าบัญชีผู้ป่วย (ข้อมูลส่วนตัว & สุขภาพ, รายการนัดหมาย, ประวัติการรักษา)
 type AccountTab = "profile" | "health" | "appointments" | "visits";
 
 /**
- * Fallback helper replacing empty/nullish values with an en-dash "–".
+ * ฟังก์ชันตัวช่วย: หากค่าเป็น null, undefined หรือค่าว่าง จะแทนที่ด้วยเครื่องหมาย "–"
  */
 const dash = (value: unknown) => (value === null || value === undefined || value === "" ? "–" : String(value));
 
 /**
- * Formats an ISO date string into Thai-localized date/time display string.
+ * แปลงสตริงวันที่ ISO ให้แสดงผลเป็นวันที่และเวลาภาษาไทย (พ.ศ.)
  *
- * @param {string | null} [value] - ISO date string.
- * @param {boolean} [includeTime=true] - Whether to include time in format.
- * @returns {string} Formatted localized date string.
+ * @param {string | null} [value] - สตริงวันที่ในรูปแบบ ISO
+ * @param {boolean} [includeTime=true] - แสดงเวลาด้วยหรือไม่ (ค่าเริ่มต้นคือ true)
+ * @returns {string} วันที่ภาษาไทยที่จัดรูปแบบแล้ว
  */
 const thaiDate = (value?: string | null, includeTime = true) =>
   value
@@ -37,14 +39,15 @@ const thaiDate = (value?: string | null, includeTime = true) =>
     : "–";
 
 /**
- * Generates and triggers download of an iCalendar (`.ics`) file for an appointment.
+ * สร้างและดาวน์โหลดไฟล์ปฏิทินมาตรฐาน iCalendar (`.ics`) สำหรับการนัดหมายแพทย์
+ * (ฟังก์ชันอำนวยความสะดวก: ช่วยให้ผู้ป่วยกดเพิ่มนัดหมายเข้า Google Calendar หรือ Apple Calendar บนมือถือได้ทันที)
  *
- * Steps:
- * 1. Formats date and time parts into VCALENDAR standard strings (`DTSTART` / `DTEND`).
- * 2. Sets summary, description, and location metadata.
- * 3. Creates a `text/calendar` Blob and triggers download link.
+ * ขั้นตอนการทำงาน:
+ * 1. แยกวันและเวลาจากข้อมูลนัดหมาย มาจัดรูปแบบตามมาตรฐาน VCALENDAR (DTSTART, DTEND)
+ * 2. กำหนดชื่อหัวข้อนัดหมาย รายละเอียด และสถานที่ (แผนก OPD)
+ * 3. บันทึกเป็นไฟล์ Blob ชนิด text/calendar แล้วสร้างลิงก์ดาวน์โหลดอัตโนมัติ
  *
- * @param {Appointment} appointment - Doctor appointment record.
+ * @param {Appointment} appointment - ข้อมูลการนัดหมายแพทย์
  */
 function downloadIcsCalendar(appointment: Appointment) {
   const dateParts = appointment.date.split("-");
@@ -79,13 +82,14 @@ function downloadIcsCalendar(appointment: Appointment) {
 }
 
 /**
- * Patient Account & Medical Records Portal component.
+ * คอมโพเนนต์หน้าบัญชีผู้ป่วยและประวัติการรักษา (`AccountView`)
  *
- * Provides 4 view tabs:
- * 1. 'profile': Personal demographic information (HN, National ID, Address, Emergency contacts).
- * 2. 'health': Medical profile (Blood group, Vitals, Chronic conditions, Allergies, Medications).
- * 3. 'appointments': Upcoming physician appointments with calendar export (`.ics`).
- * 4. 'visits': Medical visit history, vital signs, and diagnostic summaries.
+ * ประกอบด้วยส่วนสำคัญ 4 ด้าน:
+ * 1. ข้อมูลส่วนบุคคลและสุขภาพ: เลข HN, บัตรประชาชน (Masking), ที่อยู่, ผู้ติดต่อฉุกเฉิน, BMI, โรคประจำตัว, ประวัติแพ้ยา
+ * 2. การ์ดแสดงคิวที่กำลังรับบริการวันนี้ (ถ้ามี) พร้อมปุ่มลัดไปหน้าคิวสด
+ * 3. รายการนัดหมายพบแพทย์: ดูวันเวลา คำแนะนำ และปุ่มดาวน์โหลดไฟล์นัดหมายลงปฏิทินมือถือ (.ics)
+ * 4. ประวัติการตรวจรักษาและสัญญาณชีพ: แสดงบันทึกความดัน ชีพจร อุณหภูมิ และคำวินิจฉัยย้อนหลัง
+ * 5. ฟังก์ชันแก้ไขข้อมูลส่วนตัวผ่านหน้าต่าง Modal ป๊อปอัป
  */
 export function AccountView({
   token,
@@ -103,6 +107,7 @@ export function AccountView({
   const [saveError, setSaveError] = useState("");
   const profileRef = useRef<PatientProfileFormHandle>(null);
 
+  // ดึงข้อมูลบัญชีและข้อมูลคิวพร้อมกันด้วย Promise.allSettled เพื่อความรวดเร็วและป้องกันข้อผิดพลาด
   useEffect(() => {
     let active = true;
     Promise.allSettled([
@@ -122,6 +127,7 @@ export function AccountView({
         const data = accountRes.value;
         const cancelledQueue = typeof window !== "undefined" ? sessionStorage.getItem("opd_cancelled_queue_number") : null;
 
+        // จัดการสถานะคิวปัจจุบันที่เชื่อมโยงกับบัญชีผู้ป่วย
         if (queueRes.status === "fulfilled" && queueRes.value && queueRes.value.queue_number) {
           const liveQ = queueRes.value;
           if (cancelledQueue && liveQ.queue_number === cancelledQueue) {
@@ -140,7 +146,6 @@ export function AccountView({
         } else if (cancelledQueue && data.active_queue?.queue_number === cancelledQueue) {
           data.active_queue = null;
         } else if (queueRes.status === "fulfilled" && (!queueRes.value || !queueRes.value.queue_number)) {
-          // If queue API explicitly returns empty queue (no queue today), clear active_queue
           data.active_queue = null;
         }
 
@@ -162,18 +167,20 @@ export function AccountView({
   }, [token, onUnauthorized]);
 
   /**
-   * Dispatches updated patient profile to backend API (`PATCH /api/patient/me/`).
+   * บันทึกการแก้ไขข้อมูลส่วนตัวและสุขภาพของผู้ป่วย (ส่งคำขอ PATCH ไปยัง API)
    */
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!account || saving || !profileRef.current) return;
 
+    // ตรวจสอบความถูกต้องของข้อมูลในแบบฟอร์มก่อนส่ง
     const validationError = profileRef.current.validate();
     if (validationError) {
       setSaveError(validationError.message);
       return;
     }
     const payload = profileRef.current.getPayload();
+    // ตัดฟิลด์เลขบัตรประชาชนออก เพราะไม่อนุญาตให้แก้ไขเลขบัตรประชาชนได้โดยตรง
     const { national_id: _nationalId, ...profileUpdatePayload } = payload;
     const updatedProfile: PatientProfile = {
       ...account.profile,
@@ -211,6 +218,7 @@ export function AccountView({
 
   const profile = account?.profile;
 
+  // กรณีอยู่ระหว่างโหลดข้อมูลครั้งแรก
   if (loading && !account) {
     return (
       <section id="accountView" className="page-shell account-view">
@@ -224,7 +232,7 @@ export function AccountView({
 
   return (
     <section id="accountView" className="page-shell account-view">
-      {/* Profile Header Banner */}
+      {/* ส่วนหัวแสดงชื่อผู้ป่วยและรหัสประจำตัว HN */}
       <div className="account-heading">
         <div>
           <p className="eyebrow">บัตรประจำตัวและประวัติผู้ป่วย OPD</p>
@@ -241,7 +249,7 @@ export function AccountView({
       {message && <div className="alert" role="alert">{message}</div>}
       {saveSuccessMsg && <div className="success-banner" role="status">✓ {saveSuccessMsg}</div>}
 
-      {/* Active Queue Card if any */}
+      {/* กล่องสรุปสถานะคิวปัจจุบัน (ถ้ามีคิวที่กำลังรอรับบริการ) */}
       {account?.active_queue && (
         <section className="account-card queue-summary" aria-labelledby="accountQueueTitle">
           <div className="card-heading">
@@ -263,7 +271,7 @@ export function AccountView({
         </section>
       )}
 
-      {/* Unified Section Tabs */}
+      {/* แถบสลับหมวดหมู่ข้อมูล (แท็บข้อมูลผู้ป่วย, นัดหมาย, ประวัติการรักษา) */}
       <div className="account-section-tabs" role="tablist" aria-label="หมวดหมู่ข้อมูล">
         <button
           type="button"
@@ -299,7 +307,7 @@ export function AccountView({
       ) : (
         account && (
           <div className="account-tab-content">
-            {/* Tab 1: Profile & Health Unified */}
+            {/* แท็บที่ 1: ข้อมูลส่วนตัวและข้อมูลสุขภาพ */}
             {activeTab === "profile" && (
               <section className="account-card" aria-labelledby="profileTitle">
                 <div className="card-heading">
@@ -333,7 +341,7 @@ export function AccountView({
               </section>
             )}
 
-            {/* Tab 2: Appointments */}
+            {/* แท็บที่ 2: รายการนัดหมายพบแพทย์ */}
             {activeTab === "appointments" && (
               <section className="account-card" aria-labelledby="appointmentTitle">
                 <div className="card-heading">
@@ -346,7 +354,7 @@ export function AccountView({
               </section>
             )}
 
-            {/* Tab 3: Visits History */}
+            {/* แท็บที่ 3: ประวัติการรับบริการและการตรวจรักษา */}
             {activeTab === "visits" && (
               <section className="account-card" aria-labelledby="visitTitle">
                 <div className="card-heading">
@@ -362,7 +370,7 @@ export function AccountView({
         )
       )}
 
-      {/* Edit Profile Modal Dialog */}
+      {/* หน้าต่างป๊อปอัปแก้ไขข้อมูลส่วนตัวและสุขภาพ (Modal) */}
       {isEditing && account && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
           <div className="modal-content">
@@ -392,6 +400,9 @@ export function AccountView({
   );
 }
 
+/**
+ * คอมโพเนนต์ย่อยแสดงรายละเอียดข้อมูลส่วนบุคคลและการติดต่อ
+ */
 function ProfileDetails({ profile }: { profile: PatientProfile }) {
   const contactText = profile.emergency_contacts && profile.emergency_contacts.length > 0
     ? profile.emergency_contacts
@@ -426,7 +437,11 @@ function ProfileDetails({ profile }: { profile: PatientProfile }) {
   );
 }
 
+/**
+ * คอมโพเนนต์ย่อยแสดงข้อมูลสุขภาพ ค่า BMI โรคประจำตัว และประวัติการแพ้
+ */
 function HealthDetails({ profile }: { profile: PatientProfile }) {
+  // คำนวณค่าดัชนีมวลกาย BMI = น้ำหนัก (กก.) / ส่วนสูง (เมตร)^2
   const bmi = profile.height_cm && profile.weight_kg
     ? (profile.weight_kg / Math.pow(profile.height_cm / 100, 2)).toFixed(1)
     : null;
@@ -459,6 +474,9 @@ function HealthDetails({ profile }: { profile: PatientProfile }) {
   );
 }
 
+/**
+ * คอมโพเนนต์ย่อยแสดงรายการนัดหมายแพทย์ล่วงหน้า พร้อมปุ่มกดบันทึกลงปฏิทิน
+ */
 function AppointmentHistory({ appointments }: { appointments: Appointment[] }) {
   const labels: Record<string, string> = {
     SCHEDULED: "นัดหมายแล้ว",
@@ -505,6 +523,9 @@ function AppointmentHistory({ appointments }: { appointments: Appointment[] }) {
   );
 }
 
+/**
+ * คอมโพเนนต์ย่อยแสดงประวัติการรับบริการตรวจรักษาในอดีต (Timeline) และสัญญาณชีพ
+ */
 function VisitHistory({ visits }: { visits: Visit[] }) {
   if (!visits.length) return <div className="empty-state">ยังไม่มีประวัติการรับบริการ</div>;
   return (
@@ -518,6 +539,7 @@ function VisitHistory({ visits }: { visits: Visit[] }) {
           {visit.note && <p>อาการ: {visit.note}</p>}
           {visit.diagnosis && <p>ผลวินิจฉัย: {visit.diagnosis}</p>}
           {visit.treatment && <p>การรักษา: {visit.treatment}</p>}
+          {/* ข้อมูลสัญญาณชีพ (ความดันโลหิต, ชีพจร, อุณหภูมิ, ออกซิเจนในเลือด SpO2) */}
           {visit.vitals && (
             <p className="vitals-strip">
               {[

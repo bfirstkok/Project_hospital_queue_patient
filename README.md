@@ -112,8 +112,8 @@ npx playwright test tests/e2e/auth-and-queue.spec.ts
 - **ชื่อผู้ใช้ (Username):** `somchai99`
 - **รหัสผ่าน (Password):** `Password@2026`
 - **เลขประจำตัวประชาชน (National ID):** `1234567890123`
-- **รหัสความปลอดภัย PIN:** `123456`
-- **รหัสทดสอบ OTP:** `123456`
+- **รหัสความปลอดภัย PIN:** บัญชีตัวอย่างยังไม่ได้ตั้ง PIN; ตั้งรหัส 6 หลักในหน้าเว็บหลัง login
+- **รหัส OTP กู้คืนรหัสผ่าน:** ส่งทางอีเมลจริงเมื่อกำหนด SMTP ใน `.env` (ออกใหม่ทุกครั้งและหมดอายุใน 5 นาที)
 
 ---
 
@@ -129,14 +129,33 @@ npm install
 ```
 
 ### 2. รันในโหมดพัฒนา (Development Mode)
+ตั้ง `PATIENT_API_BASE_URL=http://127.0.0.1:8000` ใน `.env` ก่อน แล้วกำหนดค่า SMTP สำหรับ mock backend ในไฟล์เดียวกัน:
+
+```dotenv
+MOCK_PATIENT_EMAIL=your-real-inbox@example.com
+MOCK_SMTP_HOST=smtp.example.com
+MOCK_SMTP_PORT=587
+MOCK_SMTP_USER=your-smtp-user
+MOCK_SMTP_PASSWORD=your-smtp-app-password
+MOCK_SMTP_FROM=your-smtp-user
+```
+
+`MOCK_PATIENT_EMAIL` คืออีเมลของบัญชีตัวอย่าง `somchai99`; ใช้อีเมลจริงที่คุณรับได้ หรือสมัครบัญชีใน mock ด้วยอีเมลจริงก่อนกู้รหัส ส่วนค่า SMTP ใช้ของผู้ให้บริการอีเมลของคุณ (พอร์ต 587 ใช้ STARTTLS, 465 ใช้ SSL) เก็บรหัสไว้ใน `.env` ซึ่ง Git ไม่ติดตาม หากยังไม่ตั้งค่าหรือส่งไม่สำเร็จ ระบบจะแสดงข้อผิดพลาดและไม่เข้าสู่หน้ากรอก OTP; mock ยังไม่รองรับ SMS
+
+`mock_backend.py` จำลองสัญญา Patient API จาก [backend repo](https://github.com/bfirstkok/Project_hospital_queue/blob/2dfeb3e110e643a3a596209a364782c05838240c/patients/views.py): สมัครสมาชิกแล้วใช้รหัสที่ตั้งเข้าสู่ระบบ, token สำหรับ `/me/` และ `/queue/`, Google ID token ที่ตรวจยืนยัน, PIN และ OTP กู้รหัสแบบใช้ครั้งเดียว ข้อมูลบัญชี คิว และ PIN เก็บในหน่วยความจำ จึงหายเมื่อปิด mock backend สำหรับบัญชีที่ไม่พบ คำขอ OTP จะตอบข้อความทั่วไปเหมือน backend จริง ส่วนกรณี SMTP ส่งไม่สำเร็จ mock ตอบ `503` เพื่อให้เห็นปัญหาระหว่างทดสอบบนเครื่อง
+Google Sign-In บน localhost ต้องมี `GOOGLE_CLIENT_ID` ที่ตรงกับ token และเชื่อมต่อ Google เพื่อตรวจ token; mock ไม่ยอมรับข้อความ token ปลอม
+
 ```powershell
 # Terminal 1: รัน Local Mock Backend (Port 8000)
 python mock_backend.py
 
 # Terminal 2: รัน Next.js Dev Server (Port 3000)
+node scripts/write-runtime-config.mjs
 npm run dev
 ```
 เปิดเบราว์เซอร์ที่: **`http://localhost:3000/patient`**
+
+หลังเปลี่ยน `.env` ให้รัน `node scripts/write-runtime-config.mjs` ใหม่และรีเฟรชหน้าเว็บ; หากใช้ `dist/` ให้รัน `npm run build` ใหม่ด้วย รหัสผ่านเริ่มต้นของ mock คือ `Password@2026`; หลังรีเซ็ตจะใช้รหัสใหม่จนกว่าจะปิดและเปิด mock backend ใหม่
 
 ---
 
