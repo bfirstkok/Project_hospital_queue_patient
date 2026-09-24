@@ -170,6 +170,17 @@ describe("LoginView", () => {
       }),
     );
     expect(renderButtonMock).toHaveBeenCalled();
+    expect(renderButtonMock).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({
+        type: "standard",
+        size: "large",
+        shape: "rectangular",
+        text: "signin_with",
+        logo_alignment: "left",
+        width: 320,
+      }),
+    );
 
     // Trigger the Google credential callback
     expect(capturedCallback).toBeDefined();
