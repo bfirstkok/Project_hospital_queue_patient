@@ -27,7 +27,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <ErrorBoundary>{children}</ErrorBoundary>
         <OfflineBanner />
-        <Script src="/patient/runtime-config.js" strategy="beforeInteractive" />
+        <Script src="/patient/runtime-config.js?v=20260924-google-config" strategy="beforeInteractive" />
         <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
       </body>
     </html>
