@@ -38,6 +38,7 @@ export interface RegistrationPayload {
 
 export interface QueueData extends ApiEnvelope {
   queue_number: string;
+  status?: string;
   status_label: string;
   instruction: string;
   queue_position: number | null;
