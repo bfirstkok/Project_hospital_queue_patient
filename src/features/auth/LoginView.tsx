@@ -297,7 +297,12 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
               onClick={startGoogleSignIn}
               disabled={loading || !googleReady}
             >
-              <span className="google-g" aria-hidden="true">G</span>
+              <svg className="google-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                <path fill="#4285F4" d="M21.35 11.1H12v3.8h5.35c-.23 1.26-.94 2.32-2.01 3.03v2.5h3.24c1.89-1.75 2.98-4.33 2.98-7.39 0-.66-.06-1.3-.21-1.94Z" />
+                <path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.44l-3.24-2.5c-.9.6-2.05.96-3.37.96-2.59 0-4.79-1.75-5.58-4.1H3.08v2.58C4.73 19.78 8.1 22 12 22Z" />
+                <path fill="#FBBC05" d="M6.42 13.92c-.2-.6-.31-1.25-.31-1.92s.11-1.32.31-1.92V7.5H3.08C2.39 8.88 2 10.4 2 12s.39 3.12 1.08 4.5l3.34-2.58Z" />
+                <path fill="#EA4335" d="M12 5.98c1.47 0 2.78.51 3.82 1.51l2.87-2.87C16.96 2.98 14.7 2 12 2 8.1 2 4.73 4.22 3.08 7.5l3.34 2.58c.79-2.35 2.99-4.1 5.58-4.1Z" />
+              </svg>
               <span>{googleReady ? "เข้าสู่ระบบด้วย Google" : "กำลังโหลด Google..."}</span>
             </button>
           ) : (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
-import type { QueueData } from "@/shared/api/types";
+import type { PatientJourney, QueueData, Visit } from "@/shared/api/types";
+import { getRuntimeConfig } from "@/shared/config/runtime-config";
 import { useQueuePolling } from "./useQueuePolling";
 import { useQueueNotification } from "./useQueueNotification";
 import { generateQueueCardImage } from "./queue-card-canvas";
@@ -15,6 +16,118 @@ interface QueueStatusViewProps {
   onAccount: () => void;                                  // ฟังก์ชันนำทางไปหน้าบัญชี/ข้อมูลผู้ป่วย
   onUnauthorized: () => void;                             // ฟังก์ชันจัดการเมื่อ Token หมดอายุ
   onQueueStateChange?: (hasActiveQueue: boolean) => void; // ฟังก์ชันแจ้งการเปลี่ยนแปลงว่ามีคิวตรวจค้างอยู่หรือไม่
+}
+
+const queueProgressSteps = [
+  { key: "registration", label: "จองคิว" },
+  { key: "vitals", label: "ตรวจร่างกาย" },
+  { key: "queue", label: "รอห้องตรวจ" },
+  { key: "doctor", label: "เข้าตรวจ" },
+  { key: "billing", label: "ชำระเงิน" },
+  { key: "pharmacy", label: "จ่ายยา" },
+  { key: "complete", label: "เสร็จสิ้น" },
+] as const;
+
+type ProgressState = "done" | "current" | "pending" | "skipped" | "cancelled" | "unknown";
+
+function currentClinicalStep(status?: string): number {
+  switch (status) {
+    case "WAITING_VITALS":
+    case "WAITING_CONFIRMATION":
+      return 2;
+    case "WAITING_QUEUE":
+    case "WAITING":
+    case "OBSERVATION_MONITORING":
+    case "REASSESSMENT_REQUIRED":
+      return 3;
+    case "CALLED":
+    case "MONITORING":
+    case "OPD_DONE":
+    case "FOLLOWUP":
+    case "EMERGENCY_TRANSFER":
+    case "DISCHARGED":
+      return 4;
+    default:
+      return 1;
+  }
+}
+
+function QueueStepIcon({ number }: { number: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {number === 1 && <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1M9 10h6M9 14h6" /></>}
+      {number === 2 && <path d="M2 12h4l2-4 3 8 2-4h9" />}
+      {number === 3 && <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>}
+      {number === 4 && <><path d="M4 21V3h11v18M4 21h16M17 12h4m-2-2 2 2-2 2" /></>}
+      {number === 5 && <><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18" /></>}
+      {number === 6 && <><path d="M8 5a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V9a4 4 0 0 0-4-4Zm-4 7h8M16 7h5M18.5 4.5v5" /></>}
+      {number === 7 && <><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>}
+    </svg>
+  );
+}
+
+function QueueProgress({ status, journey }: { status?: string | null; journey?: PatientJourney | null }) {
+  const fallbackStep = currentClinicalStep(status || undefined);
+  const backendSteps = new Map(journey?.steps?.map((step) => [step.key, step]));
+  const afterExam = status === "OPD_DONE" || status === "DISCHARGED";
+  const steps = queueProgressSteps.map(({ key, label }, index) => {
+    const backendStep = backendSteps.get(key);
+    let state: ProgressState;
+    if (backendStep) {
+      state = backendStep.state;
+    } else if (index < 4) {
+      if (afterExam || index + 1 < fallbackStep) state = "done";
+      else if (index + 1 === fallbackStep) state = "current";
+      else state = "pending";
+    } else if (key === "complete") {
+      state = status === "DISCHARGED" && !journey ? "done" : "pending";
+    } else {
+      state = afterExam ? "unknown" : "pending";
+    }
+    return { key, label, state, detail: backendStep?.detail };
+  });
+  const completed = steps[6].state === "done";
+  const currentIndex = steps.findIndex((step) => step.state === "current");
+  const firstUnfinishedIndex = steps.findIndex((step) => step.state !== "done" && step.state !== "skipped");
+  const progressIndex = firstUnfinishedIndex < 0 ? 6
+    : steps[firstUnfinishedIndex].state === "current" ? firstUnfinishedIndex : Math.max(0, firstUnfinishedIndex - 1);
+  const currentLabel = currentIndex >= 0 ? steps[currentIndex].label : "";
+  const needsDownstreamStatus = steps[3].state === "done" || steps.slice(4, 6).some((step) => step.state === "current" || step.state === "done");
+  let heading = currentLabel ? `ตอนนี้: ${currentLabel}` : "ตรวจเสร็จแล้ว · รอสถานะขั้นตอนถัดไป";
+  let caption = currentLabel
+    ? `ขั้นตอนที่ ${currentIndex + 1} จาก ${queueProgressSteps.length} · กำลังดำเนินการ`
+    : "รอข้อมูลการเงินและห้องยาจากโรงพยาบาล";
+  if (journey?.current_label) heading = `ตอนนี้: ${journey.current_label}`;
+  if (journey?.current_detail) caption = journey.current_detail;
+  if (completed) heading = "เสร็จสิ้นการรับบริการ";
+  if (completed && !journey?.current_detail) caption = "ดำเนินการเสร็จแล้ว";
+  const downstreamStatus = journey
+    ? steps.slice(4, 6).map((step) => `${step.label}: ${step.detail || (step.state === "skipped" ? "ไม่ต้องดำเนินการ" : "รอข้อมูล")}`).join(" · ")
+    : completed ? "สถานะชำระเงินและจ่ายยา: โรงพยาบาลยังไม่ส่งรายละเอียดแยก" : "สถานะชำระเงินและจ่ายยา: รอข้อมูลจากโรงพยาบาล";
+
+  return (
+    <div className="queue-progress-section">
+      <h2>{heading}</h2>
+      <p className="queue-progress-caption">{caption}</p>
+      <div className="queue-progress-timeline">
+        <div className="queue-progress-track" aria-hidden="true">
+          <span style={{ width: `${(progressIndex / (queueProgressSteps.length - 1)) * 100}%` }} />
+        </div>
+        <ol className="queue-progress" aria-label="ความคืบหน้าการรับบริการ">
+          {steps.map(({ key, label, state }, index) => {
+            const number = index + 1;
+            return (
+              <li key={key} className={state} aria-current={state === "current" || (key === "complete" && completed) ? "step" : undefined}>
+                <span className="queue-progress-marker"><QueueStepIcon number={number} /></span>
+                <span>{label}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+      {needsDownstreamStatus && <p className="queue-progress-detail">{downstreamStatus}</p>}
+    </div>
+  );
 }
 
 /**
@@ -79,6 +192,7 @@ export function QueueStatusView({
   const [cancelling, setCancelling] = useState(false);
   const [cancelMessage, setCancelMessage] = useState("");
   const [cancelSuccess, setCancelSuccess] = useState(false);
+  const [recentVisit, setRecentVisit] = useState<Visit | null>(null);
 
   // อัปเดตสถานะให้คอมโพเนนต์แม่รับรู้ว่ามีคิวตรวจอยู่หรือไม่ เพื่อปรับ UI แถบนำทาง (Navbar)
   useEffect(() => {
@@ -86,6 +200,34 @@ export function QueueStatusView({
       onQueueStateChange?.(Boolean(queue?.queue_number));
     }
   }, [initialLoading, onQueueStateChange, queue?.queue_number]);
+
+  useEffect(() => {
+    if (!token || initialLoading || queue?.queue_number || cancelSuccess) {
+      setRecentVisit(null);
+      return;
+    }
+    let active = true;
+    let timer: number | undefined;
+    const loadRecentVisit = async () => {
+      let shouldPoll = false;
+      try {
+        const account = await patientApi.account(token);
+        const latest = account.visits?.[0];
+        const isToday = latest?.registered_at && new Date(latest.registered_at).toDateString() === new Date().toDateString();
+        const isAfterExam = ["OPD_DONE", "DISCHARGED"].includes(latest?.status || "");
+        if (active) setRecentVisit(isToday && isAfterExam ? latest : null);
+        shouldPoll = Boolean(isToday && latest?.status === "OPD_DONE" && !latest.patient_journey?.steps?.some((step) => step.key === "complete" && step.state === "done"));
+      } catch {
+        if (active) setRecentVisit(null);
+      }
+      if (active && shouldPoll) timer = window.setTimeout(() => void loadRecentVisit(), getRuntimeConfig().statusRefreshMs);
+    };
+    void loadRecentVisit();
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [token, initialLoading, queue?.queue_number, cancelSuccess]);
 
   // ฟอร์แมตเวลาอัปเดตล่าสุดให้เป็นรูปแบบเวลาไทย (ชั่วโมง:นาที:วินาที)
   const updatedAt = (() => {
@@ -117,6 +259,8 @@ export function QueueStatusView({
   ]);
   const rawQueueStatus = queue?.status || "";
   const canCancelQueue = !rawQueueStatus || patientCancellableStatuses.has(rawQueueStatus);
+  const postExamInProgress = recentVisit?.status === "OPD_DONE"
+    && !recentVisit.patient_journey?.steps?.some((step) => step.key === "complete" && step.state === "done");
   const cancelUnavailableText = rawQueueStatus
     ? "คิวอยู่ในขั้นตอนที่ไม่สามารถยกเลิกด้วยตนเองได้ กรุณาติดต่อเจ้าหน้าที่"
     : "";
@@ -204,6 +348,8 @@ export function QueueStatusView({
           <h1>บัตรคิวรับบริการของคุณ</h1>
           <div className="queue-number">{queue?.queue_number || "-"}</div>
           <div className="status-pill"><span /><strong>{queue?.status_label || "กำลังโหลดสถานะ"}</strong></div>
+
+          <QueueProgress status={rawQueueStatus} journey={queue?.patient_journey} />
           
           {/* กล่องแสดงระยะเวลาประมาณการ */}
           <div className="wait-time-card">
@@ -401,11 +547,18 @@ export function QueueStatusView({
         )}
 
         <div className="status-card no-queue-card">
+          {recentVisit && !cancelSuccess && (
+            <div className="recent-visit-progress" role="status">
+              <strong>คิวล่าสุดวันนี้ {recentVisit.queue_number} · {recentVisit.status_label}</strong>
+              <QueueProgress status={recentVisit.status} journey={recentVisit.patient_journey} />
+            </div>
+          )}
           <div className="no-queue-icon" aria-hidden="true">🎟️</div>
-          <h2>ยังไม่มีคิวรับบริการในขณะนี้</h2>
+          <h2>{postExamInProgress ? "กำลังดำเนินการหลังตรวจ" : "ยังไม่มีคิวรับบริการในขณะนี้"}</h2>
           <p className="instruction">
-            หากต้องการเข้ารับการตรวจหรือคัดกรองอาการวันนี้<br className="desktop-break" />
-            สามารถกดลงทะเบียนเพื่อรับบัตรคิวได้ทันที
+            {postExamInProgress
+              ? "ติดตามสถานะชำระเงินและจ่ายยาด้านบน หากยังไม่แสดงข้อมูล กรุณารอเจ้าหน้าที่อัปเดตสถานะ"
+              : "หากต้องการเข้ารับการตรวจหรือคัดกรองอาการวันนี้ สามารถกดลงทะเบียนเพื่อรับบัตรคิวได้ทันที"}
           </p>
 
           <div className="queue-action-buttons">

@@ -609,6 +609,22 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
         scrollToGroup("field-group-medications");
         return { field: "medications", message: "กรุณาระบุข้อมูลยาที่ใช้ประจำ หรือเลือก 'ไม่มียาที่ใช้ประจำ'" };
       }
+      for (const [index, contact] of emergencyContacts.entries()) {
+        if (index > 0 && !contact.name.trim() && !contact.relationship && !contact.phone.trim()) continue;
+        const number = index + 1;
+        const fields = [
+          { key: "name", valid: Boolean(contact.name.trim()), message: `กรุณาระบุชื่อผู้ติดต่อฉุกเฉินท่านที่ ${number}` },
+          { key: "relationship", valid: Boolean(contact.relationship), message: `กรุณาเลือกความสัมพันธ์ของผู้ติดต่อฉุกเฉินท่านที่ ${number}` },
+          { key: "phone", valid: contact.phone.replace(/\D/g, "").length >= 9, message: `กรุณาระบุเบอร์โทรผู้ติดต่อฉุกเฉินท่านที่ ${number} ให้ครบถ้วน` },
+        ];
+        const missing = fields.find((field) => !field.valid);
+        if (missing) {
+          const field = `emergency_${missing.key}_${number}`;
+          setInvalidField(field);
+          focusName(field);
+          return { field, message: missing.message };
+        }
+      }
       setInvalidField("");
       return null;
     }
@@ -1076,16 +1092,20 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
                   )}
                 </div>
                 <div className="form-grid three">
-                  <Field label="ชื่อผู้ติดต่อ">
+                  <Field label="ชื่อผู้ติดต่อ" required={mode === "register" && index === 0}>
                     <input
                       name={`emergency_name_${index + 1}`} maxLength={120} autoComplete={index === 0 ? "name" : undefined}
                       placeholder="ชื่อ-นามสกุล" value={contact.name}
+                      required={mode === "register" && index === 0}
+                      className={fieldClass(`emergency_name_${index + 1}`)}
                       onChange={(e) => updateContact(contact.id, "name", e.target.value)}
                     />
                   </Field>
-                  <Field label="ความสัมพันธ์">
+                  <Field label="ความสัมพันธ์" required={mode === "register" && index === 0}>
                     <select
                       name={`emergency_relationship_${index + 1}`} value={contact.relationship}
+                      required={mode === "register" && index === 0}
+                      className={fieldClass(`emergency_relationship_${index + 1}`)}
                       onChange={(e) => updateContact(contact.id, "relationship", e.target.value)}
                     >
                       <option value="">-- เลือก --</option>
@@ -1100,10 +1120,12 @@ export const PatientProfileForm = forwardRef<PatientProfileFormHandle, PatientPr
                       <option value="OTHER">อื่น ๆ</option>
                     </select>
                   </Field>
-                  <Field label="เบอร์โทรศัพท์">
+                  <Field label="เบอร์โทรศัพท์" required={mode === "register" && index === 0}>
                     <input
                       name={`emergency_phone_${index + 1}`} maxLength={20} inputMode="tel"
                       autoComplete={index === 0 ? "tel" : undefined} placeholder="08xxxxxxxx" value={contact.phone}
+                      required={mode === "register" && index === 0}
+                      className={fieldClass(`emergency_phone_${index + 1}`)}
                       onChange={(e) => updateContact(contact.id, "phone", e.target.value)}
                     />
                   </Field>

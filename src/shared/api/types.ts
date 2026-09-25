@@ -36,6 +36,7 @@ export interface RegistrationPayload {
   emergency_name: string | null;      // ชื่อผู้ติดต่อฉุกเฉินหลัก
   emergency_relationship: string | null; // ความสัมพันธ์กับผู้ติดต่อฉุกเฉิน
   emergency_phone: string | null;     // เบอร์โทรผู้ติดต่อฉุกเฉิน
+  emergency_contacts?: Array<{ id: string; name: string; relationship: string; phone: string }>;
   consent: boolean;                   // การยินยอมตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA)
 }
 
@@ -48,6 +49,18 @@ export interface QueueData extends ApiEnvelope {
   queue_position: number | null;     // ลำดับคิวที่เหลือก่อนถึงคิวของผู้ป่วย
   room: string | null;               // ห้องตรวจหรือจุดบริการที่ต้องไปติดต่อ
   updated_at: string;                // เวลาอัปเดตสถานะล่าสุด (ISO Date String)
+  patient_journey?: PatientJourney | null; // ขั้นตอนบริการจาก backend (ถ้ามี)
+}
+
+export interface PatientJourney {
+  steps: Array<{
+    key: string;
+    label: string;
+    state: "done" | "current" | "pending" | "skipped" | "cancelled";
+    detail: string;
+  }>;
+  current_label?: string;
+  current_detail?: string;
 }
 
 // ข้อมูลประวัติส่วนตัวของผู้ป่วย (Patient Profile)
@@ -86,12 +99,14 @@ export interface VisitVitals {
 // ข้อมูลประวัติการเข้ารับบริการรักษาพยาบาลย้อนหลังในแต่ละครั้ง
 export interface Visit {
   queue_number: string;              // หมายเลขคิวที่เคยได้รับ
+  status?: string | null;             // รหัสสถานะคิวล่าสุดของการรับบริการครั้งนี้
   status_label: string;              // สถานะการบริการ (เช่น ตรวจรักษาเสร็จสิ้น)
   registered_at: string;             // วันและเวลาที่ลงทะเบียนรับบริการ
   note?: string | null;              // หมายเหตุหรืออาการสำคัญที่มารับบริการ
   diagnosis?: string | null;         // การวินิจฉัยโรคจากแพทย์
   treatment?: string | null;         // แผนการรักษาหรือรายการยา
   vitals?: VisitVitals | null;       // บันทึกสัญญาณชีพ
+  patient_journey?: PatientJourney | null; // ขั้นตอนบริการจาก backend (ถ้ามี)
 }
 
 // ข้อมูลใบนัดหมายแพทย์
@@ -206,7 +221,7 @@ export interface PasswordResetRequestPayload {
 export interface PasswordResetRequestResult extends ApiEnvelope {
   cooldown_seconds?: number;         // เวลาหน่วงก่อนขอ OTP ใหม่ได้ (วินาที)
   expires_in_seconds?: number;       // อายุของ OTP (วินาที)
-  masked_target?: string;            // เบอร์โทรหรืออีเมลที่ซ่อนบางตัวอักษรเพื่อความปลอดภัย เช่น 081-xxx-1234
+  masked_target?: string;            // อีเมลปลายทางที่ซ่อนบางตัวอักษรเพื่อความปลอดภัย
   message?: string;
 }
 

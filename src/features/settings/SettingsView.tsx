@@ -65,7 +65,7 @@ export function SettingsView({
               className="secondary-button pin-manage-btn-secondary"
               onClick={onResetPin}
             >
-              📱✉️ กู้คืนรหัสผ่านอีเมล / เบอร์โทร
+              ✉️ กู้คืนรหัส PIN ทางอีเมล
             </button>
           )}
         </div>

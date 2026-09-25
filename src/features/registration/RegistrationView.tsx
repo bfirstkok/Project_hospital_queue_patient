@@ -69,7 +69,7 @@ function valueOrNull(value: FormDataEntryValue | null): string | null {
  *
  * ลำดับการทำงาน:
  * 1. อ่านค่าทุกฟิลด์จาก HTML Form ผ่าน `FormData`
- * 2. รวบรวมผู้ติดต่อฉุกเฉินสูงสุด 3 ท่าน คั่นด้วยเครื่องหมายจุลภาค
+ * 2. รวบรวมผู้ติดต่อฉุกเฉินสูงสุด 3 ท่านเป็นรายการ และระบุท่านแรกเป็นผู้ติดต่อหลัก
  * 3. แปลงฟิลด์ตัวเลข (`age`, `height_cm`, `weight_kg`) เป็น Number หรือ null
  * 4. ทำความสะอาดเลขประจำตัวประชาชนให้เป็นตัวเลขล้วน 13 หลัก
  *
@@ -85,16 +85,15 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
   payload.phone = valueOrNull(data.get("phone"));
 
   // รวบรวมข้อมูลผู้ติดต่อฉุกเฉิน
-  const emergencyNames = [data.get("emergency_name_1"), data.get("emergency_name_2"), data.get("emergency_name_3"), data.get("emergency_name")]
-    .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
-  const emergencyPhones = [data.get("emergency_phone_1"), data.get("emergency_phone_2"), data.get("emergency_phone_3"), data.get("emergency_phone")]
-    .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
-  const emergencyRels = [data.get("emergency_relationship_1"), data.get("emergency_relationship_2"), data.get("emergency_relationship_3"), data.get("emergency_relationship")]
-    .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
-
-  payload.emergency_name = emergencyNames.length > 0 ? emergencyNames.join(", ") : null;
-  payload.emergency_phone = emergencyPhones.length > 0 ? emergencyPhones.join(", ") : null;
-  payload.emergency_relationship = emergencyRels.length > 0 ? emergencyRels[0] : null;
+  const emergencyContacts = [1, 2, 3].map((index) => ({
+    id: `em_${index}`,
+    name: valueOrNull(data.get(`emergency_name_${index}`)) || "",
+    relationship: valueOrNull(data.get(`emergency_relationship_${index}`)) || "",
+    phone: valueOrNull(data.get(`emergency_phone_${index}`)) || "",
+  })).filter((contact) => contact.name || contact.relationship || contact.phone);
+  payload.emergency_name = emergencyContacts[0]?.name || null;
+  payload.emergency_phone = emergencyContacts[0]?.phone || null;
+  payload.emergency_relationship = emergencyContacts[0]?.relationship || null;
 
   // แปลงค่าฟิลด์ตัวเลข
   for (const field of numericFields) {
@@ -117,6 +116,7 @@ export function collectRegistrationPayload(form: HTMLFormElement): RegistrationP
 
   return {
     ...payload,
+    emergency_contacts: emergencyContacts,
     age: payload.age === null ? null : Number(payload.age),
     height_cm: payload.height_cm === null ? null : Number(payload.height_cm),
     weight_kg: payload.weight_kg === null ? null : Number(payload.weight_kg),

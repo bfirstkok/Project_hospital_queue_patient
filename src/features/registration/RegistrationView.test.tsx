@@ -159,6 +159,15 @@ describe("RegistrationView", () => {
     fireEvent.change(screen.getByLabelText("อำเภอ / เขต"), { target: { value: "เมืองขอนแก่น" } });
     fireEvent.change(screen.getByLabelText("ตำบล / แขวง"), { target: { value: "ศิลา" } });
 
+    // A queue cannot be booked without a reachable emergency contact.
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes("/api/patient/register/"))).toBe(false);
+
+    fireEvent.change(screen.getAllByPlaceholderText("ชื่อ-นามสกุล")[0], { target: { value: "มารดา สมหญิง" } });
+    fireEvent.change(screen.getByLabelText("ความสัมพันธ์ *"), { target: { value: "MOTHER" } });
+    fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[1], { target: { value: "0897654321" } });
+
     // Submit form
     fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
     
@@ -177,6 +186,8 @@ describe("RegistrationView", () => {
     expect(fetchBody).toContain('"chronic_diseases":"ไม่มีโรคประจำตัว"');
     expect(fetchBody).toContain('"allergies":"ไม่มีประวัติแพ้ยา"');
     expect(fetchBody).toContain('"medications":"ไม่มียาที่ใช้ประจำ"');
+    expect(fetchBody).toContain('"emergency_name":"มารดา สมหญิง"');
+    expect(fetchBody).toContain('"emergency_contacts":[{"id":"em_1","name":"มารดา สมหญิง","relationship":"MOTHER","phone":"0897654321"}]');
   });
 
   it("does not re-register a national ID that already has an active queue", async () => {
@@ -206,6 +217,9 @@ describe("RegistrationView", () => {
     fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[0], { target: { value: "0812345678" } });
     fireEvent.change(screen.getByPlaceholderText("patient@example.com"), { target: { value: "somchai@example.com" } });
     fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
+    fireEvent.change(screen.getAllByPlaceholderText("ชื่อ-นามสกุล")[0], { target: { value: "มารดา สมหญิง" } });
+    fireEvent.change(screen.getByLabelText("ความสัมพันธ์ *"), { target: { value: "MOTHER" } });
+    fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[1], { target: { value: "0897654321" } });
     fireEvent.click(screen.getByRole("button", { name: "ไม่มีโรคประจำตัว" }));
     fireEvent.click(screen.getByRole("button", { name: "ไม่มีประวัติแพ้ยา" }));
     fireEvent.click(screen.getByRole("button", { name: "ไม่มียาที่ใช้ประจำ" }));
@@ -227,6 +241,9 @@ describe("RegistrationView", () => {
     fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[0], { target: { value: "0812345678" } });
     fireEvent.change(screen.getByPlaceholderText("patient@example.com"), { target: { value: "somchai@example.com" } });
     fireEvent.change(screen.getByPlaceholderText("เช่น มีไข้สูง ปวดศีรษะ และไอต่อเนื่องมา 2 วัน"), { target: { value: "ปวดหัว" } });
+    fireEvent.change(screen.getAllByPlaceholderText("ชื่อ-นามสกุล")[0], { target: { value: "มารดา สมหญิง" } });
+    fireEvent.change(screen.getByLabelText("ความสัมพันธ์ *"), { target: { value: "MOTHER" } });
+    fireEvent.change(screen.getAllByPlaceholderText("08xxxxxxxx")[1], { target: { value: "0897654321" } });
 
     // Try submit without selecting chronic diseases
     fireEvent.click(screen.getByRole("button", { name: "บันทึกข้อมูลผู้ป่วย" }));
@@ -325,6 +342,9 @@ describe("RegistrationView", () => {
     expect((screen.getByLabelText("นามสกุล *") as HTMLInputElement).value).toBe("มีสุข");
     expect((screen.getByPlaceholderText("ตัวเลข 13 หลัก ไม่ต้องใส่ขีด") as HTMLInputElement).value).toBe("1100200300401");
     expect((screen.getAllByPlaceholderText("08xxxxxxxx")[0] as HTMLInputElement).value).toBe("0891234567");
+    expect((screen.getAllByPlaceholderText("ชื่อ-นามสกุล")[0] as HTMLInputElement).value).toBe("มารดา สมหญิง");
+    expect((screen.getByLabelText("ความสัมพันธ์ *") as HTMLSelectElement).required).toBe(true);
+    expect((screen.getAllByPlaceholderText("08xxxxxxxx")[1] as HTMLInputElement).required).toBe(true);
     expect((screen.getByLabelText("ส่วนสูง") as HTMLInputElement).value).toBe("175");
     expect((screen.getByLabelText("น้ำหนัก") as HTMLInputElement).value).toBe("70");
 

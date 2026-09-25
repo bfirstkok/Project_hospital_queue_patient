@@ -17,7 +17,7 @@ type Step = "request" | "verify" | "reset" | "completed";
  * (ฟังก์ชันความปลอดภัยที่มักใช้อธิบายเรื่อง Authentication & Security ในการสอบวิทยานิพนธ์)
  *
  * ขั้นตอนการทำงาน (Workflow):
- * 1. ขั้น 'request': ผู้ป่วยกรอก Username, อีเมล หรือเบอร์โทรศัพท์ เพื่อขอรับรหัส OTP 6 หลัก
+ * 1. ขั้น 'request': ผู้ป่วยกรอกอีเมลที่ลงทะเบียนไว้ เพื่อขอรับรหัส OTP 6 หลัก
  * 2. ขั้น 'verify': กรอกรหัส OTP 6 หลักเพื่อยืนยันตัวตน และรับ `reset_token`
  * 3. ขั้น 'reset': กำหนดรหัสผ่านใหม่และยืนยันรหัสผ่าน (ความยาวอย่างน้อย 8 ตัวอักษร)
  * 4. ขั้น 'completed': แสดงข้อความยืนยันความสำเร็จ และนำทางกลับไปหน้าล็อกอิน
@@ -67,7 +67,7 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
   async function handleRequestOtp(e: FormEvent) {
     e.preventDefault();
     if (!identifier.trim()) {
-      setErrorMessage("กรุณาระบุชื่อผู้ใช้ อีเมล หรือเบอร์โทรศัพท์");
+      setErrorMessage("กรุณาระบุอีเมลที่ลงทะเบียนไว้");
       return;
     }
     setLoading(true);
@@ -182,16 +182,18 @@ export function ForgotPasswordModal({ isOpen, onClose, onSuccess }: ForgotPasswo
         {step === "request" && (
           <form onSubmit={handleRequestOtp} className="forgot-password-form">
             <p className="forgot-desc">
-              กรอกชื่อผู้ใช้งาน อีเมล หรือเบอร์โทรศัพท์ที่เคยลงทะเบียนไว้เพื่อรับรหัสยืนยันตัวตน (OTP 6 หลัก)
+              กรอกอีเมลที่ลงทะเบียนไว้เพื่อรับรหัสยืนยันตัวตน (OTP 6 หลัก)
             </p>
 
             <label className="field">
-              <span>ชื่อผู้ใช้ / อีเมล / เบอร์โทรศัพท์ <b>*</b></span>
+              <span>อีเมลที่ลงทะเบียน <b>*</b></span>
               <input
                 name="identifier"
+                type="email"
                 required
                 autoFocus
-                placeholder="เช่น somchai99 หรือ patient@example.com"
+                autoComplete="email"
+                placeholder="เช่น somchai99@example.com"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
               />

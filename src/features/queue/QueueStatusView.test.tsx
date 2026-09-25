@@ -54,6 +54,40 @@ describe("QueueStatusView", () => {
     expect(screen.getByText("ใกล้ถึงคิวของคุณแล้ว!")).toBeInTheDocument();
   });
 
+  it("updates the care steps when the backend advances the queue", async () => {
+    const queueResponse = (status: string, statusLabel: string) => new Response(
+      JSON.stringify({ ok: true, queue_number: "A012", status, status_label: statusLabel, instruction: "กรุณารอ", queue_position: null, room: null }),
+      { headers: { "content-type": "application/json" } },
+    );
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(queueResponse("WAITING_VITALS", "รอตรวจวัดสัญญาณชีพ"))
+      .mockResolvedValueOnce(queueResponse("WAITING_QUEUE", "รอเรียกคิว"))
+      .mockResolvedValueOnce(queueResponse("CALLED", "กรุณาเข้าห้องตรวจ"));
+
+    render(createElement(QueueStatusView, { token: "mock_token", onAccount: vi.fn(), onUnauthorized: vi.fn() }));
+    await waitFor(() => expect(document.querySelector('.queue-progress [aria-current="step"]')?.textContent).toContain("ตรวจร่างกาย"));
+
+    fireEvent.click(screen.getByRole("button", { name: /อัปเดตสถานะคิว/ }));
+    await waitFor(() => expect(document.querySelector('.queue-progress [aria-current="step"]')?.textContent).toContain("รอห้องตรวจ"));
+
+    fireEvent.click(screen.getByRole("button", { name: /อัปเดตสถานะคิว/ }));
+    await waitFor(() => expect(document.querySelector('.queue-progress [aria-current="step"]')?.textContent).toContain("เข้าตรวจ"));
+  });
+
+  it("shows today's completed visit after it leaves the active queue API", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      const payload = url.includes("/api/patient/me/")
+        ? { ok: true, visits: [{ queue_number: "A012", status: "DISCHARGED", status_label: "เสร็จสิ้นการรับบริการ", registered_at: new Date().toISOString() }] }
+        : { ok: true, queue_number: null };
+      return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
+    });
+
+    render(createElement(QueueStatusView, { token: "mock_token", onAccount: vi.fn(), onUnauthorized: vi.fn() }));
+    await waitFor(() => expect(screen.getByText(/คิวล่าสุดวันนี้ A012/)).toBeInTheDocument());
+    expect(document.querySelector('.recent-visit-progress [aria-current="step"]')?.textContent).toContain("เสร็จสิ้น");
+  });
+
   it("handles sound toggle and image save clicks without crash", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(
