@@ -146,6 +146,16 @@ export const patientApi = {
   }),
 
   /**
+   * ส่ง Google OAuth access token จาก popup ให้ Backend ตรวจสอบกับ Google
+   * Endpoint: POST /api/patient/auth/google/
+   */
+  loginWithGoogleAccessToken: (accessToken: string) => request<GoogleAuthResult>("/api/patient/auth/google/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ access_token: accessToken }),
+  }),
+
+  /**
    * ส่งคำขอรับรหัส OTP สำหรับรีเซ็ตรหัสผ่านทางอีเมล
    * Endpoint: POST /api/patient/password/reset/request/
    */
