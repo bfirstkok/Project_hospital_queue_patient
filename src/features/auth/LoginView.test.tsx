@@ -1,4 +1,4 @@
-import { createElement, act } from "react";
+import { createElement } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginView } from "./LoginView";
@@ -74,7 +74,9 @@ describe("LoginView", () => {
       onGoogleRegister: vi.fn(),
     }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" }));
+    const googleButton = await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" });
+    await waitFor(() => expect(googleButton).toBeEnabled());
+    fireEvent.click(googleButton);
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("google_token", undefined));
     const [url, init] = vi.mocked(fetch).mock.calls[0];
@@ -104,7 +106,9 @@ describe("LoginView", () => {
       onGoogleRegister,
     }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" }));
+    const googleButton = await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" });
+    await waitFor(() => expect(googleButton).toBeEnabled());
+    fireEvent.click(googleButton);
 
     await waitFor(() => expect(onGoogleRegister).toHaveBeenCalledWith(
       "google-temp-token",
