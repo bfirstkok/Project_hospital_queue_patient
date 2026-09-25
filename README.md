@@ -8,13 +8,14 @@
 
 1. **ระบบเข้าสู่ระบบหลายรูปแบบ (Multi-channel Authentication):**
    - เข้าสู่ระบบด้วย **ชื่อผู้ใช้ (Username)** หรือ **เลขประจำตัวประชาชน 13 หลัก** คู่กับรหัสผ่าน
-   - รองรับ **Social Login (Google OAuth 2.0)** ด้วย Google Identity Services Token Client เปิดหน้าต่าง Account Chooser Popup ได้ทันที
-   - ระบบกู้คืนรหัสผ่านด้วยรหัส **OTP 6 หลัก** ทางอีเมลหรือเบอร์โทรศัพท์
+   - รองรับ **Social Login (Google OAuth 2.0)** ด้วย Google Identity Services Token Client; ผู้สมัครใหม่จะได้ชื่อและอีเมลจาก Google มาเติมในฟอร์ม
+   - ระบบกู้คืนรหัสผ่านด้วยรหัส **OTP 6 หลักทางอีเมล**
    - ปุ่มสลับดูรหัสผ่าน (Password Visibility Toggle) และระบบแจ้งเตือนข้อผิดพลาดทันที
 
 2. **ระบบความปลอดภัยรหัส PIN 6 หลัก (6-Digit Security PIN):**
    - ปกป้องข้อมูลเวชระเบียนและประวัติสุขภาพด้วยรหัส PIN 6 หลัก
    - แป้นตัวเลขจำลอง (Virtual Keypad) รองรับหน้าจอสัมผัส พร้อมระบบสั่นเตือนบนมือถือ (`navigator.vibrate`)
+   - กู้คืน PIN ด้วย OTP ทางอีเมล โดยตรวจ OTP กับเซิร์ฟเวอร์ก่อนเปิดขั้นตั้งรหัสใหม่
    - ยืนยันรหัส PIN 2 ขั้นตอนเมื่อเปิดใช้งานครั้งแรก (ตั้งรหัส และยืนยันรหัส)
    - จัดเก็บข้อมูลความปลอดภัยแบบปลอดภัย (Session-based Security)
 
@@ -212,6 +213,19 @@ Queue-Hostpital/
 ```
 
 ### 🔒 Google OAuth Production & Backend Parity
+
+#### API ที่ backend production ต้องรองรับสำหรับการกู้ PIN
+
+หน้าเว็บและ `mock_backend.py` ใช้การยืนยัน 2 ขั้น:
+
+1. `POST /api/patient/pin/reset/verify-otp/` รับ `{ "national_id": "...", "otp": "..." }` และตอบ `{ "ok": true, "reset_token": "..." }` เมื่อ OTP ถูกต้อง
+2. `POST /api/patient/pin/reset/confirm/` รับ `{ "reset_token": "...", "pin": "......" }`
+
+ให้ backend ผูก token กับบัญชีเดิม กำหนดอายุไม่เกิน 15 นาทีและใช้ได้ครั้งเดียว พร้อมจำกัดการลอง OTP ผิดไม่เกิน 5 ครั้ง ห้ามตั้ง PIN จาก OTP โดยตรงใน endpoint confirm
+
+#### ข้อมูล Google และการส่งอีเมล
+
+การสมัครเติมได้เฉพาะชื่อและอีเมลที่ผู้ใช้อนุญาตให้ Google ส่งมา โปรไฟล์ Sign-In มาตรฐานไม่มีเบอร์โทรหรือที่อยู่ จึงให้ผู้ใช้กรอกเอง ข้อความอีเมลที่ปรับให้เป็นทางการไม่ได้รับประกันว่าจะเข้า Inbox; production ควรใช้โดเมนผู้ส่งที่ยืนยันแล้วและตั้ง SPF, DKIM, DMARC
 
 ฝั่ง Patient Portal (Next.js) และ Django Backend (`Project_hospital_queue`) ใช้ชื่อตัวแปรและ Client ID เดียวกัน:
 

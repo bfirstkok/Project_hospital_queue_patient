@@ -84,7 +84,9 @@ export function PinAuthView({
   const [otpSent, setOtpSent] = useState<boolean>(false);
   const [otpCountdown, setOtpCountdown] = useState<number>(60);
   const [sendingOtp, setSendingOtp] = useState<boolean>(false);
+  const [verifyingOtp, setVerifyingOtp] = useState<boolean>(false);
   const [confirmingReset, setConfirmingReset] = useState<boolean>(false);
+  const [resetToken, setResetToken] = useState<string>("");
   const [verifyingPin, setVerifyingPin] = useState<boolean>(false);
 
   // ข้อมูลระบุตัวตนของผู้ป่วยที่ผูกกับเครื่องนี้
@@ -96,6 +98,9 @@ export function PinAuthView({
     setCurrentMode(initialMode);
     setStep(1);
     setEnteredPin("");
+    setOtpCode("");
+    setOtpSent(false);
+    setResetToken("");
     setErrorMessage("");
     setLockoutSeconds(getLockoutRemainingSeconds());
     const paired = readPairedPatient();
@@ -317,10 +322,15 @@ export function PinAuthView({
           setTimeout(() => setStep(3), 700);
           return;
         }
+        if (!resetToken) {
+          triggerError("กรุณายืนยันรหัส OTP ก่อนตั้งรหัส PIN ใหม่");
+          setStep(2);
+          return;
+        }
         if (confirmingReset) return;
         setConfirmingReset(true);
         try {
-          await patientApi.confirmPinReset({ national_id: resetNationalId, otp: otpCode, pin });
+          await patientApi.confirmPinReset({ reset_token: resetToken, pin });
           savePin(pin, nationalId);
           if (onPinConfigured) {
             void onPinConfigured(pin);
@@ -335,7 +345,9 @@ export function PinAuthView({
               ? "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง"
               : apiError.message,
           );
-          setTimeout(() => setStep(2), 700);
+          setResetToken("");
+          setOtpCode("");
+          setTimeout(() => setStep(1), 700);
         } finally {
           setConfirmingReset(false);
         }
@@ -363,6 +375,8 @@ export function PinAuthView({
         channel: "email",
         target: registeredEmail,
       });
+      setOtpCode("");
+      setResetToken("");
       setOtpSent(true);
       setOtpCountdown(60);
       setStep(2);
@@ -378,16 +392,32 @@ export function PinAuthView({
   }
 
   /**
-   * ตรวจสอบความยาวของรหัส OTP 6 หลัก แล้วก้าวไปสู่ขั้นตอนตั้งรหัส PIN ใหม่
+   * ตรวจสอบรหัส OTP กับเซิร์ฟเวอร์ก่อนอนุญาตให้ตั้งรหัส PIN ใหม่
    */
-  function handleVerifyOtp(e: React.FormEvent) {
+  async function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault();
+    if (verifyingOtp) return;
     if (otpCode.length !== 6) {
       setErrorMessage("กรุณากรอกรหัส OTP 6 หลัก");
       return;
     }
     setErrorMessage("");
-    setStep(3);
+    setVerifyingOtp(true);
+    try {
+      const result = await patientApi.verifyPinResetOtp({ national_id: resetNationalId, otp: otpCode });
+      if (!result.reset_token) throw new ApiError("ไม่สามารถยืนยันรหัส OTP ได้ กรุณาขอรหัสใหม่");
+      setResetToken(result.reset_token);
+      setStep(3);
+    } catch (reason) {
+      const apiError = reason instanceof ApiError
+        ? reason
+        : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถยืนยันรหัส OTP ได้");
+      setErrorMessage(apiError.message === "Failed to fetch"
+        ? "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง"
+        : apiError.message);
+    } finally {
+      setVerifyingOtp(false);
+    }
   }
 
   /**
@@ -534,7 +564,7 @@ export function PinAuthView({
 
         {/* โหมดรีเซ็ต ขั้นตอนที่ 2: กรอกรหัส OTP */}
         {currentMode === "reset" && step === 2 && (
-          <form onSubmit={handleVerifyOtp} className="reset-pin-form">
+          <form onSubmit={(event) => void handleVerifyOtp(event)} className="reset-pin-form">
             <div className="otp-info-badge">
               <span>
                 ระบบได้ส่งรหัส OTP 6 หลักไปยัง{" "}
@@ -568,8 +598,8 @@ export function PinAuthView({
                 </button>
               )}
             </div>
-            <button type="submit" className="primary-button full-width-btn">
-              <span>ยืนยันรหัส OTP</span>
+            <button type="submit" className="primary-button full-width-btn" disabled={verifyingOtp}>
+              <span>{verifyingOtp ? "กำลังตรวจสอบรหัส..." : "ยืนยันรหัส OTP"}</span>
               <i aria-hidden="true">✓</i>
             </button>
           </form>

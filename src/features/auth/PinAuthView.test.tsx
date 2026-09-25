@@ -5,9 +5,13 @@ import { PinAuthView } from "./PinAuthView";
 import { clearPin, clearPairedPatient, savePairedPatient, savePin } from "@/shared/auth/pin-storage";
 
 const okFetch = () =>
-  vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } }),
-  );
+  vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : (input as Request).url;
+    const body = url.includes("/pin/reset/verify-otp/")
+      ? { ok: true, reset_token: "test-reset-token" }
+      : { ok: true };
+    return Promise.resolve(new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } }));
+  });
 
 describe("PinAuthView", () => {
   beforeEach(() => {
@@ -212,7 +216,7 @@ describe("PinAuthView", () => {
 
     fireEvent.change(screen.getByPlaceholderText("123456"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /ยืนยันรหัส OTP/ }));
-    expect(screen.getByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
+    expect(await screen.findByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
   });
 
   it("recovers PIN via OTP to the registered email", async () => {
@@ -231,7 +235,7 @@ describe("PinAuthView", () => {
 
     fireEvent.change(screen.getByPlaceholderText("123456"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /ยืนยันรหัส OTP/ }));
-    expect(screen.getByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
+    expect(await screen.findByText("ตั้งรหัส PIN ใหม่ 6 หลัก")).toBeInTheDocument();
   });
 
   it("does not bypass email OTP when the endpoint is unavailable", async () => {
@@ -261,6 +265,60 @@ describe("PinAuthView", () => {
     expect(screen.getByText("กู้คืนรหัส PIN ทางอีเมล")).toBeInTheDocument();
     expect(onSuccess).not.toHaveBeenCalled();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/api/patient/login/"))).toBe(false);
+  });
+
+  it("does not advance to PIN setup when the server rejects the OTP", async () => {
+    window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/pin/reset/verify-otp/")) {
+          return new Response(JSON.stringify({ ok: false, error: "Invalid OTP" }), {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+      }),
+    );
+    savePairedPatient({ name: "Patient", nationalId: "1101700230708", email: "patient@example.com" });
+    render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess: vi.fn() }));
+
+    fireEvent.submit(document.querySelector(".reset-pin-form")!);
+    await screen.findByRole("heading", { name: /OTP/ });
+    fireEvent.change(screen.getByPlaceholderText("123456"), { target: { value: "000000" } });
+    fireEvent.submit(document.querySelector(".reset-pin-form")!);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid OTP");
+    expect(screen.getByRole("heading", { name: /OTP/ })).toBeInTheDocument();
+    expect(screen.queryByText(/PIN.*6/)).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/pin/reset/confirm/"))).toBe(false);
+  });
+
+  it("completes PIN recovery using the reset token returned by OTP verification", async () => {
+    window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com" };
+    vi.stubGlobal("fetch", okFetch());
+    savePairedPatient({ name: "Patient", nationalId: "1101700230708", email: "patient@example.com" });
+    const onSuccess = vi.fn();
+    render(createElement(PinAuthView, { mode: "reset", nationalId: "1101700230708", onSuccess }));
+
+    fireEvent.submit(document.querySelector(".reset-pin-form")!);
+    await screen.findByRole("heading", { name: /OTP/ });
+    fireEvent.change(screen.getByPlaceholderText("123456"), { target: { value: "123456" } });
+    fireEvent.submit(document.querySelector(".reset-pin-form")!);
+    await screen.findByText("ตั้งรหัส PIN ใหม่ 6 หลัก");
+
+    const enterPin = (pin: string) => pin.split("").forEach((digit) => {
+      fireEvent.click(screen.getByRole("button", { name: digit }));
+    });
+    enterPin("135246");
+    await screen.findByText("ยืนยันรหัส PIN ใหม่");
+    enterPin("135246");
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+    const confirmCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes("/pin/reset/confirm/"));
+    expect(JSON.parse(confirmCall?.[1]?.body as string)).toEqual({ reset_token: "test-reset-token", pin: "135246" });
   });
 
   it("blocks recovery when the account has no email", () => {

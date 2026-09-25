@@ -159,10 +159,19 @@ export interface PinResetRequestPayload {
   target: string;                    // อีเมลปลายทาง
 }
 
-// ข้อมูลยืนยันการตั้งรหัส PIN ใหม่ด้วยรหัส OTP
-export interface PinResetConfirmPayload {
+// ข้อมูลสำหรับตรวจสอบ OTP ก่อนตั้งรหัส PIN ใหม่
+export interface PinResetVerifyPayload {
   national_id: string;               // เลขประจำตัวประชาชน
   otp: string;                       // รหัส OTP 6 หลัก
+}
+
+export interface PinResetVerifyResult extends ApiEnvelope {
+  reset_token?: string;
+}
+
+// ข้อมูลยืนยันการตั้งรหัส PIN ใหม่ด้วย reset token ที่ผ่านการตรวจ OTP แล้ว
+export interface PinResetConfirmPayload {
+  reset_token: string;
   pin: string;                       // รหัส PIN 6 หลักตัวใหม่
 }
 

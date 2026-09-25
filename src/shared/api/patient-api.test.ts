@@ -115,4 +115,20 @@ describe("patientApi", () => {
       body: '{"reset_token":"rst-token","new_password":"newPassword123"}',
     }));
   });
+
+  it("verifies a PIN reset OTP before accepting its one-time reset token", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true, reset_token: "pin-reset-token" }));
+    await patientApi.verifyPinResetOtp({ national_id: "1234567890123", otp: "123456" });
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/pin/reset/verify-otp/", expect.objectContaining({
+      method: "POST",
+      body: '{"national_id":"1234567890123","otp":"123456"}',
+    }));
+
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true }));
+    await patientApi.confirmPinReset({ reset_token: "pin-reset-token", pin: "246813" });
+    expect(fetch).toHaveBeenCalledWith("https://hospital.example.com/api/patient/pin/reset/confirm/", expect.objectContaining({
+      method: "POST",
+      body: '{"reset_token":"pin-reset-token","pin":"246813"}',
+    }));
+  });
 });

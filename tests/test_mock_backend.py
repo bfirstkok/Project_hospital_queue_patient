@@ -1,6 +1,7 @@
 """HTTP contract checks for the local patient API mock. No Playwright or real email."""
 
 import copy
+import io
 import json
 import os
 import sys
@@ -116,6 +117,106 @@ class MockPatientApiTest(unittest.TestCase):
         self.assertEqual(self.post("/api/patient/auth/google/", {"credential": ""})[0], 400)
         with patch.object(backend, "verify_google_id_token", side_effect=ValueError("bad token")):
             self.assertEqual(self.post("/api/patient/auth/google/", {"credential": "fake-token"})[0], 401)
+
+    def test_google_access_token_profile_is_verified_against_userinfo(self):
+        token_info = {"aud": "client-id", "sub": "google-123", "email": "person@example.com",
+                      "email_verified": "true"}
+        user_info = {"sub": "google-123", "email": "person@example.com", "email_verified": True,
+                     "given_name": "Google", "family_name": "Patient"}
+        with patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "client-id"}), \
+                patch.object(backend.urllib.request, "urlopen", side_effect=[
+                    io.BytesIO(json.dumps(token_info).encode()), io.BytesIO(json.dumps(user_info).encode())
+                ]) as urlopen:
+            claims = backend.verify_google_access_token("access-token")
+
+        self.assertEqual(claims["sub"], "google-123")
+        self.assertEqual(claims["given_name"], "Google")
+        self.assertEqual(claims["family_name"], "Patient")
+        userinfo_request = urlopen.call_args_list[1].args[0]
+        self.assertEqual(userinfo_request.get_header("Authorization"), "Bearer access-token")
+
+    def test_google_access_token_rejects_userinfo_for_another_account(self):
+        token_info = {"aud": "client-id", "sub": "google-123", "email": "person@example.com",
+                      "email_verified": "true"}
+        user_info = {"sub": "attacker-456", "email": "person@example.com", "email_verified": True}
+        with patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "client-id"}), \
+                patch.object(backend.urllib.request, "urlopen", side_effect=[
+                    io.BytesIO(json.dumps(token_info).encode()), io.BytesIO(json.dumps(user_info).encode())
+                ]):
+            with self.assertRaises(ValueError):
+                backend.verify_google_access_token("access-token")
+
+    def test_pin_reset_requires_verified_single_use_token(self):
+        national_id = backend.MOCK_PATIENT_PROFILE["national_id"]
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}):
+            status, _ = self.post("/api/patient/pin/reset/request/", {
+                "national_id": national_id, "channel": "email", "target": "ignored@example.com",
+            })
+        self.assertEqual(status, 200)
+
+        status, invalid = self.post("/api/patient/pin/reset/verify-otp/", {
+            "national_id": national_id, "otp": "000000",
+        })
+        self.assertEqual(status, 400)
+        self.assertNotIn("reset_token", invalid)
+        self.assertIsNone(backend.ACCOUNTS[national_id]["pin"])
+        self.assertEqual(self.post("/api/patient/pin/reset/confirm/", {
+            "national_id": national_id, "otp": "123456", "pin": "246813",
+        })[0], 400)
+
+        status, verified = self.post("/api/patient/pin/reset/verify-otp/", {
+            "national_id": national_id, "otp": "123456",
+        })
+        self.assertEqual(status, 200)
+        reset_token = verified["reset_token"]
+        self.assertEqual(self.post("/api/patient/pin/reset/verify-otp/", {
+            "national_id": national_id, "otp": "123456",
+        })[0], 400)
+
+        confirm = {"reset_token": reset_token, "pin": "246813"}
+        self.assertEqual(self.post("/api/patient/pin/reset/confirm/", confirm)[0], 200)
+        self.assertEqual(backend.ACCOUNTS[national_id]["pin"], "246813")
+        self.assertEqual(self.post("/api/patient/pin/reset/confirm/", confirm)[0], 400)
+
+    def test_pin_reset_rejects_expired_otp_and_locks_after_five_wrong_codes(self):
+        national_id = backend.MOCK_PATIENT_PROFILE["national_id"]
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}):
+            self.assertEqual(self.post("/api/patient/pin/reset/request/", {
+                "national_id": national_id, "channel": "email",
+            })[0], 200)
+        backend.PIN_RESET[national_id]["expires_at"] = 0
+        self.assertEqual(self.post("/api/patient/pin/reset/verify-otp/", {
+            "national_id": national_id, "otp": "123456",
+        })[0], 400)
+
+        backend.RATE_EVENTS.clear()
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}):
+            self.assertEqual(self.post("/api/patient/pin/reset/request/", {
+                "national_id": national_id, "channel": "email",
+            })[0], 200)
+        for _ in range(5):
+            self.assertEqual(self.post("/api/patient/pin/reset/verify-otp/", {
+                "national_id": national_id, "otp": "000000",
+            })[0], 400)
+        self.assertEqual(self.post("/api/patient/pin/reset/verify-otp/", {
+            "national_id": national_id, "otp": "123456",
+        })[0], 400)
+        self.assertIsNone(backend.ACCOUNTS[national_id]["pin"])
+
+    def test_otp_email_templates_include_expiry_and_security_guidance(self):
+        sent = []
+        with patch.object(backend, "send_email", side_effect=lambda *args: sent.append(args)):
+            backend.send_password_reset_email("patient@example.com", "123456")
+            backend.send_pin_reset_email("patient@example.com", "654321")
+
+        self.assertEqual(len(sent), 2)
+        for recipient, subject, message in sent:
+            self.assertEqual(recipient, "patient@example.com")
+            self.assertIn("ระบบคิวผู้ป่วย", subject)
+            self.assertIn("5 นาที", message)
+            self.assertIn("อย่าเปิดเผย", message)
+        self.assertIn("123456", sent[0][2])
+        self.assertIn("654321", sent[1][2])
 
     def test_verified_google_new_user_can_register(self):
         claims = {"sub": "google-123", "email": "google@example.com", "given_name": "Google", "family_name": "User"}

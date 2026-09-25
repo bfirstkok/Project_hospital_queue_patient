@@ -183,8 +183,26 @@ def send_email(recipient, subject, text):
             smtp.send_message(message, from_addr=sender_address)
 
 
+def send_otp_email(recipient, purpose, otp):
+    subject = f"รหัสยืนยัน{purpose} | ระบบคิวผู้ป่วย OPD"
+    message = (
+        "เรียน ผู้ใช้บริการ,\n\n"
+        f"เราได้รับคำขอ{purpose}สำหรับบัญชีของคุณ\n\n"
+        f"รหัสยืนยัน (OTP): {otp}\n"
+        "รหัสนี้ใช้ได้ภายใน 5 นาทีและใช้ได้เพียงครั้งเดียว\n\n"
+        "หากคุณไม่ได้เป็นผู้ร้องขอ โปรดละเว้นอีเมลฉบับนี้ และอย่าเปิดเผยรหัสแก่ผู้อื่น\n\n"
+        "ขอแสดงความนับถือ\nระบบคิวผู้ป่วยนอก (OPD)\n\n"
+        "อีเมลฉบับนี้ส่งโดยระบบอัตโนมัติ กรุณาอย่าตอบกลับ"
+    )
+    send_email(recipient, subject, message)
+
+
 def send_password_reset_email(recipient, otp):
-    send_email(recipient, "รหัส OTP กู้คืนรหัสผ่านระบบคิวผู้ป่วย", f"รหัส OTP ของคุณคือ {otp}\nรหัสนี้มีอายุ 5 นาที")
+    send_otp_email(recipient, "การกู้คืนรหัสผ่าน", otp)
+
+
+def send_pin_reset_email(recipient, otp):
+    send_otp_email(recipient, "การตั้งรหัส PIN ใหม่", otp)
 
 
 def verify_google_id_token(credential):
@@ -213,6 +231,18 @@ def verify_google_access_token(access_token):
     if (client_id not in client_ids or not claims.get("sub") or not claims.get("email")
             or str(claims.get("email_verified", claims.get("verified_email", ""))).lower() != "true"):
         raise ValueError("Google access token ไม่ถูกต้อง")
+    userinfo_request = urllib.request.Request(
+        "https://openidconnect.googleapis.com/v1/userinfo",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    with urllib.request.urlopen(userinfo_request, timeout=8) as response:
+        profile = json.load(response)
+    profile_email = str(profile.get("email") or "").strip()
+    if (profile.get("sub") != claims["sub"] or not profile_email
+            or profile_email.casefold() != str(claims["email"]).casefold()
+            or str(profile.get("email_verified", "")).lower() != "true"):
+        raise ValueError("Google userinfo does not match the verified access token")
+    claims.update({key: profile[key] for key in ("given_name", "family_name", "name") if profile.get(key)})
     return claims
 
 
@@ -520,7 +550,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             otp = "123456" if test_mode else f"{secrets.randbelow(1_000_000):06d}"
             if not test_mode:
                 try:
-                    send_email(account["profile"]["email"], "รหัส OTP สำหรับตั้ง PIN ใหม่", f"รหัสยืนยันของคุณคือ {otp}\nใช้ได้ภายใน 5 นาที")
+                    send_pin_reset_email(account["profile"]["email"], otp)
                 except (OSError, smtplib.SMTPException, ValueError) as error:
                     print(f"[Mock SMTP] {error}")
                     return self._send_json(503, {"ok": False, "error": "ส่งอีเมล OTP ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า SMTP"})
@@ -528,16 +558,13 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             generic["masked_target"] = mask_email(account["profile"]["email"])
             return self._send_json(200, generic)
 
-        if path == "/api/patient/pin/reset/confirm/":
+        if path == "/api/patient/pin/reset/verify-otp/":
             national_id = str(body.get("national_id") or "").strip()
-            pin = str(body.get("pin") or body.get("new_pin") or "")
             otp = str(body.get("otp") or "")
             if not re.fullmatch(r"[0-9]{13}", national_id):
                 return self._send_json(400, {"ok": False, "error": "ข้อมูลไม่ถูกต้อง"})
-            if not re.fullmatch(r"[0-9]{6}", pin):
-                return self._send_json(400, {"ok": False, "error": "รหัส PIN ต้องเป็นตัวเลข 6 หลัก"})
             challenge = PIN_RESET.get(national_id)
-            if not challenge:
+            if not challenge or challenge.get("otp") is None:
                 return self._send_json(400, {"ok": False, "error": "ไม่พบรหัส OTP ที่ใช้งานได้ กรุณาขอใหม่"})
             if challenge["expires_at"] <= time.monotonic():
                 return self._send_json(400, {"ok": False, "error": "รหัส OTP หมดอายุ กรุณาขอใหม่"})
@@ -545,7 +572,25 @@ class MockBackendHandler(BaseHTTPRequestHandler):
                 return self._send_json(400, {"ok": False, "error": "กรอกรหัส OTP ผิดเกินกำหนด กรุณาขอใหม่"})
             if not re.fullmatch(r"[0-9]{6}", otp) or otp != challenge["otp"]:
                 challenge["attempts"] += 1
-                return self._send_json(400, {"ok": False, "error": "รหัส OTP ไม่ถูกต้อง"})
+                message = "กรอกรหัส OTP ผิดเกินกำหนด กรุณาขอใหม่" if challenge["attempts"] >= 5 else "รหัส OTP ไม่ถูกต้อง"
+                return self._send_json(400, {"ok": False, "error": message})
+            reset_token = secrets.token_urlsafe(32)
+            challenge.update({"otp": None, "reset_token": reset_token, "token_expires_at": time.monotonic() + 900})
+            return self._send_json(200, {"ok": True, "reset_token": reset_token, "message": "ยืนยันรหัส OTP สำเร็จ กรุณาตั้งรหัส PIN ใหม่"})
+
+        if path == "/api/patient/pin/reset/confirm/":
+            reset_token = str(body.get("reset_token") or "")
+            pin = str(body.get("pin") or body.get("new_pin") or "")
+            if not re.fullmatch(r"[0-9]{6}", pin):
+                return self._send_json(400, {"ok": False, "error": "รหัส PIN ต้องเป็นตัวเลข 6 หลัก"})
+            match = next(((national_id, challenge) for national_id, challenge in PIN_RESET.items()
+                          if reset_token and challenge.get("reset_token") == reset_token), None)
+            if not match:
+                return self._send_json(400, {"ok": False, "error": "Reset token ไม่ถูกต้องหรือหมดอายุ"})
+            national_id, challenge = match
+            if challenge.get("token_expires_at", 0) <= time.monotonic():
+                del PIN_RESET[national_id]
+                return self._send_json(400, {"ok": False, "error": "Reset token ไม่ถูกต้องหรือหมดอายุ"})
             account = ACCOUNTS[national_id]
             account.update({"pin": pin, "pin_attempts": 0, "pin_locked_until": 0})
             del PIN_RESET[national_id]

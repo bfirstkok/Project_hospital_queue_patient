@@ -14,6 +14,8 @@ import type {
   PasswordResetVerifyResult,
   PinResetConfirmPayload,
   PinResetRequestPayload,
+  PinResetVerifyPayload,
+  PinResetVerifyResult,
   PinSetupResult,
   PinVerifyResult,
   ProfileUpdatePayload,
@@ -226,7 +228,17 @@ export const patientApi = {
   }),
 
   /**
-   * ยืนยันรหัส OTP และตั้งรหัส PIN ใหม่
+   * ตรวจ OTP สำหรับรีเซ็ต PIN และรับ reset token อายุสั้น
+   * Endpoint: POST /api/patient/pin/reset/verify-otp/
+   */
+  verifyPinResetOtp: (payload: PinResetVerifyPayload) => request<PinResetVerifyResult>("/api/patient/pin/reset/verify-otp/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }),
+
+  /**
+   * ตั้งรหัส PIN ใหม่ด้วย reset token ที่ผ่านการตรวจ OTP แล้ว
    * Endpoint: POST /api/patient/pin/reset/confirm/
    */
   confirmPinReset: (payload: PinResetConfirmPayload) => request<PinVerifyResult>("/api/patient/pin/reset/confirm/", {
