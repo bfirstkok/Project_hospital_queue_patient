@@ -14,12 +14,33 @@ declare global {
             callback: (response: { credential: string }) => void;
             auto_select?: boolean;
             cancel_on_tap_outside?: boolean;
+            ux_mode?: "popup" | "redirect";
           }) => void;
           renderButton: (
             parent: HTMLElement,
             options: Record<string, unknown>
           ) => void;
           prompt?: (notification?: (notification: unknown) => void) => void;
+        };
+        oauth2?: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: {
+              access_token?: string;
+              error?: string;
+              error_description?: string;
+            }) => void;
+            error_callback?: (error: {
+              type?: string;
+              message?: string;
+            }) => void;
+          }) => {
+            requestAccessToken: (overrideConfig?: {
+              prompt?: string;
+              hint?: string;
+            }) => void;
+          };
         };
       };
     };
