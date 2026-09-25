@@ -112,6 +112,29 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
           logo_alignment: "left",
           width: buttonWidth,
         });
+
+        const clampGoogleButton = () => {
+          buttonHost.style.height = "44px";
+          buttonHost.style.minHeight = "44px";
+          buttonHost.style.maxHeight = "44px";
+          buttonHost.style.overflow = "hidden";
+
+          buttonHost.querySelectorAll<HTMLElement>("div, iframe").forEach((node) => {
+            node.style.setProperty("max-height", "44px", "important");
+            node.style.setProperty("height", "44px", "important");
+            node.style.setProperty("min-height", "44px", "important");
+          });
+          buttonHost.querySelectorAll<HTMLElement>("iframe").forEach((node) => {
+            node.style.setProperty("width", "100%", "important");
+            node.style.setProperty("max-width", "400px", "important");
+            node.style.setProperty("display", "block", "important");
+            node.style.setProperty("border", "0", "important");
+          });
+        };
+
+        clampGoogleButton();
+        window.requestAnimationFrame(clampGoogleButton);
+        window.setTimeout(clampGoogleButton, 50);
       } catch (err) {
         console.warn("Failed to initialize Google Identity Services:", err);
         setMessage("ไม่สามารถโหลด Google Sign-In ได้ กรุณาลองใหม่อีกครั้ง");
