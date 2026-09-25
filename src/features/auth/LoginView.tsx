@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useRef, useEffect, useCallback, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { GoogleAuthResult } from "@/shared/api/types";
 import { getRuntimeConfig } from "@/shared/config/runtime-config";
@@ -32,6 +32,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
   const [isForgotOpen, setIsForgotOpen] = useState(false);
 
   const [googleReady, setGoogleReady] = useState(false);
+  const googleTokenClientRef = useRef<{ requestAccessToken: (config?: { prompt?: string; hint?: string }) => void } | null>(null);
   const { googleClientId } = getRuntimeConfig();
 
   // ตรวจสอบว่ากำลังรันอยู่ในโหมดทดสอบอัตโนมัติ (Playwright / Test Mode) หรือไม่
@@ -42,11 +43,24 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
       window.location.search.includes("test_mode=true") ||
       window.location.search.includes("playwright=true"));
 
+  const applyGoogleResult = useCallback(async (result: GoogleAuthResult) => {
+    if (result.access_token) {
+      await onSuccess(result.access_token, result.profile?.national_id || undefined);
+      return;
+    }
+    if (result.is_new_user && result.temp_token && onGoogleRegister) {
+      onGoogleRegister(result.temp_token, result.suggested_profile);
+      return;
+    }
+    throw new ApiError("เว็บหลักไม่ได้ส่งข้อมูลเข้าสู่ระบบ Google ที่ครบถ้วน");
+  }, [onGoogleRegister, onSuccess]);
+
   /**
-   * ส่ง Credential Token ที่ได้จาก Google ไปยัง Backend API เพื่อยืนยันตัวตนและรับ JWT Token
+   * ส่ง OAuth access token ที่ได้จาก Google popup ไปให้ backend ตรวจสอบกับ Google
+   * ก่อนสร้าง session ของผู้ป่วย ระบบไม่เชื่อข้อมูลโปรไฟล์จาก browser โดยตรง
    */
-  const handleGoogleCredential = useCallback(async (credential?: string) => {
-    if (!credential) {
+  const handleGoogleAccessToken = useCallback(async (accessToken?: string) => {
+    if (!accessToken) {
       setMessage("Google ไม่ได้ส่งข้อมูลยืนยันตัวตนกลับมา กรุณาลองใหม่");
       return;
     }
@@ -55,28 +69,22 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
     setMessage("");
     setIsSuccessMsg(false);
     try {
-      const result = await patientApi.loginWithGoogle(credential);
-      // กรณีเป็นผู้ป่วยเดิมที่มีประวัติในโรงพยาบาลอยู่แล้ว
-      if (result.access_token) {
-        await onSuccess(result.access_token, result.profile?.national_id || undefined);
-        return;
-      }
-      // กรณีเป็นผู้ใช้ใหม่: ส่งข้อมูลโปรไฟล์ที่ดึงมาจาก Google ไปหน้าลงทะเบียน
-      if (result.is_new_user && result.temp_token && onGoogleRegister) {
-        onGoogleRegister(result.temp_token, result.suggested_profile);
-        return;
-      }
-      throw new ApiError("เว็บหลักไม่ได้ส่งข้อมูลเข้าสู่ระบบ Google ที่ครบถ้วน");
+      const result = await patientApi.loginWithGoogleAccessToken(accessToken);
+      await applyGoogleResult(result);
     } catch (error) {
-      const apiError = error instanceof ApiError ? error : new ApiError(error instanceof Error ? error.message : "เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
-      setMessage(apiError.message === "Failed to fetch" ? "เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่อีกครั้ง" : apiError.message);
+      const apiError = error instanceof ApiError
+        ? error
+        : new ApiError(error instanceof Error ? error.message : "เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
+      setMessage(apiError.message === "Failed to fetch"
+        ? "เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่อีกครั้ง"
+        : apiError.message);
     } finally {
       setLoading(false);
     }
-  }, [onGoogleRegister, onSuccess]);
+  }, [applyGoogleResult]);
 
-  // เตรียม Google Identity Services ไว้เบื้องหลัง แล้วใช้ปุ่มของระบบเราเอง
-  // เพื่อไม่ให้ UI ที่ Google inject เข้ามาขยายผิดขนาดบนบาง browser/device.
+  // ใช้ Google OAuth token-client เพราะ requestAccessToken() เปิด account chooser/
+  // consent ใน dialog popup ที่ผู้ใช้เป็นคนเริ่มจากปุ่มโดยตรง ไม่ใช่ One Tap/FedCM.
   useEffect(() => {
     if (!googleClientId || isAutomatedTest) {
       setGoogleReady(Boolean(googleClientId));
@@ -85,21 +93,37 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
 
     let attempts = 0;
     const initializeGoogle = () => {
-      const googleIdentity = window.google?.accounts?.id;
-      if (!googleIdentity) return false;
+      const googleOAuth = window.google?.accounts?.oauth2;
+      if (!googleOAuth?.initTokenClient) return false;
 
       try {
-        googleIdentity.initialize({
+        googleTokenClientRef.current = googleOAuth.initTokenClient({
           client_id: googleClientId,
-          callback: (response: { credential?: string }) => {
-            void handleGoogleCredential(response.credential);
+          scope: "openid email profile",
+          callback: (response) => {
+            if (response.error) {
+              setLoading(false);
+              setMessage(response.error_description || "ไม่สามารถเข้าสู่ระบบด้วย Google ได้");
+              return;
+            }
+            void handleGoogleAccessToken(response.access_token);
           },
-          auto_select: false,
-          cancel_on_tap_outside: true,
+          error_callback: (error) => {
+            setLoading(false);
+            if (error.type === "popup_closed") {
+              return;
+            }
+            setMessage(
+              error.type === "popup_failed_to_open"
+                ? "เบราว์เซอร์บล็อกหน้าต่าง Google กรุณาอนุญาต Popup แล้วลองใหม่"
+                : "ไม่สามารถเปิดหน้าต่าง Google Sign-In ได้"
+            );
+          },
         });
         setGoogleReady(true);
       } catch (err) {
-        console.warn("Failed to initialize Google Identity Services:", err);
+        console.warn("Failed to initialize Google OAuth popup:", err);
+        googleTokenClientRef.current = null;
         setGoogleReady(false);
         setMessage("ไม่สามารถโหลด Google Sign-In ได้ กรุณาลองใหม่อีกครั้ง");
       }
@@ -121,24 +145,29 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
     }, 250);
 
     return () => window.clearInterval(timer);
-  }, [googleClientId, handleGoogleCredential, isAutomatedTest]);
+  }, [googleClientId, handleGoogleAccessToken, isAutomatedTest]);
 
   const startGoogleSignIn = useCallback(() => {
     if (isAutomatedTest) {
-      void handleGoogleCredential("google_oauth_test_token");
+      void handleGoogleAccessToken("google_oauth_test_access_token");
       return;
     }
 
-    const googleIdentity = window.google?.accounts?.id;
-    if (!googleReady || !googleIdentity?.prompt) {
+    if (!googleReady || !googleTokenClientRef.current) {
       setMessage("Google Sign-In ยังโหลดไม่เสร็จ กรุณาลองใหม่อีกครั้ง");
       return;
     }
 
     setMessage("");
     setIsSuccessMsg(false);
-    googleIdentity.prompt();
-  }, [googleReady, handleGoogleCredential, isAutomatedTest]);
+    setLoading(true);
+    try {
+      googleTokenClientRef.current.requestAccessToken({ prompt: "select_account" });
+    } catch (error) {
+      setLoading(false);
+      setMessage("ไม่สามารถเปิดหน้าต่าง Google Sign-In ได้ กรุณาลองใหม่");
+    }
+  }, [googleReady, handleGoogleAccessToken, isAutomatedTest]);
 
   /**
    * ส่งคำขอเข้าสู่ระบบด้วยชื่อผู้ใช้/อีเมล และรหัสผ่าน
