@@ -137,7 +137,15 @@ describe("LoginView", () => {
     const initializeMock = vi.fn().mockImplementation((config: any) => {
       capturedCallback = config.callback;
     });
-    const renderButtonMock = vi.fn();
+    const renderButtonMock = vi.fn((parent: HTMLElement) => {
+      const wrapper = document.createElement("div");
+      const iframe = document.createElement("iframe");
+      wrapper.style.height = "320px";
+      iframe.style.height = "320px";
+      iframe.style.width = "500px";
+      wrapper.appendChild(iframe);
+      parent.appendChild(wrapper);
+    });
 
     window.google = {
       accounts: {
@@ -181,6 +189,15 @@ describe("LoginView", () => {
         width: 320,
       }),
     );
+
+    const googleHost = document.querySelector("#googleSignInDiv") as HTMLElement;
+    const googleFrame = googleHost.querySelector("iframe") as HTMLIFrameElement;
+    await waitFor(() => {
+      expect(googleHost.style.height).toBe("44px");
+      expect(googleFrame.style.getPropertyValue("height")).toBe("44px");
+      expect(googleFrame.style.getPropertyPriority("height")).toBe("important");
+      expect(googleFrame.style.getPropertyValue("max-width")).toBe("400px");
+    });
 
     // Trigger the Google credential callback
     expect(capturedCallback).toBeDefined();
