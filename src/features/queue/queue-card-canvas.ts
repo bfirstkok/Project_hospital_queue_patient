@@ -1,179 +1,317 @@
 import type { QueueData } from "@/shared/api/types";
+import type { QueueProgressModel, QueueProgressState } from "./queue-progress";
 
-/**
- * ฟังก์ชันวาดบัตรคิวตรวจรักษา (OPD Queue Slip) ลงบน HTML5 2D Canvas และส่งออกเป็นไฟล์ภาพ PNG ดาวน์โหลดลงเครื่อง
- * (ฟังก์ชันอำนวยความสะดวกให้ผู้ป่วยสามารถบันทึกรูปบัตรคิวเก็บไว้ในมือถือได้)
- *
- * ลำดับขั้นตอนการวาดภาพ (Canvas Drawing Flow):
- * 1. กำหนดขนาด Canvas 800x1050 px พร้อมสเกลความละเอียด 2 เท่า (scale 2x) เพื่อให้ได้ภาพคมชัดสูง (High-DPI / Retina)
- * 2. วาดการ์ดพื้นหลังสีขาวขอบมน พร้อมแถบแบนเนอร์สีเขียวด้านบนของโรงพยาบาล
- * 3. วาดหมายเลขคิวตัวใหญ่ ป้ายสถานะคิว ลำดับคิว และห้องตรวจ
- * 4. วาดกล่องแสดงเวลาโดยประมาณที่ต้องรอ และข้อแนะนำจากเจ้าหน้าที่
- * 5. ประทับตราวันเวลาปัจจุบันตามรูปแบบภาษาไทย (Intl.DateTimeFormat th-TH)
- * 6. แปลง Canvas เป็น Data URL (image/png) และสั่งดาวน์โหลดไฟล์ลงเครื่องอัตโนมัติ
- *
- * @param {Partial<QueueData>} queue - ข้อมูลคิวปัจจุบันของผู้ป่วย
- * @param {string} estimatedText - ข้อความเวลาโดยประมาณ (เช่น "ประมาณ 15 นาที")
- */
-export function generateQueueCardImage(queue: Partial<QueueData>, estimatedText: string): void {
+const colors = {
+  background: "#edf5f4",
+  surface: "#ffffff",
+  surfaceAlt: "#f6f9f8",
+  primary: "#0d8a7d",
+  primaryDark: "#086e63",
+  primaryLight: "#e8f7f5",
+  primaryBorder: "#b3ded8",
+  ink: "#112624",
+  muted: "#5f7774",
+  line: "#d8e6e3",
+};
+
+function syncThemeColors() {
+  const styles = getComputedStyle(document.documentElement);
+  const variables = {
+    background: "--background",
+    surface: "--surface",
+    surfaceAlt: "--surface-alt",
+    primary: "--primary",
+    primaryDark: "--primary-hover",
+    primaryLight: "--primary-light",
+    primaryBorder: "--primary-border",
+    ink: "--ink",
+    muted: "--muted",
+    line: "--line",
+  } as const;
+
+  for (const [key, variable] of Object.entries(variables) as [keyof typeof variables, string][]) {
+    const value = styles.getPropertyValue(variable).trim();
+    if (value) colors[key] = value;
+  }
+}
+
+function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, radius);
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const Segmenter = (Intl as unknown as {
+    Segmenter?: new (locale: string, options: { granularity: "word" }) => {
+      segment(value: string): Iterable<{ segment: string }>;
+    };
+  }).Segmenter;
+  const tokens = Segmenter
+    ? Array.from(new Segmenter("th", { granularity: "word" }).segment(text), ({ segment }) => segment)
+    : text.split(/(\s+)/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+
+  for (const token of tokens) {
+    const candidate = line + token;
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line.trimEnd());
+      line = token.trimStart();
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line.trimEnd());
+  return lines.length ? lines : [""];
+}
+
+function drawLines(
+  ctx: CanvasRenderingContext2D,
+  lines: string[],
+  x: number,
+  y: number,
+  lineHeight: number,
+  align: CanvasTextAlign = "left",
+) {
+  ctx.textAlign = align;
+  lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
+}
+
+function drawProgressMarker(ctx: CanvasRenderingContext2D, x: number, y: number, state: QueueProgressState, number: number) {
+  ctx.beginPath();
+  ctx.arc(x, y, 15, 0, Math.PI * 2);
+  ctx.fillStyle = state === "current" ? colors.primary : state === "done" ? colors.primaryLight : colors.surface;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = state === "current" || state === "done" ? colors.primary : colors.line;
+  ctx.stroke();
+
+  ctx.fillStyle = state === "current" ? colors.surface : state === "done" ? colors.primaryDark : colors.muted;
+  ctx.font = state === "current" || state === "done" ? "bold 15px Sarabun, sans-serif" : "14px Sarabun, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(state === "done" ? "✓" : String(number), x, y + 1);
+  ctx.textBaseline = "alphabetic";
+}
+
+function drawQueueProgress(
+  ctx: CanvasRenderingContext2D,
+  progress: QueueProgressModel,
+  contentX: number,
+  contentWidth: number,
+  titleY: number,
+  detailLines: string[],
+) {
+  ctx.textAlign = "left";
+  ctx.fillStyle = colors.primaryDark;
+  ctx.font = "bold 25px Sarabun, sans-serif";
+  ctx.fillText(progress.heading, contentX, titleY);
+  ctx.fillStyle = colors.muted;
+  ctx.font = "19px Sarabun, sans-serif";
+  const captionLines = wrapText(ctx, progress.caption, contentWidth);
+  drawLines(ctx, captionLines, contentX, titleY + 34, 24);
+
+  const markerY = titleY + 92;
+  const startX = contentX + 18;
+  const endX = contentX + contentWidth - 18;
+  const stepGap = (endX - startX) / (progress.steps.length - 1);
+  const trackY = markerY - 3;
+
+  ctx.lineCap = "round";
+  ctx.strokeStyle = colors.line;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(startX, trackY);
+  ctx.lineTo(endX, trackY);
+  ctx.stroke();
+  ctx.strokeStyle = colors.primary;
+  ctx.beginPath();
+  ctx.moveTo(startX, trackY);
+  ctx.lineTo(startX + ((endX - startX) * progress.progressIndex) / (progress.steps.length - 1), trackY);
+  ctx.stroke();
+
+  progress.steps.forEach((step, index) => {
+    const x = startX + stepGap * index;
+    drawProgressMarker(ctx, x, markerY, step.state, index + 1);
+    ctx.fillStyle = step.state === "current" || step.state === "done" ? colors.primaryDark : colors.muted;
+    ctx.font = `${step.state === "current" ? "bold " : ""}15px Sarabun, sans-serif`;
+    drawLines(ctx, wrapText(ctx, step.label, stepGap - 2).slice(0, 2), x, markerY + 33, 20, "center");
+  });
+
+  if (progress.needsDownstreamStatus) {
+    ctx.fillStyle = colors.muted;
+    ctx.font = "18px Sarabun, sans-serif";
+    drawLines(ctx, detailLines, contentX, markerY + 94, 24);
+  }
+
+  return markerY + (progress.needsDownstreamStatus ? 94 + detailLines.length * 24 : 73);
+}
+
+function drawQueueDetails(ctx: CanvasRenderingContext2D, queue: Partial<QueueData>, x: number, y: number, width: number) {
+  const gap = 10;
+  const columnWidth = (width - gap * 2) / 3;
+  const position = queue.queue_position;
+  const details = [
+    { label: "ลำดับของคุณ", value: Number.isInteger(position) ? `อันดับ ${position}` : "รอจัดลำดับ" },
+    { label: "คิวก่อนหน้า", value: typeof position === "number" ? (position <= 1 ? "คิวถัดไป" : `อีก ${position - 1} คิว`) : "–" },
+    { label: "ห้องตรวจ", value: queue.room || "กำลังจัดสรร" },
+  ];
+
+  details.forEach(({ label, value }, index) => {
+    const boxX = x + index * (columnWidth + gap);
+    ctx.fillStyle = colors.surfaceAlt;
+    ctx.strokeStyle = colors.line;
+    ctx.lineWidth = 2;
+    roundedRect(ctx, boxX, y, columnWidth, 136, 18);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = colors.muted;
+    ctx.font = "18px Sarabun, sans-serif";
+    ctx.fillText(label, boxX + columnWidth / 2, y + 43, columnWidth - 16);
+    ctx.fillStyle = colors.ink;
+    ctx.font = "bold 22px Sarabun, sans-serif";
+    drawLines(ctx, wrapText(ctx, value, columnWidth - 20).slice(0, 2), boxX + columnWidth / 2, y + 83, 26, "center");
+  });
+}
+
+/** Save a PNG snapshot of the same live queue details shown in the queue card. */
+export function generateQueueCardImage(
+  queue: Partial<QueueData>,
+  estimatedText: string,
+  updatedAt: string,
+  progress: QueueProgressModel,
+): void {
+  syncThemeColors();
   const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  const width = 800;
-  const height = 1050;
-  const scale = 2; // เพิ่มความละเอียดเป็น 2 เท่าสำหรับจอภาพความละเอียดสูง
-
+  const width = 900;
+  const scale = 2;
   canvas.width = width * scale;
-  canvas.height = height * scale;
+  canvas.height = scale;
+
+  let ctx = canvas.getContext("2d");
+  if (!ctx) return;
   ctx.scale(scale, scale);
 
-  // วาดพื้นหลังนอกการ์ด
-  ctx.fillStyle = "#eff6f5";
+  const cardX = 32;
+  const cardY = 32;
+  const cardWidth = width - cardX * 2;
+  const horizontalPadding = 54;
+  const contentX = cardX + horizontalPadding;
+  const contentWidth = cardWidth - horizontalPadding * 2;
+  ctx.font = "18px Sarabun, sans-serif";
+  const downstreamLines = progress.needsDownstreamStatus
+    ? wrapText(ctx, progress.downstreamStatus, contentWidth)
+    : [];
+  const instruction = queue.instruction || "กรุณารอเรียกตรวจตามลำดับ";
+  ctx.font = "21px Sarabun, sans-serif";
+  const instructionLines = wrapText(ctx, instruction, contentWidth);
+  const progressTitleY = 472;
+  const timelineBottom = progressTitleY + 92 + (progress.needsDownstreamStatus ? 94 + downstreamLines.length * 24 : 73);
+  const waitY = Math.max(690, timelineBottom + 24);
+  const instructionTitleY = waitY + 150;
+  const instructionTextY = instructionTitleY + 34;
+  const detailsY = instructionTextY + instructionLines.length * 29 + 28;
+  const updatedY = detailsY + 184;
+  const footerY = updatedY + 42;
+  const cardHeight = footerY + 48;
+  const height = cardHeight + cardY * 2;
+
+  canvas.height = height * scale;
+  ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = colors.background;
   ctx.fillRect(0, 0, width, height);
-
-  // วาดตัวการ์ดหลักสีขาวขอบมน
-  const cardX = 40;
-  const cardY = 40;
-  const cardW = width - 80;
-  const cardH = height - 80;
-  const cardRadius = 24;
-
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#d8e6e3";
+  ctx.fillStyle = colors.surface;
+  ctx.strokeStyle = colors.line;
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(cardX, cardY, cardW, cardH, cardRadius);
+  roundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 28);
   ctx.fill();
   ctx.stroke();
 
-  // วาดแถบแบนเนอร์ส่วนหัวสีเขียว
-  ctx.fillStyle = "#0d8a7d";
+  // Header and current queue number.
   ctx.beginPath();
-  ctx.roundRect(cardX, cardY, cardW, 110, [cardRadius, cardRadius, 0, 0]);
+  ctx.arc(width / 2, cardY + 74, 34, 0, Math.PI * 2);
+  ctx.fillStyle = colors.primaryLight;
   ctx.fill();
-
-  // ข้อความหัวข้อหลัก
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 32px Sarabun, sans-serif";
+  ctx.fillStyle = colors.primaryDark;
+  ctx.font = "bold 38px Sarabun, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("✚ โรงพยาบาล - บัตรคิวผู้ป่วย OPD", width / 2, cardY + 65);
+  ctx.textBaseline = "middle";
+  ctx.fillText("✓", width / 2, cardY + 75);
+  ctx.textBaseline = "alphabetic";
 
-  // ข้อความหัวข้อย่อย
-  ctx.fillStyle = "#0d8a7d";
-  ctx.font = "bold 22px Sarabun, sans-serif";
-  ctx.fillText("หมายเลขคิวของคุณ", width / 2, cardY + 165);
-
-  // กรอบแสดงหมายเลขคิว
-  const qBoxW = 420;
-  const qBoxH = 150;
-  const qBoxX = (width - qBoxW) / 2;
-  const qBoxY = cardY + 185;
-
-  ctx.fillStyle = "#e6f6f4";
-  ctx.strokeStyle = "#b8e5df";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.roundRect(qBoxX, qBoxY, qBoxW, qBoxH, 20);
-  ctx.fill();
-  ctx.stroke();
-
-  // ข้อความหมายเลขคิวขนาดใหญ่
-  ctx.fillStyle = "#086e63";
-  ctx.font = "bold 88px Sarabun, sans-serif";
-  ctx.fillText(queue.queue_number || "-", width / 2, qBoxY + 105);
-
-  // ป้ายแสดงสถานะคิว
-  const statusBoxW = 340;
-  const statusBoxH = 48;
-  const statusBoxX = (width - statusBoxW) / 2;
-  const statusBoxY = qBoxY + qBoxH + 20;
-
-  ctx.fillStyle = "#0d8a7d";
-  ctx.beginPath();
-  ctx.roundRect(statusBoxX, statusBoxY, statusBoxW, statusBoxH, 24);
-  ctx.fill();
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 22px Sarabun, sans-serif";
-  ctx.fillText(`สถานะ: ${queue.status_label || "รอตรวจ"}`, width / 2, statusBoxY + 32);
-
-  // ส่วนแสดงรายละเอียด (คอลัมน์คู่: ลำดับคิวก่อนหน้า และ ห้องตรวจ)
-  const gridY = statusBoxY + statusBoxH + 30;
-  const colW = (cardW - 60) / 2;
-
-  // กล่องที่ 1: ลำดับคิวก่อนหน้า
-  ctx.fillStyle = "#f7faf9";
-  ctx.strokeStyle = "#d8e6e3";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.roundRect(cardX + 25, gridY, colW, 90, 14);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#5f7774";
-  ctx.font = "18px Sarabun, sans-serif";
-  ctx.fillText("ลำดับคิวก่อนหน้า", cardX + 25 + colW / 2, gridY + 34);
-  ctx.fillStyle = "#112624";
-  ctx.font = "bold 26px Sarabun, sans-serif";
-  const posText = Number.isInteger(queue.queue_position) ? `อันดับที่ ${queue.queue_position}` : "รอจัดลำดับ";
-  ctx.fillText(posText, cardX + 25 + colW / 2, gridY + 70);
-
-  // กล่องที่ 2: ห้องตรวจ
-  ctx.fillStyle = "#f7faf9";
-  ctx.strokeStyle = "#d8e6e3";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.roundRect(cardX + 35 + colW, gridY, colW, 90, 14);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#5f7774";
-  ctx.font = "18px Sarabun, sans-serif";
-  ctx.fillText("ห้องตรวจ", cardX + 35 + colW + colW / 2, gridY + 34);
-  ctx.fillStyle = "#112624";
-  ctx.font = "bold 26px Sarabun, sans-serif";
-  ctx.fillText(queue.room || "รอระบุห้อง", cardX + 35 + colW + colW / 2, gridY + 70);
-
-  // กล่องแสดงเวลาโดยประมาณ
-  const estY = gridY + 110;
-  ctx.fillStyle = "#fffbeb";
-  ctx.strokeStyle = "#fde68a";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(cardX + 25, estY, cardW - 50, 70, 14);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#b45309";
+  ctx.fillStyle = colors.primary;
   ctx.font = "bold 20px Sarabun, sans-serif";
-  ctx.fillText(`⏱️ ${estimatedText}`, width / 2, estY + 42);
+  ctx.fillText("ระบบคิวผู้ป่วยนอก (OPD)", width / 2, cardY + 142);
+  ctx.fillStyle = colors.ink;
+  ctx.font = "bold 34px Sarabun, sans-serif";
+  ctx.fillText("บัตรคิวรับบริการของคุณ", width / 2, cardY + 190);
 
-  // กล่องคำแนะนำจากเจ้าหน้าที่
-  const insY = estY + 90;
-  ctx.fillStyle = "#112624";
-  ctx.font = "500 20px Sarabun, sans-serif";
-  ctx.fillText(queue.instruction || "กรุณารอเรียกคิว ณ จุดพักคอย", width / 2, insY + 20);
+  const numberBox = { x: width / 2 - 205, y: cardY + 214, width: 410, height: 130 };
+  ctx.fillStyle = colors.primaryLight;
+  ctx.strokeStyle = colors.primaryBorder;
+  ctx.lineWidth = 3;
+  roundedRect(ctx, numberBox.x, numberBox.y, numberBox.width, numberBox.height, 22);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = colors.primaryDark;
+  ctx.font = "bold 86px Sarabun, sans-serif";
+  ctx.fillText(queue.queue_number || "-", width / 2, numberBox.y + 100, numberBox.width - 24);
 
-  // ส่วนท้ายการ์ด: วันที่พิมพ์ และคำแนะนำ
-  const now = new Date();
-  const dateStr = new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(now);
+  const statusText = queue.status_label || "กำลังโหลดสถานะ";
+  ctx.font = "bold 20px Sarabun, sans-serif";
+  const statusWidth = Math.min(contentWidth, Math.max(260, ctx.measureText(statusText).width + 52));
+  const statusX = (width - statusWidth) / 2;
+  const statusY = numberBox.y + numberBox.height + 18;
+  ctx.fillStyle = colors.primaryLight;
+  ctx.strokeStyle = colors.primaryBorder;
+  ctx.lineWidth = 2;
+  roundedRect(ctx, statusX, statusY, statusWidth, 48, 24);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = colors.primaryDark;
+  ctx.fillText(statusText, width / 2, statusY + 31, statusWidth - 28);
 
-  ctx.fillStyle = "#5f7774";
-  ctx.font = "17px Sarabun, sans-serif";
-  ctx.fillText(`บันทึกเมื่อ: ${dateStr} น.`, width / 2, cardY + cardH - 50);
+  drawQueueProgress(ctx, progress, contentX, contentWidth, progressTitleY, downstreamLines);
 
-  ctx.font = "15px Sarabun, sans-serif";
+  ctx.fillStyle = colors.primaryLight;
+  ctx.strokeStyle = colors.primaryBorder;
+  ctx.lineWidth = 2;
+  roundedRect(ctx, contentX, waitY, contentWidth, 104, 18);
+  ctx.fill();
+  ctx.stroke();
+  ctx.textAlign = "left";
+  ctx.fillStyle = colors.primaryDark;
+  ctx.font = "bold 19px Sarabun, sans-serif";
+  ctx.fillText("ประมาณการเวลารอตรวจ", contentX + 24, waitY + 37);
+  ctx.fillStyle = colors.ink;
+  ctx.font = "bold 25px Sarabun, sans-serif";
+  ctx.fillText(estimatedText, contentX + 24, waitY + 73, contentWidth - 48);
+
+  ctx.fillStyle = colors.ink;
+  ctx.font = "bold 22px Sarabun, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("คำแนะนำ", contentX, instructionTitleY);
+  ctx.fillStyle = colors.muted;
+  ctx.font = "21px Sarabun, sans-serif";
+  drawLines(ctx, instructionLines, contentX, instructionTextY, 29);
+
+  drawQueueDetails(ctx, queue, contentX, detailsY, contentWidth);
+
+  ctx.fillStyle = colors.muted;
+  ctx.font = "18px Sarabun, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`อัปเดตล่าสุด ${updatedAt} น.`, width / 2, updatedY);
   ctx.fillStyle = "#8aa19e";
-  ctx.fillText("โปรดแสดงบัตรนี้ต่อเจ้าหน้าที่เมื่อถึงคิวของท่าน", width / 2, cardY + cardH - 22);
+  ctx.font = "16px Sarabun, sans-serif";
+  ctx.fillText("ภาพนี้แสดงข้อมูลคิว ณ เวลาที่บันทึก", width / 2, footerY);
 
-  // สร้าง Trigger ดาวน์โหลดไฟล์ PNG
-  const dataUrl = canvas.toDataURL("image/png");
   const link = document.createElement("a");
   link.download = `บัตรคิว-${queue.queue_number || "OPD"}.png`;
-  link.href = dataUrl;
+  link.href = canvas.toDataURL("image/png");
   link.click();
 }

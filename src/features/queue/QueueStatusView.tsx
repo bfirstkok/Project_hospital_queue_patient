@@ -5,6 +5,7 @@ import { getRuntimeConfig } from "@/shared/config/runtime-config";
 import { useQueuePolling } from "./useQueuePolling";
 import { useQueueNotification } from "./useQueueNotification";
 import { generateQueueCardImage } from "./queue-card-canvas";
+import { getQueueProgressModel } from "./queue-progress";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 // พร็อพส์สำหรับคอมโพเนนต์แสดงสถานะคิว (QueueStatusViewProps)
@@ -16,40 +17,6 @@ interface QueueStatusViewProps {
   onAccount: () => void;                                  // ฟังก์ชันนำทางไปหน้าบัญชี/ข้อมูลผู้ป่วย
   onUnauthorized: () => void;                             // ฟังก์ชันจัดการเมื่อ Token หมดอายุ
   onQueueStateChange?: (hasActiveQueue: boolean) => void; // ฟังก์ชันแจ้งการเปลี่ยนแปลงว่ามีคิวตรวจค้างอยู่หรือไม่
-}
-
-const queueProgressSteps = [
-  { key: "registration", label: "จองคิว" },
-  { key: "vitals", label: "ตรวจร่างกาย" },
-  { key: "queue", label: "รอห้องตรวจ" },
-  { key: "doctor", label: "เข้าตรวจ" },
-  { key: "billing", label: "ชำระเงิน" },
-  { key: "pharmacy", label: "จ่ายยา" },
-  { key: "complete", label: "เสร็จสิ้น" },
-] as const;
-
-type ProgressState = "done" | "current" | "pending" | "skipped" | "cancelled" | "unknown";
-
-function currentClinicalStep(status?: string): number {
-  switch (status) {
-    case "WAITING_VITALS":
-    case "WAITING_CONFIRMATION":
-      return 2;
-    case "WAITING_QUEUE":
-    case "WAITING":
-    case "OBSERVATION_MONITORING":
-    case "REASSESSMENT_REQUIRED":
-      return 3;
-    case "CALLED":
-    case "MONITORING":
-    case "OPD_DONE":
-    case "FOLLOWUP":
-    case "EMERGENCY_TRANSFER":
-    case "DISCHARGED":
-      return 4;
-    default:
-      return 1;
-  }
 }
 
 function QueueStepIcon({ number }: { number: number }) {
@@ -67,57 +34,21 @@ function QueueStepIcon({ number }: { number: number }) {
 }
 
 function QueueProgress({ status, journey }: { status?: string | null; journey?: PatientJourney | null }) {
-  const fallbackStep = currentClinicalStep(status || undefined);
-  const backendSteps = new Map(journey?.steps?.map((step) => [step.key, step]));
-  const afterExam = status === "OPD_DONE" || status === "DISCHARGED";
-  const steps = queueProgressSteps.map(({ key, label }, index) => {
-    const backendStep = backendSteps.get(key);
-    let state: ProgressState;
-    if (backendStep) {
-      state = backendStep.state;
-    } else if (index < 4) {
-      if (afterExam || index + 1 < fallbackStep) state = "done";
-      else if (index + 1 === fallbackStep) state = "current";
-      else state = "pending";
-    } else if (key === "complete") {
-      state = status === "DISCHARGED" && !journey ? "done" : "pending";
-    } else {
-      state = afterExam ? "unknown" : "pending";
-    }
-    return { key, label, state, detail: backendStep?.detail };
-  });
-  const completed = steps[6].state === "done";
-  const currentIndex = steps.findIndex((step) => step.state === "current");
-  const firstUnfinishedIndex = steps.findIndex((step) => step.state !== "done" && step.state !== "skipped");
-  const progressIndex = firstUnfinishedIndex < 0 ? 6
-    : steps[firstUnfinishedIndex].state === "current" ? firstUnfinishedIndex : Math.max(0, firstUnfinishedIndex - 1);
-  const currentLabel = currentIndex >= 0 ? steps[currentIndex].label : "";
-  const needsDownstreamStatus = steps[3].state === "done" || steps.slice(4, 6).some((step) => step.state === "current" || step.state === "done");
-  let heading = currentLabel ? `ตอนนี้: ${currentLabel}` : "ตรวจเสร็จแล้ว · รอสถานะขั้นตอนถัดไป";
-  let caption = currentLabel
-    ? `ขั้นตอนที่ ${currentIndex + 1} จาก ${queueProgressSteps.length} · กำลังดำเนินการ`
-    : "รอข้อมูลการเงินและห้องยาจากโรงพยาบาล";
-  if (journey?.current_label) heading = `ตอนนี้: ${journey.current_label}`;
-  if (journey?.current_detail) caption = journey.current_detail;
-  if (completed) heading = "เสร็จสิ้นการรับบริการ";
-  if (completed && !journey?.current_detail) caption = "ดำเนินการเสร็จแล้ว";
-  const downstreamStatus = journey
-    ? steps.slice(4, 6).map((step) => `${step.label}: ${step.detail || (step.state === "skipped" ? "ไม่ต้องดำเนินการ" : "รอข้อมูล")}`).join(" · ")
-    : completed ? "สถานะชำระเงินและจ่ายยา: โรงพยาบาลยังไม่ส่งรายละเอียดแยก" : "สถานะชำระเงินและจ่ายยา: รอข้อมูลจากโรงพยาบาล";
+  const progress = getQueueProgressModel(status, journey);
 
   return (
     <div className="queue-progress-section">
-      <h2>{heading}</h2>
-      <p className="queue-progress-caption">{caption}</p>
+      <h2>{progress.heading}</h2>
+      <p className="queue-progress-caption">{progress.caption}</p>
       <div className="queue-progress-timeline">
         <div className="queue-progress-track" aria-hidden="true">
-          <span style={{ width: `${(progressIndex / (queueProgressSteps.length - 1)) * 100}%` }} />
+          <span style={{ width: `${(progress.progressIndex / (progress.steps.length - 1)) * 100}%` }} />
         </div>
         <ol className="queue-progress" aria-label="ความคืบหน้าการรับบริการ">
-          {steps.map(({ key, label, state }, index) => {
+          {progress.steps.map(({ key, label, state }, index) => {
             const number = index + 1;
             return (
-              <li key={key} className={state} aria-current={state === "current" || (key === "complete" && completed) ? "step" : undefined}>
+              <li key={key} className={state} aria-current={state === "current" || (key === "complete" && progress.completed) ? "step" : undefined}>
                 <span className="queue-progress-marker"><QueueStepIcon number={number} /></span>
                 <span>{label}</span>
               </li>
@@ -125,7 +56,7 @@ function QueueProgress({ status, journey }: { status?: string | null; journey?: 
           })}
         </ol>
       </div>
-      {needsDownstreamStatus && <p className="queue-progress-detail">{downstreamStatus}</p>}
+      {progress.needsDownstreamStatus && <p className="queue-progress-detail">{progress.downstreamStatus}</p>}
     </div>
   );
 }
@@ -270,7 +201,8 @@ export function QueueStatusView({
    */
   function handleSaveImage() {
     if (!queue) return;
-    generateQueueCardImage(queue, estimatedWaitText);
+    const progress = getQueueProgressModel(rawQueueStatus, queue.patient_journey);
+    generateQueueCardImage(queue, estimatedWaitText, updatedAt, progress);
   }
 
   /**
