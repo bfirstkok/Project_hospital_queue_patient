@@ -11,16 +11,21 @@ describe("LoginView", () => {
     };
     vi.stubGlobal("fetch", vi.fn());
 
-    let credentialCallback: ((response: { credential?: string }) => void) | undefined;
+    let oauthCallback: ((response: { access_token?: string; error?: string }) => void) | undefined;
+    const requestAccessToken = vi.fn(() => {
+      oauthCallback?.({ access_token: "google-access-token" });
+    });
     window.google = {
       accounts: {
         id: {
-          initialize: vi.fn((options) => {
-            credentialCallback = options.callback;
-          }),
+          initialize: vi.fn(),
           renderButton: vi.fn(),
-          prompt: vi.fn(() => {
-            credentialCallback?.({ credential: "google-credential" });
+          prompt: vi.fn(),
+        },
+        oauth2: {
+          initTokenClient: vi.fn((options) => {
+            oauthCallback = options.callback;
+            return { requestAccessToken };
           }),
         },
       },
@@ -61,7 +66,7 @@ describe("LoginView", () => {
     expect(onRegister).toHaveBeenCalledTimes(1);
   });
 
-  it("sends the Google Identity ID token as credential", async () => {
+  it("sends the Google OAuth popup access token to the backend", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ ok: true, access_token: "google_token" }), {
         headers: { "content-type": "application/json" },
@@ -81,7 +86,7 @@ describe("LoginView", () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("google_token", undefined));
     const [url, init] = vi.mocked(fetch).mock.calls[0];
     expect(String(url)).toContain("/api/patient/auth/google/");
-    expect(init?.body).toContain('"credential":"google-credential"');
+    expect(init?.body).toContain('"access_token":"google-access-token"');
   });
 
   it("routes a new Google user into linked registration", async () => {
@@ -130,22 +135,25 @@ describe("LoginView", () => {
     expect(screen.getByRole("heading", { name: /ลืมรหัสผ่าน \/ กู้คืนบัญชี/ })).toBeDefined();
   });
 
-  it("initializes Google Identity Services and uses prompt from the compact trigger", async () => {
-    let capturedCallback: ((response: { credential: string }) => void) | undefined;
-    const initializeMock = vi.fn().mockImplementation((config: any) => {
+  it("initializes the Google OAuth token client and requests a popup", async () => {
+    let capturedCallback: ((response: { access_token?: string; error?: string }) => void) | undefined;
+    const requestAccessTokenMock = vi.fn(() => {
+      capturedCallback?.({ access_token: "real_google_access_token" });
+    });
+    const initTokenClientMock = vi.fn((config: any) => {
       capturedCallback = config.callback;
+      return { requestAccessToken: requestAccessTokenMock };
     });
-    const promptMock = vi.fn(() => {
-      capturedCallback?.({ credential: "real_jwt_from_google" });
-    });
-    const renderButtonMock = vi.fn();
 
     window.google = {
       accounts: {
         id: {
-          initialize: initializeMock,
-          renderButton: renderButtonMock,
-          prompt: promptMock,
+          initialize: vi.fn(),
+          renderButton: vi.fn(),
+          prompt: vi.fn(),
+        },
+        oauth2: {
+          initTokenClient: initTokenClientMock,
         },
       },
     } as any;
@@ -164,25 +172,24 @@ describe("LoginView", () => {
     const onSuccess = vi.fn();
     render(createElement(LoginView, { onRegister: vi.fn(), onSuccess }));
 
-    await waitFor(() => expect(initializeMock).toHaveBeenCalled());
-    expect(initializeMock).toHaveBeenCalledWith(
+    await waitFor(() => expect(initTokenClientMock).toHaveBeenCalled());
+    expect(initTokenClientMock).toHaveBeenCalledWith(
       expect.objectContaining({
         client_id: "test-client-id.apps.googleusercontent.com",
+        scope: "openid email profile",
       }),
     );
 
     const googleButton = await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" });
-    expect(googleButton).toBeEnabled();
+    await waitFor(() => expect(googleButton).toBeEnabled());
     fireEvent.click(googleButton);
 
-    expect(promptMock).toHaveBeenCalledTimes(1);
-    expect(renderButtonMock).not.toHaveBeenCalled();
-
+    expect(requestAccessTokenMock).toHaveBeenCalledWith({ prompt: "select_account" });
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("real_google_session_token", undefined));
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       "https://hospital.example.com/api/patient/auth/google/",
       expect.objectContaining({
-        body: JSON.stringify({ credential: "real_jwt_from_google" }),
+        body: JSON.stringify({ access_token: "real_google_access_token" }),
       }),
     );
   });
