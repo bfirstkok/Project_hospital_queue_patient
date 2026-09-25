@@ -1,4 +1,4 @@
-import { writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 let envFileContent = "";
@@ -11,9 +11,46 @@ try {
 
 function getEnvVal(key, fallback) {
   if (process.env[key]) return process.env[key];
-  const match = envFileContent.match(new RegExp(`^${key}=(.*)$`, "m"));
+  const match = envFileContent.match(new RegExp(`^${key}=(.*)import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+let envFileContent = "";
+try {
+  // พยายามอ่านค่าคอนฟิกจากไฟล์ .env (ถ้ามี)
+  envFileContent = await readFile(resolve(".env"), "utf8");
+} catch {
+  // ข้ามหากไม่มีไฟล์ .env (จะใช้ค่าจาก Environment Variables ของระบบ หรือค่าเริ่มต้นแทน)
+}
+
+, "m"));
   return match ? match[1].trim() : fallback;
 }
+
+async function readExistingRuntimeConfig() {
+  const candidates = [
+    resolve("public", "runtime-config.js"),
+    resolve("dist", "patient", "runtime-config.js"),
+    resolve("dist", "runtime-config.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      return await readFile(candidate, "utf8");
+    } catch {
+      // Try the next previously published runtime config.
+    }
+  }
+  return "";
+}
+
+function getRuntimeValue(content, key) {
+  if (!content) return "";
+  const match = content.match(
+    new RegExp(`["']?${key}["']?\\s*:\\s*["']([^"']*)["']`)
+  );
+  return match ? match[1].trim() : "";
+}
+
+const existingRuntimeConfig = await readExistingRuntimeConfig();
 
 // กำหนด URL ของ Backend API, ระยะเวลาการ Polling คิว, และ Google OAuth Client ID
 const apiBaseUrl = String(getEnvVal("PATIENT_API_BASE_URL", "https://hospital.bfirstkok.me")).replace(/\/$/, "");
@@ -21,7 +58,8 @@ const refreshMs = Number(getEnvVal("PATIENT_STATUS_REFRESH_MS", "10000")) || 100
 const googleClientId = String(
   getEnvVal("GOOGLE_CLIENT_ID", "") ||
   getEnvVal("NEXT_PUBLIC_GOOGLE_CLIENT_ID", "") ||
-  getEnvVal("PATIENT_GOOGLE_CLIENT_ID", "")
+  getEnvVal("PATIENT_GOOGLE_CLIENT_ID", "") ||
+  getRuntimeValue(existingRuntimeConfig, "GOOGLE_CLIENT_ID")
 ).trim();
 if (!googleClientId) {
   console.warn(
@@ -44,5 +82,6 @@ const output = `window.PATIENT_APP_ENV = ${JSON.stringify({
   GOOGLE_CLIENT_ID: googleClientId,
 }, null, 2)};\n`;
 
-// เขียนไฟล์ไปยัง public/runtime-config.js
+// สร้าง public/ อัตโนมัติสำหรับ fresh checkout แล้วเขียน runtime config
+await mkdir(resolve("public"), { recursive: true });
 await writeFile(resolve("public", "runtime-config.js"), output, "utf8");
