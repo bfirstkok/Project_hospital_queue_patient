@@ -18,13 +18,9 @@ describe("LoginView", () => {
           initialize: vi.fn((options) => {
             credentialCallback = options.callback;
           }),
-          renderButton: vi.fn((parent) => {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.setAttribute("aria-label", "เข้าสู่ระบบด้วย Google");
-            button.textContent = "Continue with Google";
-            button.addEventListener("click", () => credentialCallback?.({ credential: "google-credential" }));
-            parent.appendChild(button);
+          renderButton: vi.fn(),
+          prompt: vi.fn(() => {
+            credentialCallback?.({ credential: "google-credential" });
           }),
         },
       },
@@ -78,8 +74,6 @@ describe("LoginView", () => {
       onGoogleRegister: vi.fn(),
     }));
 
-    expect(document.querySelector("#googleSignInDiv")).toBeVisible();
-
     fireEvent.click(await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("google_token", undefined));
@@ -132,27 +126,22 @@ describe("LoginView", () => {
     expect(screen.getByRole("heading", { name: /ลืมรหัสผ่าน \/ กู้คืนบัญชี/ })).toBeDefined();
   });
 
-  it("initializes Google Identity Services and handles credential callback", async () => {
+  it("initializes Google Identity Services and uses prompt from the compact trigger", async () => {
     let capturedCallback: ((response: { credential: string }) => void) | undefined;
     const initializeMock = vi.fn().mockImplementation((config: any) => {
       capturedCallback = config.callback;
     });
-    const renderButtonMock = vi.fn((parent: HTMLElement) => {
-      const wrapper = document.createElement("div");
-      const iframe = document.createElement("iframe");
-      wrapper.style.height = "320px";
-      iframe.style.height = "320px";
-      iframe.style.width = "500px";
-      wrapper.appendChild(iframe);
-      parent.appendChild(wrapper);
+    const promptMock = vi.fn(() => {
+      capturedCallback?.({ credential: "real_jwt_from_google" });
     });
+    const renderButtonMock = vi.fn();
 
     window.google = {
       accounts: {
         id: {
           initialize: initializeMock,
           renderButton: renderButtonMock,
-          prompt: vi.fn(),
+          prompt: promptMock,
         },
       },
     } as any;
@@ -177,33 +166,13 @@ describe("LoginView", () => {
         client_id: "test-client-id.apps.googleusercontent.com",
       }),
     );
-    expect(renderButtonMock).toHaveBeenCalled();
-    expect(renderButtonMock).toHaveBeenCalledWith(
-      expect.any(HTMLElement),
-      expect.objectContaining({
-        type: "standard",
-        size: "large",
-        shape: "rectangular",
-        text: "signin_with",
-        logo_alignment: "left",
-        width: 320,
-      }),
-    );
 
-    const googleHost = document.querySelector("#googleSignInDiv") as HTMLElement;
-    const googleFrame = googleHost.querySelector("iframe") as HTMLIFrameElement;
-    await waitFor(() => {
-      expect(googleHost.style.height).toBe("44px");
-      expect(googleFrame.style.getPropertyValue("height")).toBe("44px");
-      expect(googleFrame.style.getPropertyPriority("height")).toBe("important");
-      expect(googleFrame.style.getPropertyValue("max-width")).toBe("400px");
-    });
+    const googleButton = await screen.findByRole("button", { name: "เข้าสู่ระบบด้วย Google" });
+    expect(googleButton).toBeEnabled();
+    fireEvent.click(googleButton);
 
-    // Trigger the Google credential callback
-    expect(capturedCallback).toBeDefined();
-    await act(async () => {
-      capturedCallback!({ credential: "real_jwt_from_google" });
-    });
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(renderButtonMock).not.toHaveBeenCalled();
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("real_google_session_token", undefined));
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
