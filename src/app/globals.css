@@ -1584,11 +1584,36 @@ input:disabled {
 
 #googleSignInDiv {
   width: min(100%, 400px);
-  min-height: 44px;
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
   display: flex;
   justify-content: center;
   align-items: center;
-  overflow: hidden;
+  overflow: hidden !important;
+  position: relative;
+}
+
+#googleSignInDiv > div,
+#googleSignInDiv > div > div {
+  width: 100% !important;
+  max-width: 400px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
+  overflow: hidden !important;
+}
+
+#googleSignInDiv iframe {
+  display: block !important;
+  width: 100% !important;
+  max-width: 400px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
+  margin: 0 auto !important;
+  border: 0 !important;
+  transform: none !important;
 }
 
 .google-icon {
