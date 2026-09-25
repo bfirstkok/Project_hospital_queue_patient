@@ -142,7 +142,7 @@ MOCK_SMTP_FROM=your-smtp-user
 
 `MOCK_PATIENT_EMAIL` คืออีเมลของบัญชีตัวอย่าง `somchai99`; ใช้อีเมลจริงที่คุณรับได้ หรือสมัครบัญชีใน mock ด้วยอีเมลจริงก่อนกู้รหัส ส่วนค่า SMTP ใช้ของผู้ให้บริการอีเมลของคุณ (พอร์ต 587 ใช้ STARTTLS, 465 ใช้ SSL) เก็บรหัสไว้ใน `.env` ซึ่ง Git ไม่ติดตาม หากยังไม่ตั้งค่าหรือส่งไม่สำเร็จ ระบบจะแสดงข้อผิดพลาดและไม่เข้าสู่หน้ากรอก OTP; mock ยังไม่รองรับ SMS
 
-`mock_backend.py` จำลองสัญญา Patient API จาก [backend repo](https://github.com/bfirstkok/Project_hospital_queue/blob/2dfeb3e110e643a3a596209a364782c05838240c/patients/views.py): สมัครสมาชิกแล้วใช้รหัสที่ตั้งเข้าสู่ระบบ, token สำหรับ `/me/` และ `/queue/`, Google ID token ที่ตรวจยืนยัน, PIN และ OTP กู้รหัสแบบใช้ครั้งเดียว ข้อมูลบัญชี คิว และ PIN เก็บในหน่วยความจำ จึงหายเมื่อปิด mock backend สำหรับบัญชีที่ไม่พบ คำขอ OTP จะตอบข้อความทั่วไปเหมือน backend จริง ส่วนกรณี SMTP ส่งไม่สำเร็จ mock ตอบ `503` เพื่อให้เห็นปัญหาระหว่างทดสอบบนเครื่อง
+`mock_backend.py` จำลองสัญญา Patient API จาก [backend repo](https://github.com/bfirstkok/Project_hospital_queue/blob/2dfeb3e110e643a3a596209a364782c05838240c/patients/views.py): สมัครสมาชิกแล้วใช้รหัสที่ตั้งเข้าสู่ระบบ, token สำหรับ `/me/` และ `/queue/`, Google ID token หรือ OAuth access token ที่ตรวจยืนยันกับ Google, PIN และ OTP กู้รหัสแบบใช้ครั้งเดียว ข้อมูลบัญชี คิว และ PIN เก็บในหน่วยความจำ จึงหายเมื่อปิด mock backend สำหรับบัญชีที่ไม่พบ คำขอ OTP จะตอบข้อความทั่วไปเหมือน backend จริง ส่วนกรณี SMTP ส่งไม่สำเร็จ mock ตอบ `503` เพื่อให้เห็นปัญหาระหว่างทดสอบบนเครื่อง
 Google Sign-In บน localhost ต้องมี `GOOGLE_CLIENT_ID` ที่ตรงกับ token และเชื่อมต่อ Google เพื่อตรวจ token; mock ไม่ยอมรับข้อความ token ปลอม
 
 ```powershell

@@ -15,6 +15,7 @@ import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -150,24 +151,36 @@ def rate_limited(operation, identifier, limit, window_seconds):
 
 def send_email(recipient, subject, text):
     host = os.environ.get("MOCK_SMTP_HOST") or os.environ.get("EMAIL_HOST", "")
-    user = os.environ.get("MOCK_SMTP_USER") or os.environ.get("EMAIL_HOST_USER", "")
+    user_value = os.environ.get("MOCK_SMTP_USER") or os.environ.get("EMAIL_HOST_USER", "")
+    _, parsed_user = parseaddr(user_value)
+    user = parsed_user or user_value.strip()
     password = os.environ.get("MOCK_SMTP_PASSWORD") or os.environ.get("EMAIL_HOST_PASSWORD", "")
-    sender = os.environ.get("MOCK_SMTP_FROM") or os.environ.get("DEFAULT_FROM_EMAIL") or user
+    sender_value = os.environ.get("MOCK_SMTP_FROM") or os.environ.get("DEFAULT_FROM_EMAIL") or user
     port = int(os.environ.get("MOCK_SMTP_PORT") or os.environ.get("EMAIL_PORT", "587"))
-    if not all((host, user, password, sender)):
+    if not all((host, user, password, sender_value)):
         raise ValueError("ยังไม่ได้ตั้งค่า SMTP ใน .env")
+    if not user.isascii() or not password.isascii():
+        raise ValueError("SMTP username และ app password ต้องเป็น ASCII; ใช้อีเมลบัญชี SMTP และ app password")
+
+    sender_name, sender_address = parseaddr(sender_value)
+    if "@" not in sender_address:
+        sender_name, sender_address = sender_value.strip(), user
+    if not sender_address.isascii():
+        raise ValueError("MOCK_SMTP_FROM ต้องมีที่อยู่อีเมล SMTP ที่เป็น ASCII")
+
     message = EmailMessage()
-    message["From"], message["To"], message["Subject"] = sender, recipient, subject
+    message["From"] = formataddr((sender_name, sender_address), charset="utf-8")
+    message["To"], message["Subject"] = recipient, subject
     message.set_content(text)
     if port == 465:
         with smtplib.SMTP_SSL(host, port, timeout=10) as smtp:
             smtp.login(user, password)
-            smtp.send_message(message)
+            smtp.send_message(message, from_addr=sender_address)
     else:
         with smtplib.SMTP(host, port, timeout=10) as smtp:
             smtp.starttls()
             smtp.login(user, password)
-            smtp.send_message(message)
+            smtp.send_message(message, from_addr=sender_address)
 
 
 def send_password_reset_email(recipient, otp):
@@ -185,6 +198,21 @@ def verify_google_id_token(credential):
     if (claims.get("aud") != client_id or not claims.get("sub") or not claims.get("email")
             or str(claims.get("email_verified", "")).lower() != "true"):
         raise ValueError("Google credential ไม่ถูกต้อง")
+    return claims
+
+
+def verify_google_access_token(access_token):
+    """Validate a GIS OAuth access token and its issuing client with Google."""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    if not client_id:
+        raise RuntimeError("Google Sign-In ยังไม่ได้ตั้งค่า")
+    url = "https://oauth2.googleapis.com/tokeninfo?" + urllib.parse.urlencode({"access_token": access_token})
+    with urllib.request.urlopen(url, timeout=8) as response:
+        claims = json.load(response)
+    client_ids = {claims.get("aud"), claims.get("azp"), claims.get("issued_to")}
+    if (client_id not in client_ids or not claims.get("sub") or not claims.get("email")
+            or str(claims.get("email_verified", claims.get("verified_email", ""))).lower() != "true"):
+        raise ValueError("Google access token ไม่ถูกต้อง")
     return claims
 
 
@@ -326,15 +354,20 @@ class MockBackendHandler(BaseHTTPRequestHandler):
 
         if path == "/api/patient/auth/google/":
             credential = str(body.get("credential") or "").strip()
+            access_token = str(body.get("access_token") or "").strip()
             if rate_limited("google-login", "all", 10, 300):
                 return self._send_json(429, {"ok": False, "error": "พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่"})
-            if not credential:
+            if not credential and not access_token:
                 return self._send_json(400, {"ok": False, "error": "ไม่พบข้อมูลยืนยันจาก Google"})
             try:
-                if is_local_test_mode(self.client_address) and credential == "google_oauth_test_token":
+                if is_local_test_mode(self.client_address) and (
+                    credential == "google_oauth_test_token" or access_token == "google_oauth_test_access_token"
+                ):
                     claims = {"sub": "playwright-test-user", "email": MOCK_PATIENT_PROFILE["email"]}
-                else:
+                elif credential:
                     claims = verify_google_id_token(credential)
+                else:
+                    claims = verify_google_access_token(access_token)
             except RuntimeError:
                 return self._send_json(503, {"ok": False, "error": "ระบบ Google Sign-In ยังไม่ได้ตั้งค่า"})
             except Exception:
