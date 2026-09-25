@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { GoogleAuthResult } from "@/shared/api/types";
 import { getRuntimeConfig } from "@/shared/config/runtime-config";
@@ -31,7 +31,7 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
   const [loading, setLoading] = useState(false);
   const [isForgotOpen, setIsForgotOpen] = useState(false);
 
-  const googleBtnRef = useRef<HTMLDivElement>(null);
+  const [googleReady, setGoogleReady] = useState(false);
   const { googleClientId } = getRuntimeConfig();
 
   // ตรวจสอบว่ากำลังรันอยู่ในโหมดทดสอบอัตโนมัติ (Playwright / Test Mode) หรือไม่
@@ -75,14 +75,18 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
     }
   }, [onGoogleRegister, onSuccess]);
 
-  // เริ่มต้นการทำงานของปุ่ม Google Sign-In (Google Identity Services)
+  // เตรียม Google Identity Services ไว้เบื้องหลัง แล้วใช้ปุ่มของระบบเราเอง
+  // เพื่อไม่ให้ UI ที่ Google inject เข้ามาขยายผิดขนาดบนบาง browser/device.
   useEffect(() => {
-    if (!googleClientId || isAutomatedTest) return;
+    if (!googleClientId || isAutomatedTest) {
+      setGoogleReady(Boolean(googleClientId));
+      return;
+    }
 
     let attempts = 0;
     const initializeGoogle = () => {
       const googleIdentity = window.google?.accounts?.id;
-      if (!googleIdentity || !googleBtnRef.current) return false;
+      if (!googleIdentity) return false;
 
       try {
         googleIdentity.initialize({
@@ -93,50 +97,10 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
           auto_select: false,
           cancel_on_tap_outside: true,
         });
-
-        const buttonHost = googleBtnRef.current;
-        const measuredWidth = Math.floor(buttonHost.getBoundingClientRect().width || 320);
-        const buttonWidth = Math.max(200, Math.min(400, measuredWidth));
-
-        // Google may append a new rendered button if this effect is re-run.
-        // Keep exactly one instance and constrain the official button to the
-        // available auth-card width so it cannot expand into an oversized logo.
-        buttonHost.replaceChildren();
-        googleIdentity.renderButton(buttonHost, {
-          type: "standard",
-          theme: "outline",
-          size: "large",
-          shape: "rectangular",
-          text: "signin_with",
-          locale: "th",
-          logo_alignment: "left",
-          width: buttonWidth,
-        });
-
-        const clampGoogleButton = () => {
-          buttonHost.style.height = "44px";
-          buttonHost.style.minHeight = "44px";
-          buttonHost.style.maxHeight = "44px";
-          buttonHost.style.overflow = "hidden";
-
-          buttonHost.querySelectorAll<HTMLElement>("div, iframe").forEach((node) => {
-            node.style.setProperty("max-height", "44px", "important");
-            node.style.setProperty("height", "44px", "important");
-            node.style.setProperty("min-height", "44px", "important");
-          });
-          buttonHost.querySelectorAll<HTMLElement>("iframe").forEach((node) => {
-            node.style.setProperty("width", "100%", "important");
-            node.style.setProperty("max-width", "400px", "important");
-            node.style.setProperty("display", "block", "important");
-            node.style.setProperty("border", "0", "important");
-          });
-        };
-
-        clampGoogleButton();
-        window.requestAnimationFrame(clampGoogleButton);
-        window.setTimeout(clampGoogleButton, 50);
+        setGoogleReady(true);
       } catch (err) {
         console.warn("Failed to initialize Google Identity Services:", err);
+        setGoogleReady(false);
         setMessage("ไม่สามารถโหลด Google Sign-In ได้ กรุณาลองใหม่อีกครั้ง");
       }
 
@@ -145,19 +109,36 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
 
     if (initializeGoogle()) return;
 
-    // ตั้งเวลาลองใหม่หากสคริปต์ Google SDK ยังโหลดไม่เสร็จ
     const timer = window.setInterval(() => {
       attempts += 1;
       if (initializeGoogle()) {
         window.clearInterval(timer);
       } else if (attempts >= 20) {
         window.clearInterval(timer);
+        setGoogleReady(false);
         setMessage("ไม่สามารถโหลดบริการ Google Sign-In ได้ กรุณาลองใหม่อีกครั้ง");
       }
     }, 250);
 
     return () => window.clearInterval(timer);
   }, [googleClientId, handleGoogleCredential, isAutomatedTest]);
+
+  const startGoogleSignIn = useCallback(() => {
+    if (isAutomatedTest) {
+      void handleGoogleCredential("google_oauth_test_token");
+      return;
+    }
+
+    const googleIdentity = window.google?.accounts?.id;
+    if (!googleReady || !googleIdentity?.prompt) {
+      setMessage("Google Sign-In ยังโหลดไม่เสร็จ กรุณาลองใหม่อีกครั้ง");
+      return;
+    }
+
+    setMessage("");
+    setIsSuccessMsg(false);
+    googleIdentity.prompt();
+  }, [googleReady, handleGoogleCredential, isAutomatedTest]);
 
   /**
    * ส่งคำขอเข้าสู่ระบบด้วยชื่อผู้ใช้/อีเมล และรหัสผ่าน
@@ -281,18 +262,15 @@ export function LoginView({ onRegister, onSuccess, onGoogleRegister }: LoginView
         <div className="divider-line"><span>หรือเข้าสู่ระบบด้วย</span></div>
         <div className="google-auth-wrapper">
           {googleClientId ? (
-            isAutomatedTest ? (
-              <button
-                type="button"
-                className="google-sign-in-btn"
-                onClick={() => void handleGoogleCredential("google_oauth_test_token")}
-                disabled={loading}
-              >
-                <span>เข้าสู่ระบบด้วย Google</span>
-              </button>
-            ) : (
-              <div ref={googleBtnRef} id="googleSignInDiv" />
-            )
+            <button
+              type="button"
+              className="google-sign-in-btn"
+              onClick={startGoogleSignIn}
+              disabled={loading || !googleReady}
+            >
+              <span className="google-g" aria-hidden="true">G</span>
+              <span>{googleReady ? "เข้าสู่ระบบด้วย Google" : "กำลังโหลด Google..."}</span>
+            </button>
           ) : (
             <div className="alert" role="status">
               Google Sign-In ยังไม่ได้ตั้งค่า Client ID สำหรับระบบนี้
