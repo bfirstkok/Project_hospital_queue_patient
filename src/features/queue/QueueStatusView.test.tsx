@@ -74,6 +74,66 @@ describe("QueueStatusView", () => {
     await waitFor(() => expect(document.querySelector('.queue-progress [aria-current="step"]')?.textContent).toContain("เข้าตรวจ"));
   });
 
+  it("refreshes the billing and pharmacy footer from the backend journey", async () => {
+    const queueResponse = (paid: boolean, dispensed: boolean) => new Response(
+      JSON.stringify({
+        ok: true,
+        queue_number: "A012",
+        status: "OPD_DONE",
+        status_label: paid && dispensed ? "พร้อมกลับบ้าน · รอปิด Visit" : "การเงิน",
+        instruction: paid && dispensed ? "รอเจ้าหน้าที่ปิด Visit" : "รอชำระเงิน",
+        queue_position: null,
+        room: null,
+        updated_at: "2026-09-29T10:00:00Z",
+        patient_journey: {
+          current_label: paid && dispensed ? "พร้อมกลับบ้าน · รอปิด Visit" : "การเงิน",
+          current_detail: paid && dispensed ? "รับยาและชำระเงินครบแล้ว · รอปิด Visit" : "รอชำระเงิน",
+          steps: [
+            { key: "registration", label: "ลงทะเบียน", state: "done", detail: "ลงทะเบียนแล้ว" },
+            { key: "vitals", label: "วัดสัญญาณชีพ", state: "done", detail: "บันทึกสัญญาณชีพแล้ว" },
+            { key: "triage", label: "คัดกรอง", state: "done", detail: "คัดกรองแล้ว" },
+            { key: "queue", label: "รอ/เรียกคิว", state: "done", detail: "เรียกคิวแล้ว" },
+            { key: "doctor", label: "ห้องตรวจ", state: "done", detail: "แพทย์ตรวจแล้ว" },
+            {
+              key: "billing",
+              label: "การเงิน",
+              state: paid ? "done" : "current",
+              detail: paid ? "ชำระแล้ว" : "รอชำระเงิน",
+            },
+            {
+              key: "pharmacy",
+              label: "ห้องยา",
+              state: dispensed ? "done" : "current",
+              detail: dispensed ? "จ่ายยาแล้ว" : "รอห้องยา",
+            },
+            { key: "complete", label: "ออกจากโรงพยาบาล", state: "current", detail: "รอปิด Visit" },
+          ],
+        },
+      }),
+      { headers: { "content-type": "application/json" } },
+    );
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(queueResponse(false, false))
+      .mockResolvedValueOnce(queueResponse(true, true));
+
+    render(createElement(QueueStatusView, {
+      token: "mock_token",
+      onAccount: vi.fn(),
+      onUnauthorized: vi.fn(),
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByText("ชำระเงิน: รอชำระเงิน · จ่ายยา: รอห้องยา")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /อัปเดตสถานะคิว/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText("ชำระเงิน: ชำระแล้ว · จ่ายยา: จ่ายยาแล้ว")).toBeInTheDocument();
+    });
+    expect(screen.getByText("ตอนนี้: พร้อมกลับบ้าน · รอปิด Visit")).toBeInTheDocument();
+  });
+
   it("shows today's completed visit after it leaves the active queue API", async () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);
