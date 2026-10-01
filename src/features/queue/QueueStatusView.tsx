@@ -6,6 +6,8 @@ import { useQueuePolling } from "./useQueuePolling";
 import { useQueueNotification } from "./useQueueNotification";
 import { generateQueueCardImage } from "./queue-card-canvas";
 import { getQueueProgressModel } from "./queue-progress";
+import { QueueHistory } from "./QueueHistory";
+import { QueuePendingNotice } from "./QueuePendingNotice";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 
 // พร็อพส์สำหรับคอมโพเนนต์แสดงสถานะคิว (QueueStatusViewProps)
@@ -124,6 +126,7 @@ export function QueueStatusView({
   const [cancelMessage, setCancelMessage] = useState("");
   const [cancelSuccess, setCancelSuccess] = useState(false);
   const [recentVisit, setRecentVisit] = useState<Visit | null>(null);
+  const [queueRegisteredAt, setQueueRegisteredAt] = useState<string | null>(null);
 
   // อัปเดตสถานะให้คอมโพเนนต์แม่รับรู้ว่ามีคิวตรวจอยู่หรือไม่ เพื่อปรับ UI แถบนำทาง (Navbar)
   useEffect(() => {
@@ -133,7 +136,7 @@ export function QueueStatusView({
   }, [initialLoading, onQueueStateChange, queue?.queue_number]);
 
   useEffect(() => {
-    if (!token || initialLoading || queue?.queue_number || cancelSuccess) {
+    if (!token || initialLoading || cancelSuccess) {
       setRecentVisit(null);
       return;
     }
@@ -143,11 +146,19 @@ export function QueueStatusView({
       let shouldPoll = false;
       try {
         const account = await patientApi.account(token);
+        if (queue?.queue_number) {
+          const visit = account.visits?.find((item) => item.queue_number === queue.queue_number);
+          if (active) {
+            setQueueRegisteredAt(visit?.registered_at || null);
+            setRecentVisit(null);
+          }
+          return;
+        }
         const latest = account.visits?.[0];
         const isToday = latest?.registered_at && new Date(latest.registered_at).toDateString() === new Date().toDateString();
         const isAfterExam = ["OPD_DONE", "DISCHARGED"].includes(latest?.status || "");
-        if (active) setRecentVisit(isToday && isAfterExam ? latest : null);
-        shouldPoll = Boolean(isToday && latest?.status === "OPD_DONE" && !latest.patient_journey?.steps?.some((step) => step.key === "complete" && step.state === "done"));
+        if (active) setRecentVisit(isAfterExam && (isToday || latest?.status === "OPD_DONE") ? latest : null);
+        shouldPoll = latest?.status === "OPD_DONE";
       } catch {
         if (active) setRecentVisit(null);
       }
@@ -160,20 +171,9 @@ export function QueueStatusView({
     };
   }, [token, initialLoading, queue?.queue_number, cancelSuccess]);
 
-  // ฟอร์แมตเวลาอัปเดตล่าสุดให้เป็นรูปแบบเวลาไทย (ชั่วโมง:นาที:วินาที)
-  const updatedAt = (() => {
-    if (!queue?.updated_at) return "กำลังอัปเดต...";
-    try {
-      const d = new Date(queue.updated_at);
-      if (isNaN(d.getTime())) {
-        return queue.updated_at;
-      }
-      return new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(d);
-    } catch {
-      return queue.updated_at || "กำลังอัปเดต...";
-    }
-  })();
-
+  const updatedAt = queue?.updated_at && !Number.isNaN(Date.parse(queue.updated_at))
+    ? new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(queue.updated_at))
+    : null;
   const position = queue?.queue_position;
   const statusLabel = queue?.status_label || "";
   // ตรวจสอบเงื่อนไขว่าใกล้ถึงคิวหรือไม่ (เหลือ 1-3 คิว หรือ กำลังเรียก)
@@ -190,8 +190,7 @@ export function QueueStatusView({
   ]);
   const rawQueueStatus = queue?.status || "";
   const canCancelQueue = !rawQueueStatus || patientCancellableStatuses.has(rawQueueStatus);
-  const postExamInProgress = recentVisit?.status === "OPD_DONE"
-    && !recentVisit.patient_journey?.steps?.some((step) => step.key === "complete" && step.state === "done");
+  const postExamInProgress = recentVisit?.status === "OPD_DONE";
   const cancelUnavailableText = rawQueueStatus
     ? "คิวอยู่ในขั้นตอนที่ไม่สามารถยกเลิกด้วยตนเองได้ กรุณาติดต่อเจ้าหน้าที่"
     : "";
@@ -202,7 +201,7 @@ export function QueueStatusView({
   function handleSaveImage() {
     if (!queue) return;
     const progress = getQueueProgressModel(rawQueueStatus, queue.patient_journey);
-    generateQueueCardImage(queue, estimatedWaitText, updatedAt, progress);
+    generateQueueCardImage(queue, estimatedWaitText, updatedAt || "ยังไม่มีข้อมูลเวลา", progress);
   }
 
   /**
@@ -264,6 +263,9 @@ export function QueueStatusView({
         <div className="status-card">
           {/* ปุ่มสลับเปิด/ปิดเสียงและระบบสั่นเตือน */}
           <div className="card-top-actions">
+            <p className="card-updated-at">
+              อัปเดตล่าสุด {updatedAt ? <time dateTime={queue?.updated_at}>{updatedAt} น.</time> : "ยังไม่มีข้อมูลเวลา"}
+            </p>
             <button
               type="button"
               className={`notif-toggle-btn ${soundEnabled ? "active" : ""}`}
@@ -280,6 +282,8 @@ export function QueueStatusView({
           <h1>บัตรคิวรับบริการของคุณ</h1>
           <div className="queue-number">{queue?.queue_number || "-"}</div>
           <div className="status-pill"><span /><strong>{queue?.status_label || "กำลังโหลดสถานะ"}</strong></div>
+
+          <QueuePendingNotice queue={queue!} registeredAt={queue?.registered_at || queueRegisteredAt} />
 
           <QueueProgress status={rawQueueStatus} journey={queue?.patient_journey} />
           
@@ -316,7 +320,8 @@ export function QueueStatusView({
             </div>
           </div>
 
-          <p className="last-updated" role={error ? "alert" : undefined}>{error || `อัปเดตล่าสุด ${updatedAt} น.`}</p>
+          <QueueHistory journey={queue?.patient_journey} registeredAt={queue?.registered_at || queueRegisteredAt} statusLabel={queue?.status_label} />
+          {error && <p className="last-updated" role="alert">{error}</p>}
 
           {/* แผงปุ่มดำเนินการ: อัปเดต, บันทึกรูป, ดูประวัติ, ยกเลิกคิว */}
           <div className="queue-action-buttons">
@@ -481,8 +486,10 @@ export function QueueStatusView({
         <div className="status-card no-queue-card">
           {recentVisit && !cancelSuccess && (
             <div className="recent-visit-progress" role="status">
-              <strong>คิวล่าสุดวันนี้ {recentVisit.queue_number} · {recentVisit.status_label}</strong>
+              <strong>{postExamInProgress ? "คิวที่ยังรับบริการ" : "คิวล่าสุดวันนี้"} {recentVisit.queue_number} · {recentVisit.status_label}</strong>
               <QueueProgress status={recentVisit.status} journey={recentVisit.patient_journey} />
+              {postExamInProgress && <QueuePendingNotice queue={recentVisit} registeredAt={recentVisit.registered_at} />}
+              <QueueHistory journey={recentVisit.patient_journey} registeredAt={recentVisit.registered_at} statusLabel={recentVisit.status_label} />
             </div>
           )}
           <div className="no-queue-icon" aria-hidden="true">🎟️</div>

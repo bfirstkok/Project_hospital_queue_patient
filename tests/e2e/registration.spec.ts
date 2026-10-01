@@ -1,5 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { preparePatientE2E } from "./prepare-test";
+
+async function fillEmergencyContact(page: Page) {
+  await page.fill("input[name='emergency_name_1']", "สมศรี ใจดี");
+  await page.selectOption("select[name='emergency_relationship_1']", "SPOUSE");
+  await page.fill("input[name='emergency_phone_1']", "0898765432");
+}
 
 test.describe("Patient Registration Flow - E2E Tests", () => {
   test.beforeEach(async ({ page, request }) => {
@@ -44,6 +50,7 @@ test.describe("Patient Registration Flow - E2E Tests", () => {
     await page.fill("input[name='phone']", "0891112222");
     await page.fill("input[name='email']", "somying@example.com");
     await page.fill("textarea[name='note']", "มีอาการเป็นไข้");
+    await fillEmergencyContact(page);
 
     // Submit without selecting chronic disease, allergy, or medication chips
     await page.click("button[type='submit']:has-text('บันทึกข้อมูลผู้ป่วย')");
@@ -76,6 +83,7 @@ test.describe("Patient Registration Flow - E2E Tests", () => {
 
     // Symptoms
     await page.fill("textarea[name='note']", "มีไข้สูง และไอแห้งมา 2 วัน");
+    await fillEmergencyContact(page);
 
     // Submit form
     await page.click("button[type='submit']:has-text('บันทึกข้อมูลผู้ป่วย')");
@@ -118,6 +126,7 @@ test.describe("Patient Registration Flow - E2E Tests", () => {
     await page.click("button.choice-chip:has-text('ไม่มียาที่ใช้ประจำ')");
 
     await page.fill("textarea[name='note']", "ปวดศีรษะ");
+    await fillEmergencyContact(page);
 
     // Submit form
     await page.click("button[type='submit']:has-text('บันทึกข้อมูลผู้ป่วย')");

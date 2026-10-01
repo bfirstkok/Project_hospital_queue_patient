@@ -38,6 +38,90 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
+JOURNEY_STEPS = [
+    ("registration", "ลงทะเบียน", "ลงทะเบียนแล้ว"),
+    ("vitals", "วัดสัญญาณชีพ", "บันทึกสัญญาณชีพแล้ว"),
+    ("triage", "คัดกรอง", "คัดกรองแล้ว"),
+    ("queue", "รอ/เรียกคิว", "เรียกคิวแล้ว"),
+    ("doctor", "ห้องตรวจ", "แพทย์ตรวจแล้ว"),
+    ("pharmacy", "ห้องยา", "จ่ายยาแล้ว"),
+    ("billing", "การเงิน", "ชำระแล้ว"),
+    ("complete", "ออกจากโรงพยาบาล", "ผู้ป่วยออกจากโรงพยาบาลแล้ว"),
+]
+MOCK_QUEUE_STAGES = {
+    "waiting_vitals": ("WAITING_VITALS", "รอตรวจวัดสัญญาณชีพ", "กรุณาไปยังจุดวัดสัญญาณชีพ", ["done", "current", "pending", "pending", "pending", "pending", "pending", "pending"]),
+    "waiting_confirmation": ("WAITING_CONFIRMATION", "รอพยาบาลยืนยันผลคัดกรอง", "กรุณารอบริเวณจุดคัดกรอง", ["done", "done", "current", "pending", "pending", "pending", "pending", "pending"]),
+    "waiting_queue": ("WAITING_QUEUE", "รอเรียกคิว", "กรุณารอบริเวณหน้าห้องตรวจ", ["done", "done", "done", "current", "pending", "pending", "pending", "pending"]),
+    "called": ("CALLED", "กรุณาเข้าห้องตรวจ", "ถึงคิวของคุณแล้ว กรุณาเข้าห้องตรวจ", ["done", "done", "done", "done", "current", "pending", "pending", "pending"]),
+    "billing": ("OPD_DONE", "การเงิน", "รอชำระเงิน", ["done", "done", "done", "done", "done", "pending", "current", "pending"]),
+    "pharmacy": ("OPD_DONE", "ห้องยา", "รอรับยา", ["done", "done", "done", "done", "done", "current", "done", "pending"]),
+    "ready_to_leave": ("OPD_DONE", "พร้อมกลับบ้าน · รอปิด Visit", "รับยาและชำระเงินครบแล้ว · รอเจ้าหน้าที่ปิด Visit", ["done", "done", "done", "done", "done", "done", "done", "current"]),
+    "discharged": ("DISCHARGED", "เสร็จสิ้นการรับบริการ", "สามารถกลับบ้านได้ตามคำแนะนำของเจ้าหน้าที่", ["done"] * 8),
+}
+PATIENT_CANCELLABLE_QUEUE_STATUSES = {"WAITING_VITALS", "WAITING_CONFIRMATION", "WAITING_QUEUE", "WAITING", "CALLED"}
+
+
+def apply_mock_queue_stage(queue, stage):
+    status, label, instruction, states = MOCK_QUEUE_STAGES[stage]
+    previous = {step["key"]: step for step in queue.get("patient_journey", {}).get("steps", [])}
+    stamp = now_iso()
+    steps = []
+    for (key, step_label, done_detail), state in zip(JOURNEY_STEPS, states):
+        old = previous.get(key, {})
+        timestamp = old.get("timestamp")
+        recorded = state == "done" or (state == "current" and key in {"pharmacy", "billing"})
+        if recorded and (not timestamp or old.get("state") != state):
+            timestamp = queue["registered_at"] if key == "registration" else stamp
+        if not recorded:
+            timestamp = None
+        detail = done_detail if state == "done" else (
+            instruction if state == "current" else "รอขั้นตอนก่อนหน้า"
+        )
+        steps.append({"key": key, "label": step_label, "state": state, "detail": detail, "timestamp": timestamp})
+    queue.update({
+        "status": status, "status_label": label, "instruction": instruction,
+        "queue_position": 4 if status == "WAITING_QUEUE" else None,
+        "people_ahead": 3 if status == "WAITING_QUEUE" else None,
+        "room": "ห้องตรวจ 2" if status in {"WAITING_QUEUE", "CALLED", "OPD_DONE", "DISCHARGED"} else None,
+        "updated_at": stamp,
+        "patient_journey": {"steps": steps, "current_label": label, "current_detail": instruction},
+    })
+
+
+def new_mock_queue(number, registered_at=None):
+    queue = {"ok": True, "queue_number": number, "registered_at": registered_at or now_iso()}
+    apply_mock_queue_stage(queue, "waiting_vitals")
+    return queue
+
+
+def active_mock_queue(account):
+    queue = account.get("queue")
+    return queue if queue and queue["status"] not in {"CANCELLED", "DISCHARGED"} else None
+
+
+def queue_response(queue):
+    return {**copy.deepcopy(queue), "updated_at": now_iso()}
+
+
+def sync_mock_visit(account, note=None):
+    queue = account["queue"]
+    existing = next((visit for visit in account["visits"] if visit["queue_number"] == queue["queue_number"]), None)
+    steps = {step["key"]: step for step in queue["patient_journey"]["steps"]}
+    visit = {
+        "queue_number": queue["queue_number"], "registered_at": queue["registered_at"],
+        "status": queue["status"], "status_label": queue["status_label"], "status_detail": queue["instruction"],
+        "patient_journey": copy.deepcopy(queue["patient_journey"]), "room": queue["room"],
+        "note": note if note is not None else (existing or {}).get("note", ""),
+        "vitals": {"rr": 18, "pr": 72, "sys_bp": 120, "dia_bp": 80, "bt": 36.5, "o2sat": 99, "pain_score": 0} if steps["vitals"]["state"] == "done" else None,
+        "diagnosis": "สุขภาพแข็งแรงดี (ข้อมูลจำลอง)" if steps["doctor"]["state"] == "done" else "",
+        "treatment": "คำแนะนำการดูแลสุขภาพ (ข้อมูลจำลอง)" if steps["doctor"]["state"] == "done" else "",
+    }
+    if existing:
+        existing.update(visit)
+    else:
+        account["visits"].insert(0, visit)
+
+
 MOCK_PATIENT_PROFILE = {
     "username": "somchai99", "first_name": "สมชาย", "last_name": "ใจดี",
     "national_id": "1234567890123", "hn": "HN-67001",
@@ -49,20 +133,23 @@ MOCK_PATIENT_PROFILE = {
     "medications": "ไม่มี", "emergency_name": "สมศรี ใจดี", "emergency_phone": "0898765432",
     "emergency_contacts": [{"id": "em-mock-1", "name": "สมศรี ใจดี", "relationship": "SPOUSE", "phone": "0898765432"}],
 }
-MOCK_ACTIVE_QUEUE = {
-    "ok": True, "queue_number": "A012", "status": "WAITING_VITALS", "status_label": "รอตรวจ",
-    "instruction": "กรุณารอเรียกคิวที่ห้องตรวจ 2", "queue_position": 3,
-    "room": "ห้องตรวจ 2", "updated_at": now_iso(),
-}
+MOCK_ACTIVE_QUEUE = new_mock_queue("A012")
 MOCK_VISITS = [{
-    "queue_number": "A005", "status_label": "ตรวจเสร็จสิ้น", "registered_at": "2026-08-01 09:30",
+    "queue_number": "A005", "status": "DISCHARGED", "status_label": "เสร็จสิ้นการรับบริการ", "registered_at": "2026-08-01T09:30:00+07:00",
     "note": "ตรวจสุขภาพทั่วไปและตรวจเลือด", "diagnosis": "สุขภาพแข็งแรงดี ผลเลือดปกติ",
     "treatment": "แนะนำการออกกำลังกายและรับประทานอาหารให้ครบ 5 หมู่",
     "vitals": {"sys_bp": 120, "dia_bp": 80, "pr": 72, "bt": 36.5, "o2sat": 99},
+    "room": "ห้องตรวจ 2", "status_detail": "สามารถกลับบ้านได้ตามคำแนะนำของเจ้าหน้าที่",
+    "patient_journey": {
+        "current_label": "เสร็จสิ้นการรับบริการ", "current_detail": "ผู้ป่วยออกจากโรงพยาบาลแล้ว",
+        "steps": [{"key": key, "label": label, "state": "done", "detail": detail,
+                   "timestamp": (datetime.fromisoformat("2026-08-01T09:30:00+07:00") + timedelta(minutes=index * 5)).isoformat()}
+                  for index, (key, label, detail) in enumerate(JOURNEY_STEPS)],
+    },
 }]
 MOCK_APPOINTMENTS = [{
-    "status": "confirmed", "status_label": "นัดตรวจติดตาม", "date": "2026-09-15",
-    "time": "09:00 - 10:00", "note": "ติดตามผลสุขภาพประจำปี",
+    "status": "SCHEDULED", "status_label": "Scheduled", "date": (datetime.now(timezone.utc) + timedelta(days=14)).date().isoformat(),
+    "time": "09:00", "note": "ติดตามผลสุขภาพประจำปี",
 }]
 
 # One account is seeded for a quick thesis demo. Registration adds more accounts.
@@ -71,9 +158,13 @@ ACCOUNTS = {
         "profile": MOCK_PATIENT_PROFILE, "password": "Password@2026", "google_id": None,
         "pin": None, "pin_attempts": 0, "pin_locked_until": 0,
         "queue": MOCK_ACTIVE_QUEUE, "visits": MOCK_VISITS, "appointments": MOCK_APPOINTMENTS,
+        "tracking_token": "11111111-1111-4111-8111-111111111111",
     }
 }
+sync_mock_visit(ACCOUNTS[MOCK_PATIENT_PROFILE["national_id"]])
 SEED_ACCOUNTS = copy.deepcopy(ACCOUNTS)
+TRACKED_QUEUES = {account["tracking_token"]: account["queue"] for account in ACCOUNTS.values()}
+NEXT_QUEUE_NUMBER = 13
 TOKENS = {}                  # bearer token -> {national_id, expires_at}
 PASSWORD_RESET = {}          # national_id -> one active OTP challenge
 PIN_RESET = {}               # national_id -> one active PIN OTP challenge
@@ -82,8 +173,12 @@ RATE_EVENTS = {}             # (operation, identifier) -> request timestamps
 
 
 def reset_mock_state():
+    global NEXT_QUEUE_NUMBER
     ACCOUNTS.clear()
     ACCOUNTS.update(copy.deepcopy(SEED_ACCOUNTS))
+    TRACKED_QUEUES.clear()
+    TRACKED_QUEUES.update({account["tracking_token"]: account["queue"] for account in ACCOUNTS.values()})
+    NEXT_QUEUE_NUMBER = 13
     for state in (TOKENS, PASSWORD_RESET, PIN_RESET, GOOGLE_LINK_TOKENS, RATE_EVENTS):
         state.clear()
 
@@ -282,12 +377,14 @@ class MockBackendHandler(BaseHTTPRequestHandler):
         return account
 
     def _account_data(self, account):
+        queue = active_mock_queue(account)
         return {
-            "ok": True, "profile": account["profile"], "active_queue": account["queue"],
+            "ok": True, "profile": account["profile"], "active_queue": queue_response(queue) if queue else None,
             "visits": account["visits"], "appointments": account["appointments"],
         }
 
     def do_POST(self):
+        global NEXT_QUEUE_NUMBER
         path = self.path.rstrip("/") + "/"
         body = self._read_json()
 
@@ -296,6 +393,20 @@ class MockBackendHandler(BaseHTTPRequestHandler):
                 return self._send_json(404, {"ok": False, "error": "Not Found"})
             reset_mock_state()
             return self._send_json(200, {"ok": True})
+
+        if path == "/__test__/queue/":
+            if not is_local_test_mode(self.client_address):
+                return self._send_json(404, {"ok": False, "error": "Not Found"})
+            account = self._require_account()
+            if not account:
+                return
+            if body.get("stage") not in MOCK_QUEUE_STAGES:
+                return self._send_json(400, {"ok": False, "error": "ไม่รู้จักขั้นตอนคิวจำลอง"})
+            if not active_mock_queue(account):
+                return self._send_json(409, {"ok": False, "error": "ไม่พบคิวที่กำลังใช้งาน"})
+            apply_mock_queue_stage(account["queue"], body["stage"])
+            sync_mock_visit(account)
+            return self._send_json(200, queue_response(account["queue"]))
 
         if path == "/api/patient/register/":
             if body.get("website"):
@@ -338,7 +449,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
                     return self._send_json(409, {"ok": False, "error": "ชื่อผู้ใช้นี้ถูกใช้งานแล้ว", "errors": {"username": ["ชื่อผู้ใช้นี้ถูกใช้งานแล้ว"]}})
                 if email and email == str(profile.get("email") or "").lower():
                     return self._send_json(409, {"ok": False, "error": "อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว", "errors": {"email": ["อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว"]}})
-            if existing and existing["queue"]:
+            if existing and active_mock_queue(existing):
                 return self._send_json(409, {"ok": False, "error": "คุณมีคิวที่กำลังรับบริการอยู่แล้ว กรุณาตรวจสอบคิวเดิมก่อนจองใหม่", "active_queue": existing["queue"]})
             profile = dict(existing["profile"]) if existing else {}
             profile.update({key: value for key, value in body.items() if key in {
@@ -349,17 +460,16 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             }})
             profile["email"] = email
             profile["hn"] = profile.get("hn") or f"HN-{len(ACCOUNTS) + 67001}"
-            queue = {
-                "ok": True, "queue_number": f"A{len(ACCOUNTS) + 12:03d}", "status": "WAITING_VITALS",
-                "status_label": "รอตรวจวัดสัญญาณชีพ", "instruction": "กรุณาไปยังจุดวัดสัญญาณชีพ",
-                "queue_position": 4, "people_ahead": 3, "room": None, "updated_at": now_iso(),
-            }
+            queue = new_mock_queue(f"A{NEXT_QUEUE_NUMBER:03d}")
+            NEXT_QUEUE_NUMBER += 1
             tracking_token = str(uuid.uuid4())
             account = existing or {"pin": None, "pin_attempts": 0, "pin_locked_until": 0, "visits": [], "appointments": []}
             account.update({"profile": profile, "password": password or account.get("password"),
                             "google_id": google_claims["sub"] if google_claims else account.get("google_id"),
                             "queue": queue, "tracking_token": tracking_token})
             ACCOUNTS[national_id] = account
+            TRACKED_QUEUES[tracking_token] = queue
+            sync_mock_visit(account, body.get("note") or "")
             if body.get("temp_token"):
                 GOOGLE_LINK_TOKENS.pop(body["temp_token"], None)
             return self._send_json(201, {
@@ -602,7 +712,18 @@ class MockBackendHandler(BaseHTTPRequestHandler):
                 return
             if not account["queue"]:
                 return self._send_json(409, {"ok": False, "error": "ไม่พบคิวที่กำลังใช้งาน"})
-            account["queue"] = None
+            queue = account["queue"]
+            if queue["status"] == "CANCELLED":
+                return self._send_json(200, {"ok": True, "message": "คิวนี้ถูกยกเลิกแล้ว"})
+            if queue["status"] not in PATIENT_CANCELLABLE_QUEUE_STATUSES:
+                return self._send_json(409, {"ok": False, "error": "สถานะคิวปัจจุบันไม่สามารถยกเลิกด้วยตนเองได้ กรุณาติดต่อเจ้าหน้าที่"})
+            queue.update({"status": "CANCELLED", "status_label": "ยกเลิกคิวแล้ว", "instruction": "หากต้องการรับบริการ กรุณาติดต่อเจ้าหน้าที่", "queue_position": None, "people_ahead": None})
+            journey = queue["patient_journey"]
+            journey.update({"current_label": "ยกเลิกการรับบริการ", "current_detail": "คิวนี้ถูกยกเลิก"})
+            for step in journey["steps"]:
+                if step["state"] != "done":
+                    step.update({"state": "cancelled", "detail": "ยกเลิกคิว/การรับบริการ", "timestamp": None})
+            sync_mock_visit(account)
             return self._send_json(200, {"ok": True, "message": "ยกเลิกคิวเรียบร้อยแล้ว"})
 
         self._send_json(404, {"ok": False, "error": "Not Found"})
@@ -611,22 +732,20 @@ class MockBackendHandler(BaseHTTPRequestHandler):
         path = self.path.rstrip("/") + "/"
         if path.startswith("/api/patient/queue/") and path != "/api/patient/queue/":
             tracking_token = path[len("/api/patient/queue/"):].rstrip("/")
-            account = next((item for item in ACCOUNTS.values() if item.get("tracking_token") == tracking_token), None)
-            if not account:
+            queue = TRACKED_QUEUES.get(tracking_token)
+            if not queue:
                 return self._send_json(404, {"ok": False, "error": "ไม่พบข้อมูลคิว"})
-            if not account["queue"]:
-                return self._send_json(200, {"ok": True, "queue_number": None, "status_label": "ไม่มีคิว"})
-            return self._send_json(200, account["queue"])
+            return self._send_json(200, queue_response(queue))
         if path in ("/api/patient/me/", "/api/patient/queue/"):
             account = self._require_account()
             if not account:
                 return
             if path.endswith("/me/"):
                 return self._send_json(200, self._account_data(account))
-            if not account["queue"]:
+            queue = active_mock_queue(account)
+            if not queue:
                 return self._send_json(200, {"ok": True, "queue_number": None, "message": "ไม่มีคิวที่กำลังรอรับบริการในวันนี้"})
-            account["queue"]["updated_at"] = now_iso()
-            return self._send_json(200, account["queue"])
+            return self._send_json(200, queue_response(queue))
         self._send_json(404, {"ok": False, "error": "Not Found"})
 
     def do_PATCH(self):

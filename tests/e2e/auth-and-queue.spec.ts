@@ -12,7 +12,7 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
     await expect(page.locator("h1")).toContainText("เข้าสู่ระบบผู้ป่วย");
   });
 
-  test("2. Forgot Password modal requests OTP and allows setting new password", async ({ page }) => {
+  test("2. Forgot Password modal requests OTP and allows setting new password", async ({ page, request }) => {
     await page.goto("/patient");
 
     // Click "ลืมรหัสผ่าน?"
@@ -20,7 +20,9 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
     await expect(page.locator("#forgotPasswordTitle")).toContainText("ลืมรหัสผ่าน / กู้คืนบัญชี");
 
     // Fill identifier
-    await page.fill(".forgot-password-modal input[name='identifier']", "somchai99");
+    const login = await request.post("http://127.0.0.1:8001/api/patient/login/", { data: { identifier: "somchai99", password: "Password@2026" } });
+    const { profile } = await login.json();
+    await page.fill(".forgot-password-modal input[name='identifier']", profile.email);
     await page.click(".forgot-password-modal button[type='submit']");
 
     // Wait for step 2: OTP input
@@ -127,7 +129,7 @@ test.describe("Hospital Queue Portal - E2E Tests", () => {
 
     // Check tabs
     await page.click("button[role='tab']:has-text('รายการนัดหมาย')");
-    await expect(page.locator("text=นัดตรวจติดตาม")).toBeVisible();
+    await expect(page.getByText("ติดตามผลสุขภาพประจำปี", { exact: true })).toBeVisible();
 
     await page.click("button[role='tab']:has-text('ประวัติการรักษา')");
     await expect(page.locator("text=ตรวจสุขภาพทั่วไป")).toBeVisible();

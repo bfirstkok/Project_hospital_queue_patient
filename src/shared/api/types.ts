@@ -47,8 +47,10 @@ export interface QueueData extends ApiEnvelope {
   status_label: string;              // ข้อความแสดงสถานะภาษาไทย (เช่น รอเรียกพบแพทย์)
   instruction: string;               // คำแนะนำสำหรับผู้ป่วย (เช่น กรุณารอที่หน้าห้องตรวจ 1)
   queue_position: number | null;     // ลำดับคิวที่เหลือก่อนถึงคิวของผู้ป่วย
+  people_ahead?: number | null;
   room: string | null;               // ห้องตรวจหรือจุดบริการที่ต้องไปติดต่อ
   updated_at: string;                // เวลาอัปเดตสถานะล่าสุด (ISO Date String)
+  registered_at?: string | null;
   patient_journey?: PatientJourney | null; // ขั้นตอนบริการจาก backend (ถ้ามี)
 }
 
@@ -58,6 +60,7 @@ export interface PatientJourney {
     label: string;
     state: "done" | "current" | "pending" | "skipped" | "cancelled";
     detail: string;
+    timestamp?: string | null;
   }>;
   current_label?: string;
   current_detail?: string;
@@ -89,6 +92,8 @@ export interface PatientProfile {
 
 // ข้อมูลสัญญาณชีพของผู้ป่วยจากการตรวจแต่ละครั้ง
 export interface VisitVitals {
+  rr?: number | null;
+  pain_score?: number | null;
   sys_bp?: number | null;            // ความดันโลหิตตัวบน (Systolic Blood Pressure)
   dia_bp?: number | null;            // ความดันโลหิตตัวล่าง (Diastolic Blood Pressure)
   pr?: number | null;                // อัตราการเต้นของหัวใจ/ชีพจร (Pulse Rate)
@@ -101,6 +106,8 @@ export interface Visit {
   queue_number: string;              // หมายเลขคิวที่เคยได้รับ
   status?: string | null;             // รหัสสถานะคิวล่าสุดของการรับบริการครั้งนี้
   status_label: string;              // สถานะการบริการ (เช่น ตรวจรักษาเสร็จสิ้น)
+  status_detail?: string | null;
+  room?: string | null;
   registered_at: string;             // วันและเวลาที่ลงทะเบียนรับบริการ
   note?: string | null;              // หมายเหตุหรืออาการสำคัญที่มารับบริการ
   diagnosis?: string | null;         // การวินิจฉัยโรคจากแพทย์

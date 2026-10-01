@@ -2,11 +2,35 @@ import { createElement } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueueStatusView } from "./QueueStatusView";
+import { patientApi } from "@/shared/api/patient-api";
+import type { AccountData } from "@/shared/api/types";
 
 describe("QueueStatusView", () => {
   beforeEach(() => {
     window.PATIENT_APP_ENV = { API_BASE_URL: "https://hospital.example.com", STATUS_REFRESH_MS: 10000 };
     vi.stubGlobal("fetch", vi.fn());
+    vi.spyOn(patientApi, "account").mockResolvedValue({ ok: true, visits: [] } as unknown as AccountData);
+  });
+
+  it("shows station event times instead of the polling time after refreshing", async () => {
+    let pharmacyDone = false;
+    vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({
+      ok: true, queue_number: "A012", status: "OPD_DONE", status_label: "รอปิด Visit",
+      updated_at: pharmacyDone ? "2026-10-01T12:00:00Z" : "2026-10-01T11:30:00Z",
+      patient_journey: { steps: [
+        { key: "registration", label: "ลงทะเบียน", state: "done", detail: "ลงทะเบียนแล้ว", timestamp: "2026-10-01T11:00:00Z" },
+        { key: "billing", label: "การเงิน", state: "done", detail: "ชำระแล้ว", timestamp: "2026-10-01T11:10:00Z" },
+        { key: "pharmacy", label: "ห้องยา", state: pharmacyDone ? "done" : "pending", detail: "จ่ายยาแล้ว", timestamp: pharmacyDone ? "2026-10-01T11:20:40Z" : null },
+      ] },
+    }), { headers: { "content-type": "application/json" } }));
+    render(createElement(QueueStatusView, { token: "mock_token", onAccount: vi.fn(), onUnauthorized: vi.fn() }));
+    await waitFor(() => expect(screen.getByText("สถานะคิวจุดล่าสุด:").parentElement).toHaveTextContent("การเงิน · ชำระแล้ว: 18:10:00 น."));
+    pharmacyDone = true;
+    fireEvent.click(screen.getByRole("button", { name: /อัปเดตสถานะคิว/ }));
+    await waitFor(() => expect(screen.getByText("สถานะคิวจุดล่าสุด:").parentElement).toHaveTextContent("ห้องยา · จ่ายยาแล้ว: 18:20:40 น."));
+    expect(screen.getByText("เริ่มรับคิว:").parentElement).toHaveTextContent("18:00:00 น.");
+    expect(document.querySelector(".card-top-actions .card-updated-at")).toHaveTextContent("อัปเดตล่าสุด 19:00:00 น.");
+    expect(screen.getByText("ประวัติคิว")).toBeInTheDocument();
   });
 
   it("shows LoadingScreen during initial queue status lookup", () => {
@@ -135,6 +159,7 @@ describe("QueueStatusView", () => {
   });
 
   it("shows today's completed visit after it leaves the active queue API", async () => {
+    vi.mocked(patientApi.account).mockRestore();
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);
       const payload = url.includes("/api/patient/me/")
@@ -287,7 +312,7 @@ describe("QueueStatusView", () => {
     await waitFor(() => expect(screen.getByText("M009")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "ยกเลิกคิวรับบริการ" })).toBeNull();
     expect(screen.getByText("ไม่สามารถยกเลิกคิวด้วยตนเองในขั้นตอนนี้")).toBeInTheDocument();
-    expect(screen.getByText(/กรุณาติดต่อเจ้าหน้าที่/)).toBeInTheDocument();
+    expect(screen.getByText("คิวอยู่ในขั้นตอนที่ไม่สามารถยกเลิกด้วยตนเองได้ กรุณาติดต่อเจ้าหน้าที่")).toBeInTheDocument();
   });
 
   it("keeps the queue visible and shows the API error when cancellation fails", async () => {

@@ -16,18 +16,9 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import mock_backend as backend
 
-SEED_ACCOUNTS = copy.deepcopy(backend.ACCOUNTS)
-
-
 class MockPatientApiTest(unittest.TestCase):
     def setUp(self):
-        backend.ACCOUNTS.clear()
-        backend.ACCOUNTS.update(copy.deepcopy(SEED_ACCOUNTS))
-        backend.TOKENS.clear()
-        backend.PASSWORD_RESET.clear()
-        backend.PIN_RESET.clear()
-        backend.GOOGLE_LINK_TOKENS.clear()
-        backend.RATE_EVENTS.clear()
+        backend.reset_mock_state()
         self.server = HTTPServer(("127.0.0.1", 0), backend.MockBackendHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -54,6 +45,69 @@ class MockPatientApiTest(unittest.TestCase):
 
     def post(self, path, payload, token=None):
         return self.request("POST", path, payload, token)
+
+    def test_queue_account_and_public_tracking_share_registration_history(self):
+        payload = {"national_id": "2222222222222", "first_name": "ใหม่", "last_name": "ทดสอบ", "consent": True}
+        status, registered = self.post("/api/patient/register/", payload)
+        self.assertEqual(status, 201)
+        token = registered["access_token"]
+        queue = self.request("GET", "/api/patient/queue/", token=token)[1]
+        me = self.request("GET", "/api/patient/me/", token=token)[1]
+        public = self.request("GET", registered["status_url"])[1]
+        self.assertIsNone(queue["queue_position"])
+        self.assertEqual(queue["status_label"], "รอตรวจวัดสัญญาณชีพ")
+        for data in (registered, queue, me["active_queue"], public, me["visits"][0]):
+            self.assertEqual(data["patient_journey"], queue["patient_journey"])
+        steps = {step["key"]: step for step in queue["patient_journey"]["steps"]}
+        self.assertEqual(steps["registration"]["timestamp"], me["visits"][0]["registered_at"])
+        self.assertIsNone(steps["vitals"]["timestamp"])
+
+    def test_refresh_changes_fetch_time_without_changing_event_times(self):
+        token = self.post("/api/patient/login/", {"identifier": "somchai99", "password": "Password@2026"})[1]["access_token"]
+        with patch.object(backend, "now_iso", return_value="2026-10-01T11:00:00+00:00"):
+            first = self.request("GET", "/api/patient/queue/", token=token)[1]
+        with patch.object(backend, "now_iso", return_value="2026-10-01T12:00:00+00:00"):
+            second = self.request("GET", "/api/patient/queue/", token=token)[1]
+        self.assertNotEqual(first["updated_at"], second["updated_at"])
+        self.assertEqual(first["patient_journey"], second["patient_journey"])
+
+    def test_demo_stages_update_queue_and_visit_and_preserve_finished_visit(self):
+        token = self.post("/api/patient/login/", {"identifier": "somchai99", "password": "Password@2026"})[1]["access_token"]
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}):
+            for stage, label in [("billing", "การเงิน"), ("pharmacy", "ห้องยา"), ("ready_to_leave", "พร้อมกลับบ้าน · รอปิด Visit")]:
+                self.assertEqual(self.post("/__test__/queue/", {"stage": stage}, token)[0], 200)
+                queue = self.request("GET", "/api/patient/queue/", token=token)[1]
+                me = self.request("GET", "/api/patient/me/", token=token)[1]
+                self.assertEqual(queue["status"], "OPD_DONE")
+                self.assertEqual(queue["status_label"], label)
+                self.assertEqual(me["visits"][0]["patient_journey"], queue["patient_journey"])
+            self.assertEqual(self.post("/api/patient/queue/cancel/", {}, token)[0], 409)
+            self.assertEqual(self.post("/__test__/queue/", {"stage": "discharged"}, token)[0], 200)
+        self.assertIsNone(self.request("GET", "/api/patient/queue/", token=token)[1]["queue_number"])
+        me = self.request("GET", "/api/patient/me/", token=token)[1]
+        self.assertIsNone(me["active_queue"])
+        self.assertEqual(me["visits"][0]["status"], "DISCHARGED")
+        self.assertEqual(me["visits"][0]["patient_journey"]["steps"][-1]["state"], "done")
+
+    def test_cancellation_keeps_history_and_original_public_tracking_after_rebooking(self):
+        payload = {"national_id": "2222222222222", "first_name": "ใหม่", "last_name": "ทดสอบ", "consent": True}
+        original = self.post("/api/patient/register/", payload)[1]
+        token = original["access_token"]
+        self.assertEqual(self.post("/api/patient/queue/cancel/", {}, token)[0], 200)
+        self.assertEqual(self.post("/api/patient/queue/cancel/", {}, token)[0], 200)
+        new = self.post("/api/patient/register/", payload)[1]
+        self.assertNotEqual(new["queue_number"], original["queue_number"])
+        me = self.request("GET", "/api/patient/me/", token=token)[1]
+        self.assertEqual(len(me["visits"]), 2)
+        old = self.request("GET", original["status_url"])[1]
+        self.assertEqual(old["status"], "CANCELLED")
+        self.assertEqual(old["queue_number"], original["queue_number"])
+
+    def test_demo_queue_controls_require_local_test_mode_and_authentication(self):
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "0"}):
+            self.assertEqual(self.post("/__test__/queue/", {"stage": "billing"})[0], 404)
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}):
+            self.assertEqual(self.post("/__test__/queue/", {"stage": "billing"})[0], 401)
 
     def test_register_login_profile_and_pin_match_backend_contract(self):
         payload = {

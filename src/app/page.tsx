@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { getRuntimeConfig } from "@/shared/config/runtime-config";
 import { AccountView } from "@/features/account/AccountView";
 import { LoginView } from "@/features/auth/LoginView";
 import { PinAuthView } from "@/features/auth/PinAuthView";
@@ -153,6 +154,27 @@ export default function Page() {
     setQueueActive(active);
     if (!active) setInitialQueue(null);
   }, []);
+
+  useEffect(() => {
+    if (!token || !["account", "settings", "registration"].includes(view)) return;
+    let active = true;
+    let timer: number | undefined;
+    const checkQueue = async () => {
+      try {
+        const live = await patientApi.queue(token);
+        if (!active) return;
+        const hasQueue = Boolean(live?.queue_number);
+        setQueueActive(hasQueue);
+        setInitialQueue(hasQueue ? live : null);
+        if (hasQueue && view === "registration") setView("status");
+      } catch {
+        // Keep the last confirmed queue state when the network is unavailable.
+      }
+      if (active) timer = window.setTimeout(() => void checkQueue(), getRuntimeConfig().statusRefreshMs);
+    };
+    void checkQueue();
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [token, view]);
 
   /**
    * ล้างข้อมูลเซสชันและนำผู้ป่วยกลับสู่หน้าเข้าสู่ระบบ

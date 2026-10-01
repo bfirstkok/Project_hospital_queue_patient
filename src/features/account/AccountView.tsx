@@ -7,6 +7,8 @@ import {
 } from "@/features/patient-profile/PatientProfileForm";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 import { formatMaskedNationalId } from "@/shared/data/thai-id";
+import { getPendingQueueMessage, getQueueAttention, hasUnpaidBill, isPendingVisit } from "@/features/queue/pending-queue";
+import { QueueHistory } from "@/features/queue/QueueHistory";
 
 // พร็อพส์สำหรับคอมโพเนนต์หน้าบัญชีและประวัติผู้ป่วย
 interface AccountViewProps {
@@ -33,7 +35,7 @@ const dash = (value: unknown) => (value === null || value === undefined || value
  */
 const thaiDate = (value?: string | null, includeTime = true) =>
   value
-    ? new Intl.DateTimeFormat("th-TH", includeTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" }).format(
+    ? new Intl.DateTimeFormat("th-TH", includeTime ? { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" } : { timeZone: "Asia/Bangkok", dateStyle: "medium" }).format(
         new Date(value)
       )
     : "–";
@@ -86,7 +88,7 @@ function downloadIcsCalendar(appointment: Appointment) {
  *
  * ประกอบด้วยส่วนสำคัญ 4 ด้าน:
  * 1. ข้อมูลส่วนบุคคลและสุขภาพ: เลข HN, บัตรประชาชน (Masking), ที่อยู่, ผู้ติดต่อฉุกเฉิน, BMI, โรคประจำตัว, ประวัติแพ้ยา
- * 2. การ์ดแสดงคิวที่กำลังรับบริการวันนี้ (ถ้ามี) พร้อมปุ่มลัดไปหน้าคิวสด
+ * 2. การ์ดแสดงคิวที่กำลังรับบริการ (ถ้ามี) พร้อมปุ่มลัดไปหน้าคิวสด
  * 3. รายการนัดหมายพบแพทย์: ดูวันเวลา คำแนะนำ และปุ่มดาวน์โหลดไฟล์นัดหมายลงปฏิทินมือถือ (.ics)
  * 4. ประวัติการตรวจรักษาและสัญญาณชีพ: แสดงบันทึกความดัน ชีพจร อุณหภูมิ และคำวินิจฉัยย้อนหลัง
  * 5. ฟังก์ชันแก้ไขข้อมูลส่วนตัวผ่านหน้าต่าง Modal ป๊อปอัป
@@ -134,6 +136,8 @@ export function AccountView({
             data.active_queue = null;
           } else {
             data.active_queue = {
+              ...data.active_queue,
+              ...liveQ,
               ok: true,
               queue_number: liveQ.queue_number,
               status_label: liveQ.status_label || "รอตรวจ",
@@ -143,6 +147,10 @@ export function AccountView({
               updated_at: liveQ.updated_at || new Date().toISOString(),
             };
           }
+          data.visits = data.visits?.map((visit) => visit.queue_number === liveQ.queue_number ? {
+            ...visit, status: liveQ.status ?? visit.status, status_label: liveQ.status_label ?? visit.status_label,
+            patient_journey: liveQ.patient_journey ?? visit.patient_journey,
+          } : visit);
         } else if (cancelledQueue && data.active_queue?.queue_number === cancelledQueue) {
           data.active_queue = null;
         } else if (queueRes.status === "fulfilled" && (!queueRes.value || !queueRes.value.queue_number)) {
@@ -255,7 +263,7 @@ export function AccountView({
           <div className="card-heading">
             <div>
               <span className="section-number">!</span>
-              <h2 id="accountQueueTitle">คิวที่กำลังรับบริการวันนี้</h2>
+              <h2 id="accountQueueTitle">คิวที่กำลังรับบริการ</h2>
             </div>
             <button className="text-button" type="button" onClick={onQueue}>
               ดูสถานะคิวสด →
@@ -363,7 +371,7 @@ export function AccountView({
                     <h2 id="visitTitle">ประวัติการรับบริการและผลตรวจรักษา</h2>
                   </div>
                 </div>
-                <VisitHistory visits={account.visits || []} />
+                <VisitHistory visits={account.visits || []} onQueue={onQueue} />
               </section>
             )}
           </div>
@@ -526,10 +534,25 @@ function AppointmentHistory({ appointments }: { appointments: Appointment[] }) {
 /**
  * คอมโพเนนต์ย่อยแสดงประวัติการรับบริการตรวจรักษาในอดีต (Timeline) และสัญญาณชีพ
  */
-function VisitHistory({ visits }: { visits: Visit[] }) {
+function VisitHistory({ visits, onQueue }: { visits: Visit[]; onQueue: () => void }) {
   if (!visits.length) return <div className="empty-state">ยังไม่มีประวัติการรับบริการ</div>;
   return (
     <div className="timeline-list">
+      {visits.some(isPendingVisit) && (
+        <section className="pending-queue-list" aria-label="คิวที่ยังไม่เสร็จสิ้น">
+          <h3>คิวที่ยังไม่เสร็จสิ้น ({visits.filter(isPendingVisit).length})</h3>
+          {visits.filter(isPendingVisit).map((visit) => (
+            <article className="pending-queue-item" key={`${visit.queue_number}-${visit.registered_at}`}>
+              <strong>คิว {visit.queue_number}</strong>
+              <p><time dateTime={visit.registered_at}>{thaiDate(visit.registered_at)}</time></p>
+              <p>ขั้นตอนล่าสุด: {visit.patient_journey?.current_label || visit.status_label}</p>
+              {getQueueAttention(visit).map((reason) => <p className="queue-attention-text" key={reason}>{reason}</p>)}
+              {hasUnpaidBill(visit) && <p>{getPendingQueueMessage(visit)}</p>}
+              <button type="button" className="secondary-button" onClick={onQueue}>ดูคิวเดิม</button>
+            </article>
+          ))}
+        </section>
+      )}
       {visits.map((visit, index) => (
         <article className="timeline-item" key={`${visit.queue_number}-${visit.registered_at}-${index}`}>
           <div className="timeline-item-header">
@@ -539,6 +562,8 @@ function VisitHistory({ visits }: { visits: Visit[] }) {
           {visit.note && <p>อาการ: {visit.note}</p>}
           {visit.diagnosis && <p>ผลวินิจฉัย: {visit.diagnosis}</p>}
           {visit.treatment && <p>การรักษา: {visit.treatment}</p>}
+          {getQueueAttention(visit).map((reason) => <p className="queue-attention-text" key={reason}>{reason}</p>)}
+          <QueueHistory journey={visit.patient_journey} registeredAt={visit.registered_at} statusLabel={visit.status_label} />
           {/* ข้อมูลสัญญาณชีพ (ความดันโลหิต, ชีพจร, อุณหภูมิ, ออกซิเจนในเลือด SpO2) */}
           {visit.vitals && (
             <p className="vitals-strip">

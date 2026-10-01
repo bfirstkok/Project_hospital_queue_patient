@@ -15,3 +15,6 @@ __pycache__/
 *.pyc
 playwright-report/
 test-results/
+outputs/
+graphify-out/
+debug.log

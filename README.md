@@ -1,139 +1,94 @@
-# OPD Smart Hospital - Patient Queue & Medical Portal 🏥
+# Hospital Queue Patient Portal
 
-ระบบจองและตรวจสอบสถานะคิวผู้ป่วยนอก (OPD Patient Queue & Portal) พัฒนาด้วย **Next.js 16 App Router (Turbopack), React 19, TypeScript** พร้อมสถาปัตยกรรมแบบ **Static Export (`basePath: /patient`)** รองรับการใช้งานแบบ **Mobile-First Responsive Web Application** ทำงานได้อย่างสมบูรณ์ทั้งบนโทรศัพท์มือถือและคอมพิวเตอร์
+เว็บผู้ป่วยสำหรับลงทะเบียน ติดตามคิว และดูประวัติบริการ OPD. ใช้ Next.js `16.3.0`, React `19.2.8` และ TypeScript `5.9.3`. Build เป็น Static Export ที่ `/patient/` และเรียก REST API ของ Django โดยตรง.
 
----
+## ฟีเจอร์ปัจจุบัน
 
-## 🌟 ฟีเจอร์หลักของระบบ (Core Features)
+- ลงทะเบียนข้อมูลส่วนตัว สุขภาพ อาการ และผู้ติดต่อฉุกเฉิน พร้อมความยินยอม PDPA
+- เข้าสู่ระบบด้วยบัญชีผู้ป่วยหรือ Google และยืนยันด้วย PIN 6 หลัก
+- กู้รหัสผ่าน/PIN ด้วย OTP ทางอีเมล โดยให้ Backend ตรวจสอบและออก reset token
+- แสดงบัตรคิว ลำดับ ห้องตรวจ ขั้นตอนบริการ และประมาณการเวลารอ
+- แจ้งเตือนด้วยเสียง/การสั่นเมื่อใกล้ถึงคิว และยกเลิกคิวที่ Backend อนุญาตได้
+- แสดงเวลาเรียกข้อมูลล่าสุดมุมซ้ายบนบัตรคิว พร้อมเวลาเริ่มรับคิวและจุดบริการล่าสุดด้านล่าง
+- เปิดดูประวัติคิวพร้อม timestamp: ลงทะเบียน วัดสัญญาณชีพ คัดกรอง เรียกคิว ตรวจ ห้องยา การเงิน และจบบริการ
+- แจ้งเตือนค้างชำระเงิน และแจ้งเมื่อรับยา/ชำระเงินครบแต่คิวยังไม่ปิด ทั้งหน้าคิวและประวัติการรักษา
+- เก็บคิวที่ยังไม่เสร็จสิ้นแม้เป็นคิวจากวันก่อน และป้องกันการจองใหม่จน Backend ยืนยันว่าคิวเดิมสิ้นสุดแล้ว
+- ดู/แก้ข้อมูลผู้ป่วย ดูผลตรวจ สัญญาณชีพ นัดหมาย และบันทึกนัดหมายเป็นไฟล์ `.ics`
+- รองรับมือถือ เดสก์ท็อป และการปรับขนาดตัวอักษร
 
-1. **ระบบเข้าสู่ระบบหลายรูปแบบ (Multi-channel Authentication):**
-   - เข้าสู่ระบบด้วย **ชื่อผู้ใช้ (Username)** หรือ **เลขประจำตัวประชาชน 13 หลัก** คู่กับรหัสผ่าน
-   - รองรับ **Social Login (Google OAuth 2.0)** ด้วย Google Identity Services Token Client; ผู้สมัครใหม่จะได้ชื่อและอีเมลจาก Google มาเติมในฟอร์ม
-   - ระบบกู้คืนรหัสผ่านด้วยรหัส **OTP 6 หลักทางอีเมล**
-   - ปุ่มสลับดูรหัสผ่าน (Password Visibility Toggle) และระบบแจ้งเตือนข้อผิดพลาดทันที
+## การแจ้งเตือนค้างชำระและคิวยังไม่ปิด
 
-2. **ระบบความปลอดภัยรหัส PIN 6 หลัก (6-Digit Security PIN):**
-   - ปกป้องข้อมูลเวชระเบียนและประวัติสุขภาพด้วยรหัส PIN 6 หลัก
-   - แป้นตัวเลขจำลอง (Virtual Keypad) รองรับหน้าจอสัมผัส พร้อมระบบสั่นเตือนบนมือถือ (`navigator.vibrate`)
-   - กู้คืน PIN ด้วย OTP ทางอีเมล โดยตรวจ OTP กับเซิร์ฟเวอร์ก่อนเปิดขั้นตั้งรหัสใหม่
-   - ยืนยันรหัส PIN 2 ขั้นตอนเมื่อเปิดใช้งานครั้งแรก (ตั้งรหัส และยืนยันรหัส)
-   - จัดเก็บข้อมูลความปลอดภัยแบบปลอดภัย (Session-based Security)
+สถานะจาก Backend เป็นข้อมูลอ้างอิงหลัก. `OPD_DONE` หมายถึงตรวจเสร็จ แต่ยังอาจมีขั้นตอนห้องยา/การเงินและการปิดคิว.
 
-3. **ระบบลงทะเบียนผู้ป่วยใหม่ & คัดกรองอาการ (Patient Registration & PDPA):**
-   - **PDPA Consent Gate:** บังคับให้ความยินยอมตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคลก่อนเข้าถึงแบบฟอร์ม
-   - **Health Screening:** คัดกรองข้อมูลโรคประจำตัว, ประวัติแพ้ยา/อาหาร, ยาที่ใช้ประจำ และอาการสำคัญ
-   - **Duplicate Queue Guard:** ป้องกันการลงทะเบียนซ้ำซ้อน หากมีคิวค้างอยู่แล้วในระบบจะพากลับไปหน้าคิวเดิมทันที
+| เงื่อนไข | สิ่งที่แสดง |
+|---|---|
+| การเงินเป็น `current` และรายละเอียด `รอชำระเงิน` | ข้อความและป๊อปอัปให้ไปชำระเงิน |
+| การเงินยัง `รอสรุปค่าใช้จ่าย` | แสดงว่ารอสรุปค่าใช้จ่าย โดยไม่กล่าวว่าค้างชำระ |
+| รับยา/ชำระเงินเป็น `done` หรือ `skipped` แต่สถานะคิวยังเปิดอยู่ | แจ้งให้ติดต่อเจ้าหน้าที่เพื่อปิดคิว |
+| Backend ส่ง `DISCHARGED` หรือ `CANCELLED` | ยกเลิกการแจ้งเตือนและอนุญาตจองใหม่ |
 
-4. **หน้าบัตรคิวรับบริการสด (Live Queue Status):**
-   - แสดงหมายเลขคิว, ห้องตรวจ, ลำดับคิว, และจำนวนคิวก่อนหน้าแบบ Real-time
-   - คำนวณและประเมินระยะเวลารอตรวจโดยประมาณอัตโนมัติ
-   - ระบบเสียงเตือนกระดิ่ง (3-Tone Gentle Chime ผ่าน Web Audio API) และการสั่นเมื่อใกล้ถึงคิว
-   - ระบบยกเลิกคิวรับบริการแบบปลอดภัย 2 ขั้นตอน (2-Step Cancellation Confirmation)
-   - บัตรคิวแบบกราฟิก Canvas สามารถแชร์หรือบันทึกได้
+กด “รับทราบและดูคิวเดิม” เพื่อปิดป๊อปอัป. การรีเฟรชในหน้านั้นไม่เปิดป๊อปอัปเดิมซ้ำ แต่ยังแสดงข้อความที่ต้องดำเนินการ. กด “ดูคิวที่กำลังรับบริการ” เพื่อเปิดรายละเอียดอีกครั้ง. ประวัติมีสรุป “คิวที่ยังไม่เสร็จสิ้น” พร้อมวันที่ ขั้นตอน และคำแนะนำ.
 
-5. **ข้อมูลและประวัติการรักษา (Patient Account & Medical Records):**
-   - แสดงข้อมูลส่วนบุคคลและหมายเลขประจำตัวผู้ป่วย (HN)
-   - แท็บรายการนัดหมายแพทย์ พร้อมปุ่มดาวน์โหลดไฟล์นัดเข้าปฏิทิน (`.ics`)
-   - แท็บบันทึกประวัติการตรวจ สัญญาณชีพ (ความดัน, ชีพจร, อุณหภูมิ, ออกซิเจน) และคำวินิจฉัย
-   - ฟอร์มแก้ไขข้อมูลส่วนตัวและผู้ติดต่อฉุกเฉิน
+“คิวยังไม่ปิด” หมายถึง Backend ยังไม่ยืนยันว่าจบบริการ ไม่ใช่การสรุปว่าเซิร์ฟเวอร์เกิดข้อผิดพลาด. Frontend ไม่ปิดคิวแทนเจ้าหน้าที่.
 
-6. **การออกแบบเพื่อทุกคน & โหมดผู้สูงอายุ (Senior Accessibility & Responsive):**
-   - สลับ Layout อัตโนมัติ: **Bottom App Bar** บนโทรศัพท์มือถือ และ **Top Header Menu** บนคอมพิวเตอร์
-   - โหมดปรับขนาดตัวอักษรสำหรับผู้สูงอายุและสายตายาว (ขนาดใหญ่พิเศษ `data-font-size="xlarge"`)
-   - หมายเลขฉุกเฉินและสายด่วนกู้ชีพ 1669
-   - ออกแบบตามมาตรฐานความสามารถในการเข้าถึง (WCAG 2.1 AA)
+## เวลาและข้อมูล API
 
----
+- `updated_at`: เวลา API ส่งข้อมูลล่าสุด ใช้แสดงมุมซ้ายบนบัตรคิว
+- `registered_at` หรือ timestamp ขั้นตอน `registration`: เวลาเริ่มรับคิว
+- `patient_journey.steps[].timestamp`: เวลาเหตุการณ์ ใช้เรียงประวัติและเลือกจุดล่าสุด
+- แสดงเวลาใน `Asia/Bangkok`; รีเฟรชไม่เปลี่ยนเวลาเหตุการณ์
+- ถ้าไม่มีเวลาเหตุการณ์จะแสดง “ยังไม่มีข้อมูลเวลา” โดยไม่ใช้เวลา polling แทน
 
-## 🔑 การตั้งค่า Google OAuth 2.0 (Google Identity Services)
+เทียบสัญญาคิว/ประวัติกับ [Backend commit `49cf050`](https://github.com/bfirstkok/Project_hospital_queue/tree/49cf05090c289f39e08735aa3f50040eca25f89d) วันที่ 1 ตุลาคม 2026. Commit นี้ยังไม่มี timestamp รายขั้นตอน. Mock รองรับแล้ว และมี [Backend patch](docs/BACKEND_QUEUE_TIMESTAMPS.patch) พร้อม regression test. ดูวิธีใช้และขอบเขตการตรวจสอบใน [คู่มือ Mock คิว](docs/MOCK_QUEUE_API.md). ต้องนำ patch ไปใช้และทดสอบใน Backend ก่อน deploy.
 
-ระบบใช้ **Google Identity Services (GSI)** สำหรับเข้าสู่ระบบด้วย Google โดยตั้ง `GOOGLE_CLIENT_ID` ใน `.env` เพียงจุดเดียว:
+## เริ่มใช้งาน
 
-### 1. การตั้งค่าใน `.env`
-```env
-PATIENT_API_BASE_URL=https://hospital.bfirstkok.me
+ต้องมี Node.js `20.9+` และ Python สำหรับ mock/static server.
+
+```powershell
+npm install
+Copy-Item .env.example .env
+```
+
+ตั้ง `.env` สำหรับ local mock:
+
+```dotenv
+PATIENT_API_BASE_URL=http://127.0.0.1:8000
 PATIENT_STATUS_REFRESH_MS=10000
 GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 ```
 
-### 2. การตั้งค่าใน Google Cloud Console
-ในหน้า [Google Cloud Console - Credentials](https://console.cloud.google.com/apis/credentials):
-- ไปที่ OAuth 2.0 Client ID ของแอป
-- ในหัวข้อ **"URI ต้นทาง JavaScript ที่ได้รับอนุญาต" (Authorized JavaScript origins)** ต้องเพิ่ม URL เหล่านี้:
-  - `http://localhost:5500`
-  - `http://127.0.0.1:5500`
-  - `http://localhost:3000`
-  - `http://127.0.0.1:3000`
-  *(ห้ามใส่ `/` หรือ path ปิดท้าย เช่น ห้ามใส่ `http://localhost:5500/`)*
-- บันทึกการตั้งค่า และรอประมาณ 2-3 นาทีเพื่อให้สิทธิ์มีผลทั่วโลก
-
----
-
-## 📱 การรองรับอุปกรณ์ (Responsive Support)
-
-| รายการ | โทรศัพท์มือถือ (Mobile) | คอมพิวเตอร์ (Desktop PC) |
-| :--- | :--- | :--- |
-| **แถบนำทาง** | Bottom Navigation Bar ด้านล่างหน้าจอ | Top Header Navigation Menu ด้านบนขวา |
-| **ฟอร์มกรอกข้อมูล** | Single-column ไหลลื่น ไม่ตกขอบจอ | Multi-column จัดวางเต็มหน้าจออย่างเป็นสัดส่วน |
-| **แป้นพิมพ์ PIN** | Touch Target > 48px สำหรับแตะนิ้วสัมผัส | รองรับคลิกเมาส์และพิมพ์ผ่านแป้นพิมพ์จริง |
-| **Viewport** | ทดสอบบน Pixel 7 (412 x 915) | ทดสอบบน Desktop Chrome (1280 x 720) |
-
----
-
-## 🧪 การทดสอบระบบ (Automated Testing - 100% Pass)
-
-โครงการนี้มีชุดทดสอบครอบคลุมทั้ง Unit Testing และ End-to-End Testing รวม **97 การทดสอบ**:
-
-### 1. Unit & Component Tests (Vitest - 65 Tests)
 ```powershell
-# สั่งรัน Unit Test ทั้งหมด
-npm run test
-```
-ครอบคลุม:
-- Validation เลขบัตรประจำตัวประชาชน 13 หลักตามสูตร Checksum มหาดไทย
-- ระบบจัดเก็บและเข้ารหัส PIN Session Storage
-- การทำงานของ API Client และการจัดการ Error
-- คอมโพเนนต์ UI, Navigation, Login, Registration, PDPA Consent, Queue Polling
+# Terminal 1
+python mock_backend.py
 
-### 2. End-to-End Tests (Playwright - 32 Tests)
-```powershell
-# สั่งรันการทดสอบ E2E ทั้งหมด (ระบบจะเปิด mock_backend และ web server ให้อัตโนมัติ)
-npm run test:e2e
-
-# สั่งรันพร้อมเปิดหน้าต่าง Interactive UI เพื่อดูการทำงานสด
-npm run test:e2e:ui
-
-# สั่งรันเฉพาะไฟล์ที่ต้องการ
-npx playwright test tests/e2e/login.spec.ts
-npx playwright test tests/e2e/registration.spec.ts
-npx playwright test tests/e2e/auth-and-queue.spec.ts
+# Terminal 2
+npm run dev
 ```
 
-### ชุดข้อมูลสำหรับทดสอบ (Mock Test Credentials)
-- **ชื่อผู้ใช้ (Username):** `somchai99`
-- **รหัสผ่าน (Password):** `Password@2026`
-- **เลขประจำตัวประชาชน (National ID):** `1234567890123`
-- **รหัสความปลอดภัย PIN:** บัญชีตัวอย่างยังไม่ได้ตั้ง PIN; ตั้งรหัส 6 หลักในหน้าเว็บหลัง login
-- **รหัส OTP กู้คืนรหัสผ่าน:** ส่งทางอีเมลจริงเมื่อกำหนด SMTP ใน `.env` (ออกใหม่ทุกครั้งและหมดอายุใน 5 นาที)
+เปิด `http://localhost:3000/patient/`. สำหรับ Backend จริงเปลี่ยน `PATIENT_API_BASE_URL` เป็น URL ของ Backend. URL ภายนอกเครื่อง local ต้องเป็น HTTPS.
 
----
+`npm run dev` และ `npm run build` สร้าง `public/runtime-config.js` จาก `.env`. หลังเปลี่ยนค่าให้เริ่ม dev server ใหม่ หรือรัน `node scripts/write-runtime-config.mjs` แล้วรีเฟรช. หากใช้ `dist/` ให้ build ใหม่. `.env` และ runtime config ที่สร้างอัตโนมัติไม่ถูก commit.
 
-## 🚀 วิธีการติดตั้งและเริ่มใช้งาน (Getting Started)
+## Mock Backend
 
-### ความต้องการของระบบ (Prerequisites)
-- **Node.js:** เวอร์ชั่น 20.9 หรือใหม่กว่า (แนะนำ Node.js LTS)
-- **Python:** เวอร์ชั่น 3.8 หรือใหม่กว่า (สำหรับรัน Mock Backend และ Static Server)
+บัญชีตัวอย่าง: `somchai99` / `Password@2026`, เลขบัตร `1234567890123`. ยังไม่ได้ตั้ง PIN; ตั้งในหน้าเว็บหลัง login. ข้อมูลเป็น in-memory และคืนค่าเมื่อเริ่ม server ใหม่. ใช้กับข้อมูลจำลองเท่านั้น.
 
-### 1. ติดตั้ง Dependencies
+Mock ส่งข้อมูลคิว ประวัติ และลิงก์ติดตาม Visit เดียวกัน เก็บประวัติหลังยกเลิก/จบบริการ และจำลองการเงิน/ห้องยาได้. ดู stage และคำสั่งใน [คู่มือ Mock คิว](docs/MOCK_QUEUE_API.md).
+
+โหมดทดสอบ local ใช้ OTP `123456` และไม่ส่งอีเมลจริง:
+
 ```powershell
-npm install
+$env:MOCK_BACKEND_TEST_MODE = "1"
+python mock_backend.py
 ```
 
-### 2. รันในโหมดพัฒนา (Development Mode)
-ตั้ง `PATIENT_API_BASE_URL=http://127.0.0.1:8000` ใน `.env` สำหรับ local mock แล้วกำหนดค่า SMTP สำหรับ mock backend ในไฟล์เดียวกัน:
+`/__test__/reset/` และ `/__test__/queue/` เปิดเฉพาะ test mode จาก loopback; การเปลี่ยนขั้นตอนต้องมี Bearer token. ปิด test mode โดยลบ environment variable แล้วเริ่ม server ใหม่.
+
+โหมดปกติต้องกำหนด SMTP ใน `.env` เพื่อส่ง OTP:
 
 ```dotenv
-MOCK_PATIENT_EMAIL=your-real-inbox@example.com
+MOCK_PATIENT_EMAIL=your-inbox@example.com
 MOCK_SMTP_HOST=smtp.example.com
 MOCK_SMTP_PORT=587
 MOCK_SMTP_USER=your-smtp-user
@@ -141,100 +96,58 @@ MOCK_SMTP_PASSWORD=your-smtp-app-password
 MOCK_SMTP_FROM=your-smtp-user
 ```
 
-`MOCK_PATIENT_EMAIL` คืออีเมลของบัญชีตัวอย่าง `somchai99`; ใช้อีเมลจริงที่คุณรับได้ หรือสมัครบัญชีใน mock ด้วยอีเมลจริงก่อนกู้รหัส ส่วนค่า SMTP ใช้ของผู้ให้บริการอีเมลของคุณ (พอร์ต 587 ใช้ STARTTLS, 465 ใช้ SSL) เก็บรหัสไว้ใน `.env` ซึ่ง Git ไม่ติดตาม หากยังไม่ตั้งค่าหรือส่งไม่สำเร็จ ระบบจะแสดงข้อผิดพลาดและไม่เข้าสู่หน้ากรอก OTP; mock ยังไม่รองรับ SMS
+พอร์ต `587` ใช้ STARTTLS และ `465` ใช้ SSL. ส่งไม่สำเร็จจะตอบ `503`. OTP หมดอายุใน 5 นาที และ reset token ใช้ครั้งเดียว. เก็บรหัส SMTP ใน `.env` เท่านั้น.
 
-`mock_backend.py` จำลองสัญญา Patient API จาก [backend repo](https://github.com/bfirstkok/Project_hospital_queue/blob/2dfeb3e110e643a3a596209a364782c05838240c/patients/views.py): สมัครสมาชิกแล้วใช้รหัสที่ตั้งเข้าสู่ระบบ, token สำหรับ `/me/` และ `/queue/`, Google ID token หรือ OAuth access token ที่ตรวจยืนยันกับ Google, PIN และ OTP กู้รหัสแบบใช้ครั้งเดียว ข้อมูลบัญชี คิว และ PIN เก็บในหน่วยความจำ จึงหายเมื่อปิด mock backend สำหรับบัญชีที่ไม่พบ คำขอ OTP จะตอบข้อความทั่วไปเหมือน backend จริง ส่วนกรณี SMTP ส่งไม่สำเร็จ mock ตอบ `503` เพื่อให้เห็นปัญหาระหว่างทดสอบบนเครื่อง
-Google Sign-In บน localhost ต้องมี `GOOGLE_CLIENT_ID` ที่ตรงกับ token และเชื่อมต่อ Google เพื่อตรวจ token; mock ไม่ยอมรับข้อความ token ปลอม
+## Google Sign-In
 
-```powershell
-# Terminal 1: รัน Local Mock Backend (Port 8000)
-python mock_backend.py
+Frontend และ Backend ต้องใช้ `GOOGLE_CLIENT_ID` ตรงกัน และตั้ง Authorized JavaScript origins ให้ตรงกับ origin ที่เปิดเว็บ เช่น `http://localhost:3000`, `http://127.0.0.1:5500` หรือ `https://hospital.bfirstkok.me` โดยไม่ใส่ path `/patient/`.
 
-# Terminal 2: รัน Next.js Dev Server (Port 3000)
-npm run dev
-```
-เปิดเบราว์เซอร์ที่: **`http://localhost:3000/patient`**
+Backend ต้องตรวจ token กับ Google. ข้อมูลที่เติมอัตโนมัติเป็นชื่อและอีเมลที่ Google อนุญาต; ผู้ป่วยกรอกเบอร์โทร ที่อยู่ และข้อมูลสุขภาพเอง. Mock โหมดปกติไม่รับ token ปลอม.
 
-หลังเปลี่ยน `.env` ให้รัน `node scripts/write-runtime-config.mjs` ใหม่และรีเฟรชหน้าเว็บ; หากใช้ `dist/` ให้รัน `npm run build` ใหม่ด้วย รหัสผ่านเริ่มต้นของ mock คือ `Password@2026`; หลังรีเซ็ตจะใช้รหัสใหม่จนกว่าจะปิดและเปิด mock backend ใหม่
-
----
-
-## 📦 การ Build และ Run ในโหมด Production (Static Export)
-
-ระบบจะคอมไพล์และ Export เว็บออกมาเป็นไฟล์ HTML/CSS/JS บริสุทธิ์ในโฟลเดอร์ `dist/`:
+## Build และตรวจสอบ
 
 ```powershell
-# 1. ตรวจสอบ Type Safety
+npm run lint
 npm run typecheck
-
-# 2. คอมไพล์โปรเจกต์สำหรับ Production
+npm test
+python -m unittest discover -s tests -p test_mock_backend.py
 npm run build
-
-# 3. รัน Static Server ด้วย Python
-python -m http.server 5500 --bind 0.0.0.0 -d dist
-```
-เข้าใช้งานผ่านเบราว์เซอร์ได้ที่: **`http://127.0.0.1:5500`**, **`http://localhost:5500/patient`** หรือผ่าน IP ของเครื่องในวง LAN เช่น **`http://172.x.x.x:5500/patient`**
-*(ระบบมีสคริปต์ Auto-Redirect จากหน้า Root `/` ไปยัง `/patient/` ให้โดยอัตโนมัติ)*
-
----
-
-## ⚙️ การตั้งค่าการเชื่อมต่อเซิร์ฟเวอร์ (Runtime Configuration)
-
-แก้ค่าที่ `.env` เท่านั้น `npm run dev` และ `npm run build` จะสร้าง `public/runtime-config.js` จากค่าเหล่านั้นให้อัตโนมัติ ไฟล์ runtime นี้เป็นไฟล์ generated และไม่ต้องแก้หรือ commit เอง
-
----
-
-## 📁 โครงสร้างโปรเจกต์ (Project Structure)
-
-```text
-Queue-Hostpital/
-├─ dist/                       ผลลัพธ์ Static Export พร้อม Deploy ขึ้น Production
-├─ public/                     ไฟล์ Static Assets (icons, runtime-config.js)
-├─ scripts/
-│  ├─ clean-build.mjs          ล้างโฟลเดอร์ build เก่าก่อนเริ่มคอมไพล์ใหม่
-│  ├─ publish-export.mjs       ก็อปปี้ไฟล์ export และสร้าง index.html redirect
-│  └─ write-runtime-config.mjs เขียนค่าคอนฟิกจาก .env เข้า runtime-config.js
-├─ src/
-│  ├─ app/                     Next.js Entrypoint, Layout และ Global Styles
-│  ├─ features/
-│  │  ├─ account/              หน้าข้อมูลผู้ป่วย, ตารางนัดหมาย และประวัติการรักษา
-│  │  ├─ auth/                 หน้าเข้าสู่ระบบ, Google OAuth 2.0, กู้คืนรหัสผ่าน OTP และระบบ PIN 6 หลัก
-│  │  ├─ patient-profile/      ฟอร์มกรอกข้อมูลส่วนบุคคลและข้อมูลสุขภาพ
-│  │  ├─ queue/                หน้าแสดงบัตรคิวสด, การคำนวณเวลารอ และระบบยกเลิกคิว
-│  │  ├─ registration/         หน้าลงทะเบียนผู้ป่วยใหม่ และ PDPA Consent Gate
-│  │  └─ settings/             หน้าตั้งค่า, โหมดผู้สูงอายุ (ใหญ่พิเศษ) และออกจากระบบ
-│  └─ shared/                  โมดูลและคอมโพเนนต์ที่ใช้ร่วมกัน (API Client, UI, Icons, Data)
-├─ tests/
-│  └─ e2e/                     ชุดทดสอบ Playwright E2E Tests ครอบคลุม 32 เคส
-├─ DEFENSE_QA_100_QUESTIONS.md เอกสารรวมแนวคำถาม-คำตอบ 100 ข้อสำหรับการสอบป้องกันโครงงาน
-├─ mock_backend.py             Local Mock Hospital Backend สำหรับการพัฒนาและทดสอบ E2E
-├─ playwright.config.ts        การตั้งค่า Playwright รองรับ Desktop และ Mobile Emulation
-└─ README.md                   คู่มือการใช้งานและเอกสารอธิบายระบบ
+npm run test:e2e
 ```
 
-### 🔒 Google OAuth Production & Backend Parity
+Playwright เปิด mock backend ใน test mode ที่พอร์ต `8001` และ static server ที่ `5500` ให้อัตโนมัติ ใช้ `dist/` จาก build ล่าสุด ทดสอบทั้ง Desktop Chrome และ Pixel 7. ติดตั้ง browser ก่อนครั้งแรก:
 
-#### API ที่ backend production ต้องรองรับสำหรับการกู้ PIN
+```powershell
+npx playwright install chromium
+```
 
-หน้าเว็บและ `mock_backend.py` ใช้การยืนยัน 2 ขั้น:
+ทดสอบเฉพาะการแจ้งเตือนและประวัติ:
 
-1. `POST /api/patient/pin/reset/verify-otp/` รับ `{ "national_id": "...", "otp": "..." }` และตอบ `{ "ok": true, "reset_token": "..." }` เมื่อ OTP ถูกต้อง
-2. `POST /api/patient/pin/reset/confirm/` รับ `{ "reset_token": "...", "pin": "......" }`
+```powershell
+npx playwright test tests/e2e/pending-queue.spec.ts tests/e2e/queue-history.spec.ts tests/e2e/mock-queue-history.spec.ts
+```
 
-ให้ backend ผูก token กับบัญชีเดิม กำหนดอายุไม่เกิน 15 นาทีและใช้ได้ครั้งเดียว พร้อมจำกัดการลอง OTP ผิดไม่เกิน 5 ครั้ง ห้ามตั้ง PIN จาก OTP โดยตรงใน endpoint confirm
+`npm run build` สร้าง `out/` และจัดไฟล์พร้อมโฮสต์ไว้ใน `dist/`:
 
-#### ข้อมูล Google และการส่งอีเมล
+```powershell
+python -m http.server 5500 --bind 127.0.0.1 -d dist
+```
 
-การสมัครเติมได้เฉพาะชื่อและอีเมลที่ผู้ใช้อนุญาตให้ Google ส่งมา โปรไฟล์ Sign-In มาตรฐานไม่มีเบอร์โทรหรือที่อยู่ จึงให้ผู้ใช้กรอกเอง ข้อความอีเมลที่ปรับให้เป็นทางการไม่ได้รับประกันว่าจะเข้า Inbox; production ควรใช้โดเมนผู้ส่งที่ยืนยันแล้วและตั้ง SPF, DKIM, DMARC
+เปิด `http://127.0.0.1:5500/patient/`. หน้า root redirect ไป `/patient/`. อัปโหลดเนื้อหา `dist/` ไปยัง static host ที่รองรับ path นี้; Frontend ยังต้องเชื่อมต่อ Backend API.
 
-ฝั่ง Patient Portal (Next.js) และ Django Backend (`Project_hospital_queue`) ใช้ชื่อตัวแปรและ Client ID เดียวกัน:
+## โครงสร้างหลัก
 
-- **Patient Portal:** `GOOGLE_CLIENT_ID=<client-id>` (ใน `.env` / runtime config)
-- **Django Backend:** `GOOGLE_CLIENT_ID=<client-id>` (ใน `.env` ของเซิร์ฟเวอร์หลังบ้าน)
-- **Google Cloud Console Authorized JavaScript origins:**
-  - `https://hospital.bfirstkok.me`
-  - `http://localhost:5500`
-  - `http://127.0.0.1:5500`
-  - `http://localhost:3000`
+| ตำแหน่ง | หน้าที่ |
+|---|---|
+| `src/app/` | ควบคุมหน้าและสถานะร่วม, layout, CSS |
+| `src/features/queue/` | บัตรคิว, polling, ประวัติ timestamp และแจ้งเตือน |
+| `src/features/account/` | ข้อมูลผู้ป่วย ประวัติ ผลตรวจ และนัดหมาย |
+| `src/features/auth/` | Login, Google, PIN และ OTP |
+| `src/features/registration/`, `patient-profile/` | ลงทะเบียนและฟอร์มข้อมูล |
+| `src/shared/api/` | API client และ TypeScript contracts |
+| `mock_backend.py` | จำลอง Patient API บนเครื่อง local |
+| `scripts/` | runtime config และ static export |
+| `tests/` | HTTP tests และ Playwright |
+| `docs/MOCK_QUEUE_API.md` | สัญญาข้อมูล ขั้นตอนจำลอง และ Backend patch |
 
-> **Note:** หน้า Login โหลด Google Identity Services (GSI) และส่ง ID token ที่ได้ไปยัง Endpoint `POST /api/patient/auth/google/` โดยหลังบ้านจะ Verify Token ผ่าน Google Public Certificate โดยไม่ต้องใช้ Client Secret ครับ
+Access token ใหม่เก็บใน `sessionStorage` และใช้ `Authorization: Bearer`. Backend ต้องตรวจสิทธิ์และสถานะคิว; PIN และสถานะใน browser ไม่ทดแทนการตรวจสิทธิ์ของ API.

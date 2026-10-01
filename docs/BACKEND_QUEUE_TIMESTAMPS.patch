@@ -1,0 +1,147 @@
+--- a/patients/views.py
++++ b/patients/views.py
+@@ -109,6 +109,10 @@
+ 
+     queue_status = getattr(queue, "status", "")
+     logged_events = {log.event_type for log in workflow_logs}
++    event_times = {}
++    for log in sorted(workflow_logs, key=lambda item: (item.created_at, item.pk), reverse=True):
++        event_times.setdefault(log.event_type, log.created_at)
++
+     departure_log = next(
+         (
+             log for log in workflow_logs
+@@ -123,6 +127,7 @@
+             "label": label,
+             "state": state,
+             "detail": detail,
++            "timestamp": None,
+         }
+ 
+     beyond_vitals = queue_status not in {"", Queue.Status.WAITING_VITALS}
+@@ -276,6 +281,28 @@
+         ),
+     ]
+ 
++    step_times = {
++        "registration": visit.registered_at,
++        "vitals": event_times.get(VisitWorkflowLog.EventType.VITALS_RECORDED) or visit.triaged_at,
++        "triage": event_times.get(VisitWorkflowLog.EventType.TRIAGE_CONFIRMED) or visit.confirmed_at,
++        "queue": event_times.get(VisitWorkflowLog.EventType.QUEUE_CALLED) or visit.called_at,
++        "doctor": event_times.get(VisitWorkflowLog.EventType.DOCTOR_ASSESSMENT)
++        or getattr(assessment, "created_at", None),
++        "pharmacy": getattr(prescription, "dispensed_at", None)
++        or event_times.get(VisitWorkflowLog.EventType.PHARMACY_STATUS_CHANGED)
++        or getattr(prescription, "sent_at", None),
++        "billing": getattr(bill, "paid_at", None)
++        or event_times.get(VisitWorkflowLog.EventType.PAYMENT_RECEIVED)
++        or event_times.get(VisitWorkflowLog.EventType.BILLING_QUEUE_ENTERED)
++        or getattr(bill, "billing_queue_entered_at", None)
++        or event_times.get(VisitWorkflowLog.EventType.BILL_CREATED)
++        or getattr(bill, "created_at", None),
++        "complete": departure_log.created_at if departure_log else None,
++    }
++    for step_data in steps:
++        timestamp = step_times.get(step_data["key"])
++        step_data["timestamp"] = timestamp.isoformat() if timestamp else None
++
+     if terminal_cancelled:
+         current_label = "ยกเลิกการรับบริการ"
+         current_detail = "คิวนี้ถูกยกเลิก"
+@@ -739,6 +766,7 @@
+             "label": step_data.get("label", ""),
+             "state": state,
+             "detail": detail,
++            "timestamp": step_data.get("timestamp"),
+         })
+ 
+     return {
+--- a/patients/test_patient_portal_api.py
++++ b/patients/test_patient_portal_api.py
+@@ -1,5 +1,5 @@
+ import json
+-from datetime import timedelta
++from datetime import datetime, timedelta, timezone as datetime_timezone
+ 
+ from django.core.cache import cache
+ from django.contrib.auth import get_user_model
+@@ -7,7 +7,7 @@
+ from django.urls import reverse
+ from django.utils import timezone
+ 
+-from queues.models import Queue, Visit, VitalSign
++from queues.models import Queue, Visit, VisitWorkflowLog, VitalSign
+ from opd.models import Bill, Prescription, VisitAssessment
+ 
+ from .models import Patient, PatientAccessToken
+@@ -207,6 +207,70 @@
+         self.assertEqual(steps["pharmacy"]["detail"], "รอห้องยา")
+         self.assertNotIn("portal-doctor", response.content.decode())
+ 
++    def test_patient_queue_includes_recorded_timestamp_for_each_service_stage(self):
++        stamps = {
++            "registration": datetime(2026, 10, 1, 11, 0, tzinfo=datetime_timezone.utc),
++            "vitals": datetime(2026, 10, 1, 11, 5, tzinfo=datetime_timezone.utc),
++            "triage": datetime(2026, 10, 1, 11, 10, tzinfo=datetime_timezone.utc),
++            "queue": datetime(2026, 10, 1, 11, 30, tzinfo=datetime_timezone.utc),
++            "doctor": datetime(2026, 10, 1, 12, 0, tzinfo=datetime_timezone.utc),
++            "pharmacy": datetime(2026, 10, 1, 12, 30, tzinfo=datetime_timezone.utc),
++            "billing": datetime(2026, 10, 1, 12, 45, tzinfo=datetime_timezone.utc),
++            "complete": datetime(2026, 10, 1, 13, 0, tzinfo=datetime_timezone.utc),
++        }
++        self.visit.registered_at = stamps["registration"]
++        self.visit.triaged_at = stamps["vitals"]
++        self.visit.confirmed_at = stamps["triage"]
++        self.visit.called_at = stamps["queue"]
++        self.visit.save(update_fields=["registered_at", "triaged_at", "confirmed_at", "called_at"])
++
++        assessment = VisitAssessment.objects.create(
++            visit=self.visit,
++            examiner=get_user_model().objects.create_user(username="timestamp-doctor"),
++            diagnosis="ทดสอบ",
++        )
++        VisitAssessment.objects.filter(pk=assessment.pk).update(created_at=stamps["doctor"])
++
++        prescription = Prescription.objects.create(
++            visit=self.visit,
++            prescribed_by=assessment.examiner,
++            status=Prescription.Status.DISPENSED,
++        )
++        Prescription.objects.filter(pk=prescription.pk).update(
++            sent_at=stamps["pharmacy"],
++            dispensed_at=stamps["pharmacy"],
++        )
++        bill = Bill.objects.create(visit=self.visit, status=Bill.Status.PAID)
++        Bill.objects.filter(pk=bill.pk).update(
++            billing_queue_entered_at=stamps["billing"],
++            paid_at=stamps["billing"],
++        )
++        self.queue.status = Queue.Status.DISCHARGED
++        self.queue.save(update_fields=["status"])
++
++        event_by_stage = {
++            "vitals": VisitWorkflowLog.EventType.VITALS_RECORDED,
++            "triage": VisitWorkflowLog.EventType.TRIAGE_CONFIRMED,
++            "queue": VisitWorkflowLog.EventType.QUEUE_CALLED,
++            "doctor": VisitWorkflowLog.EventType.DOCTOR_ASSESSMENT,
++            "pharmacy": VisitWorkflowLog.EventType.PHARMACY_STATUS_CHANGED,
++            "billing": VisitWorkflowLog.EventType.PAYMENT_RECEIVED,
++            "complete": VisitWorkflowLog.EventType.PATIENT_DEPARTED,
++        }
++        for stage, event_type in event_by_stage.items():
++            log = VisitWorkflowLog.objects.create(visit=self.visit, event_type=event_type)
++            VisitWorkflowLog.objects.filter(pk=log.pk).update(created_at=stamps[stage])
++
++        response = self.client.get(
++            reverse("public_patient_queue_status", args=[self.visit.tracking_token]),
++        )
++
++        self.assertEqual(response.status_code, 200)
++        steps = {step["key"]: step for step in response.json()["patient_journey"]["steps"]}
++        for stage, expected_at in stamps.items():
++            with self.subTest(stage=stage):
++                self.assertEqual(steps[stage]["timestamp"], expected_at.isoformat())
++
+     def test_patient_can_cancel_own_waiting_or_called_queue(self):
+         other_patient = Patient.objects.create(
+             first_name="ผู้ป่วยอื่น",

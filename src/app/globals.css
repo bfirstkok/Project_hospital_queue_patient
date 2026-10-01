@@ -1063,8 +1063,28 @@ input:disabled {
 
 .card-top-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 10px;
+}
+
+.card-updated-at {
+  margin: 0;
+  min-width: 0;
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.card-updated-at time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-top-actions .notif-toggle-btn {
+  flex-shrink: 0;
 }
 
 .notif-toggle-btn {
@@ -1365,6 +1385,103 @@ input:disabled {
   font-size: 1.15rem;
   color: var(--ink);
   font-weight: 700;
+}
+
+.queue-history {
+  margin: 0 0 20px;
+  text-align: left;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.queue-pending-notice {
+  margin: 16px 0;
+  text-align: left;
+}
+
+.queue-attention, .pending-queue-item {
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  border: 1px solid #b7791f;
+  border-radius: var(--radius-md);
+  background: #fffbeb;
+  color: #78350f;
+}
+
+.queue-attention p {
+  margin: 4px 0;
+}
+
+.queue-attention-text {
+  color: #78350f;
+  font-weight: 600;
+}
+
+.queue-pending-dialog {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+}
+
+.queue-pending-dialog::backdrop {
+  background: rgb(15 23 42 / 45%);
+}
+
+.queue-pending-dialog h2 {
+  margin-top: 0;
+  font-size: 1.2rem;
+}
+
+.queue-pending-dialog .primary-button {
+  width: 100%;
+}
+
+.queue-timestamps p {
+  margin: 0;
+}
+
+.queue-timestamps p + p {
+  margin-top: 4px;
+}
+
+.queue-history time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-history-details {
+  margin-top: 12px;
+}
+
+.queue-history-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.queue-history-details summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
+.queue-history-details ol {
+  margin: 8px 0 0;
+  padding-left: 24px;
+}
+
+.queue-history-details li {
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.queue-history-details li time {
+  display: block;
+  color: var(--muted);
 }
 
 .last-updated {

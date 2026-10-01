@@ -1,5 +1,7 @@
 # Backend API — สถานะปัจจุบัน (Patient Portal)
 
+ข้อมูลคิว/ประวัติและขอบเขต timestamp ที่เทียบกับ Backend วันที่ 1 ตุลาคม 2026 ดู [Mock คิวและประวัติบริการ](MOCK_QUEUE_API.md). หัวข้อเก่าในเอกสารนี้บางส่วนเขียนก่อนเพิ่มระบบบัญชี/PIN/OTP.
+
 เอกสารนี้ = **สภาพจริงของ API ตอนนี้** ที่ frontend (`Project_hospital_queue_patient`)
 เรียกใช้กับ backend (`Project_hospital_queue`, Django).
 งานที่ต้องเพิ่ม (ระบบ PIN + OTP) อยู่ใน [`BACKEND_HANDOFF.md`](BACKEND_HANDOFF.md).
