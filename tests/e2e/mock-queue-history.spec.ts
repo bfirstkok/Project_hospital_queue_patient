@@ -17,7 +17,7 @@ test("reads registration, pharmacy, payment and completed history from the actua
   await expect(page.locator(".queue-number")).toHaveText("A012");
   const startedAt = await page.locator(".queue-timestamps p").first().textContent();
   expect(startedAt).not.toContain("ยังไม่มีข้อมูลเวลา");
-  for (const [stage, expectedLabel] of [["billing", "การเงิน"], ["pharmacy", "ห้องยา"], ["ready_to_leave", "พร้อมกลับบ้าน"]]) {
+  for (const [stage, expectedLabel] of [["pharmacy_unpaid", "ห้องยา"], ["billing", "การเงิน"], ["pharmacy", "ห้องยา"], ["ready_to_leave", "พร้อมกลับบ้าน"]]) {
     const changed = await request.post("http://127.0.0.1:8001/__test__/queue/", {
       headers: { Authorization: `Bearer ${token}` }, data: { stage },
     });
@@ -25,7 +25,20 @@ test("reads registration, pharmacy, payment and completed history from the actua
     await page.getByRole("button", { name: /อัปเดตสถานะคิว/ }).click();
     await expect(page.locator(".status-pill")).toContainText(expectedLabel);
     const notice = page.getByRole("dialog");
+    if (stage === "pharmacy_unpaid") {
+      await expect(page.getByRole("dialog", { name: "แจ้งเตือนค้างชำระเงิน" })).toBeVisible();
+      await expect(page.locator(".queue-attention")).toContainText("ยังไม่ได้รับยาตามคิว");
+      await expect(page.locator(".queue-attention")).toContainText("ยังไม่ได้ชำระเงิน");
+    }
     if (await notice.isVisible()) await notice.getByRole("button", { name: "รับทราบและดูคิวเดิม" }).click();
+    if (stage === "pharmacy_unpaid") {
+      await page.getByRole("button", { name: "ข้อมูลของฉัน" }).click();
+      await page.getByRole("tab", { name: /ประวัติการรักษา/ }).click();
+      await expect(page.locator(".pending-queue-item")).toContainText("ยังไม่ได้รับยาตามคิว");
+      await expect(page.locator(".pending-queue-item")).toContainText("ยังไม่ได้ชำระเงิน");
+      await page.getByRole("button", { name: /คิวของฉัน/ }).click();
+      await page.getByRole("dialog").getByRole("button", { name: "รับทราบและดูคิวเดิม" }).click();
+    }
     await expect(page.locator(".queue-timestamps p").first()).toHaveText(startedAt!);
     await expect(page.locator(".queue-timestamps p").last()).not.toContainText("ยังไม่มีข้อมูลเวลา");
   }

@@ -55,6 +55,7 @@ MOCK_QUEUE_STAGES = {
     "called": ("CALLED", "กรุณาเข้าห้องตรวจ", "ถึงคิวของคุณแล้ว กรุณาเข้าห้องตรวจ", ["done", "done", "done", "done", "current", "pending", "pending", "pending"]),
     "billing": ("OPD_DONE", "การเงิน", "รอชำระเงิน", ["done", "done", "done", "done", "done", "pending", "current", "pending"]),
     "pharmacy": ("OPD_DONE", "ห้องยา", "รอรับยา", ["done", "done", "done", "done", "done", "current", "done", "pending"]),
+    "pharmacy_unpaid": ("OPD_DONE", "ห้องยา", "รอรับยา · ยังไม่ชำระเงิน", ["done", "done", "done", "done", "done", "current", "current", "pending"]),
     "ready_to_leave": ("OPD_DONE", "พร้อมกลับบ้าน · รอปิด Visit", "รับยาและชำระเงินครบแล้ว · รอเจ้าหน้าที่ปิด Visit", ["done", "done", "done", "done", "done", "done", "done", "current"]),
     "discharged": ("DISCHARGED", "เสร็จสิ้นการรับบริการ", "สามารถกลับบ้านได้ตามคำแนะนำของเจ้าหน้าที่", ["done"] * 8),
 }
@@ -77,6 +78,8 @@ def apply_mock_queue_stage(queue, stage):
         detail = done_detail if state == "done" else (
             instruction if state == "current" else "รอขั้นตอนก่อนหน้า"
         )
+        if stage == "pharmacy_unpaid" and state == "current":
+            detail = "รอรับยา" if key == "pharmacy" else "รอชำระเงิน"
         steps.append({"key": key, "label": step_label, "state": state, "detail": detail, "timestamp": timestamp})
     queue.update({
         "status": status, "status_label": label, "instruction": instruction,

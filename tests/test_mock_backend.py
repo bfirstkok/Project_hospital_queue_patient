@@ -89,6 +89,22 @@ class MockPatientApiTest(unittest.TestCase):
         self.assertEqual(me["visits"][0]["status"], "DISCHARGED")
         self.assertEqual(me["visits"][0]["patient_journey"]["steps"][-1]["state"], "done")
 
+    def test_pharmacy_unpaid_demo_keeps_both_actions_in_queue_and_history(self):
+        token = self.post("/api/patient/login/", {"identifier": "somchai99", "password": "Password@2026"})[1]["access_token"]
+        with patch.dict(os.environ, {"MOCK_BACKEND_TEST_MODE": "1"}):
+            status, queue = self.post("/__test__/queue/", {"stage": "pharmacy_unpaid"}, token)
+        self.assertEqual(status, 200)
+        self.assertEqual(queue["status_label"], "ห้องยา")
+        steps = {step["key"]: step for step in queue["patient_journey"]["steps"]}
+        self.assertEqual((steps["pharmacy"]["state"], steps["pharmacy"]["detail"]), ("current", "รอรับยา"))
+        self.assertEqual((steps["billing"]["state"], steps["billing"]["detail"]), ("current", "รอชำระเงิน"))
+        self.assertIsNotNone(steps["pharmacy"]["timestamp"])
+        self.assertIsNotNone(steps["billing"]["timestamp"])
+        me = self.request("GET", "/api/patient/me/", token=token)[1]
+        self.assertEqual(me["active_queue"]["patient_journey"], queue["patient_journey"])
+        self.assertEqual(me["visits"][0]["patient_journey"], queue["patient_journey"])
+        self.assertEqual(self.post("/api/patient/register/", {"national_id": "1234567890123", "first_name": "สมชาย", "last_name": "ใจดี", "consent": True})[0], 409)
+
     def test_cancellation_keeps_history_and_original_public_tracking_after_rebooking(self):
         payload = {"national_id": "2222222222222", "first_name": "ใหม่", "last_name": "ทดสอบ", "consent": True}
         original = self.post("/api/patient/register/", payload)[1]

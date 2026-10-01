@@ -55,7 +55,17 @@ $mockHeaders = @{ Authorization = "Bearer $($mockLogin.access_token)" }
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/__test__/queue/ -Headers $mockHeaders -ContentType application/json -Body '{"stage":"billing"}'
 ```
 
-เปลี่ยน `stage` เป็น `waiting_vitals`, `waiting_confirmation`, `waiting_queue`, `called`, `billing`, `pharmacy`, `ready_to_leave`, `discharged` แล้วกดอัปเดตสถานะคิวในหน้าเว็บ. แต่ละ stage เป็น snapshot จำลอง; การข้าม stage จะสร้างเวลาเหตุการณ์จำลองสำหรับขั้นตอนที่ผ่านแล้ว. ห้ามตีความเป็นประวัติผู้ป่วยจริง.
+เปลี่ยน `stage` เป็น `waiting_vitals`, `waiting_confirmation`, `waiting_queue`, `called`, `billing`, `pharmacy`, `pharmacy_unpaid`, `ready_to_leave`, `discharged` แล้วกดอัปเดตสถานะคิวในหน้าเว็บ. แต่ละ stage เป็น snapshot จำลอง; การข้าม stage จะสร้างเวลาเหตุการณ์จำลองสำหรับขั้นตอนที่ผ่านแล้ว. ห้ามตีความเป็นประวัติผู้ป่วยจริง.
+
+ทดสอบสมชายรอรับยาและค้างชำระพร้อมกัน:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/__test__/queue/ -Headers $mockHeaders -ContentType application/json -Body '{"stage":"pharmacy_unpaid"}'
+```
+
+ล็อกอิน `somchai99` / `Password@2026` แล้วเปิด “คิวของฉัน” หรือกด “อัปเดตสถานะคิว”. ขั้นตอนปัจจุบันเป็นห้องยา พร้อมป๊อปอัป “แจ้งเตือนค้างชำระเงิน” และข้อความให้ติดต่อห้องยา/การเงิน. กดรับทราบเพื่อดูบัตรคิว; ใน “ข้อมูลของฉัน” → “ประวัติการรักษา” จะแสดงสองรายการที่ยังไม่เสร็จ และยังจองคิวใหม่ไม่ได้.
+
+จำลองว่าชำระแล้วแต่ยังรอรับยาโดยเปลี่ยนเป็น `pharmacy`; รับยาและชำระครบแต่รอปิดคิวใช้ `ready_to_leave`; เจ้าหน้าที่ปิดคิวสำเร็จใช้ `discharged`. การเริ่ม mock server ใหม่คืนคิวสมชายเป็น `waiting_vitals`; เรียกคำสั่งข้างต้นอีกครั้งเพื่อทดสอบซ้ำ.
 
 `/__test__/queue/` ต้องมี Bearer token, เปิด test mode และเรียกจาก loopback เท่านั้น. ปิดโดยลบ environment variable แล้วเริ่ม server ใหม่:
 
