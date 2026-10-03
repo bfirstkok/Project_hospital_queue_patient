@@ -251,7 +251,7 @@ export const patientApi = {
    * ดึงข้อมูลสถานะคิวปัจจุบันของผู้ป่วย (หมายเลขคิว, ลำดับคิวที่รอ, ห้องตรวจ)
    * Endpoint: GET /api/patient/queue/
    */
-  queue: (token: string) => request<QueueData>("/api/patient/queue/", { cache: "no-store" }, token),
+  queue: (token: string, signal?: AbortSignal) => request<QueueData>("/api/patient/queue/", { cache: "no-store", signal }, token),
 
   /**
    * อัปเดตข้อมูลประวัติส่วนตัวและผู้ติดต่อฉุกเฉินของผู้ป่วย

@@ -4,6 +4,7 @@ import type { PatientJourney, QueueData, Visit } from "@/shared/api/types";
 import { getRuntimeConfig } from "@/shared/config/runtime-config";
 import { useQueuePolling } from "./useQueuePolling";
 import { useQueueNotification } from "./useQueueNotification";
+import { isQueueNearOrCalled } from "./queue-alert";
 import { generateQueueCardImage } from "./queue-card-canvas";
 import { getQueueProgressModel } from "./queue-progress";
 import { QueueHistory } from "./QueueHistory";
@@ -177,7 +178,7 @@ export function QueueStatusView({
   const position = queue?.queue_position;
   const statusLabel = queue?.status_label || "";
   // ตรวจสอบเงื่อนไขว่าใกล้ถึงคิวหรือไม่ (เหลือ 1-3 คิว หรือ กำลังเรียก)
-  const isNearQueue = (typeof position === "number" && position > 0 && position <= 3) || statusLabel.includes("เรียก");
+  const isNearQueue = isQueueNearOrCalled(queue);
   const estimatedWaitText = calculateEstimatedWaitTime(position, statusLabel);
 
   // รายการสถานะคิวที่อนุญาตให้ผู้ป่วยกดยกเลิกได้ด้วยตนเอง

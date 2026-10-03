@@ -1,13 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { getRuntimeConfig } from "@/shared/config/runtime-config";
-import { AccountView } from "@/features/account/AccountView";
 import { LoginView } from "@/features/auth/LoginView";
-import { PinAuthView } from "@/features/auth/PinAuthView";
-import { QueueStatusView } from "@/features/queue/QueueStatusView";
-import { RegistrationView } from "@/features/registration/RegistrationView";
-import { SettingsView } from "@/features/settings/SettingsView";
 import { clearToken, readToken, saveToken } from "@/shared/auth/token-storage";
 import {
   clearPairedPatient,
@@ -22,6 +18,13 @@ import { SiteShell, type FontSize } from "@/shared/ui/SiteShell";
 import type { NavView } from "@/shared/ui/AppNavbar";
 import { LoadingScreen } from "@/shared/ui/LoadingScreen";
 import { formatMaskedNationalId } from "@/shared/data/thai-id";
+
+const loadingView = () => <LoadingScreen title="กำลังโหลด" />;
+const AccountView = dynamic(() => import("@/features/account/AccountView").then((module) => module.AccountView), { loading: loadingView });
+const PinAuthView = dynamic(() => import("@/features/auth/PinAuthView").then((module) => module.PinAuthView), { loading: loadingView });
+const QueueStatusView = dynamic(() => import("@/features/queue/QueueStatusView").then((module) => module.QueueStatusView), { loading: loadingView });
+const RegistrationView = dynamic(() => import("@/features/registration/RegistrationView").then((module) => module.RegistrationView), { loading: loadingView });
+const SettingsView = dynamic(() => import("@/features/settings/SettingsView").then((module) => module.SettingsView), { loading: loadingView });
 
 // รายชื่อมุมมองหน้าจอทั้งหมดในระบบ Single Page Application (SPA State Machine)
 type View =

@@ -30,6 +30,13 @@ export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(Boolean(enabled && token && !initialQueue));
   const onUnauthorizedRef = useRef(onUnauthorized);
+  const sessionTokenRef = useRef(token);
+  const requestRef = useRef<{ controller: AbortController; promise: Promise<void> } | null>(null);
+
+  const abortRequest = useCallback(() => {
+    requestRef.current?.controller.abort();
+    requestRef.current = null;
+  }, []);
 
   // เก็บ ref ของ onUnauthorized เพื่อป้องกันไม่ให้ useEffect รันซ้ำโดยไม่จำเป็น
   useEffect(() => {
@@ -38,48 +45,72 @@ export function useQueuePolling({ enabled, token, initialQueue, onUnauthorized }
 
   // ฟังก์ชันดึงข้อมูลสถานะคิวล่าสุดจาก API
   const refresh = useCallback(async (silent = false) => {
-    if (!token) {
-      setInitialLoading(false);
-      return;
-    }
+    if (!enabled || !token) return;
     // หากไม่ใช่การดึงแบบเงียบ จะแสดงสถานะ Loading
     if (!silent) setLoading(true);
-    try {
-      const data = await patientApi.queue(token);
-      setQueue(data);
-      setError("");
-    } catch (reason) {
-      const apiError = reason instanceof ApiError ? reason : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถอัปเดตสถานะได้");
-      // กรณี Token หมดอายุ หรือสิทธิ์ไม่ถูกต้อง
-      if (apiError.status === 401) onUnauthorizedRef.current();
-      // กรณีไม่พบคิวที่ยังรอดำเนินการ (ตรวจเสร็จแล้วหรือยกเลิกแล้ว)
-      else if (apiError.status === 404) {
-        setQueue(null);
+    if (requestRef.current) return requestRef.current.promise;
+
+    const request = { controller: new AbortController(), promise: Promise.resolve() };
+    requestRef.current = request;
+    request.promise = (async () => {
+      try {
+        const data = await patientApi.queue(token, request.controller.signal);
+        if (requestRef.current !== request) return;
+        setQueue(data);
         setError("");
+      } catch (reason) {
+        // Abort alone cannot discard a response that has already reached JSON parsing.
+        if (requestRef.current !== request) return;
+        const apiError = reason instanceof ApiError ? reason : new ApiError(reason instanceof Error ? reason.message : "ไม่สามารถอัปเดตสถานะได้");
+        if (apiError.status === 401) onUnauthorizedRef.current();
+        else if (apiError.status === 404) {
+          setQueue(null);
+          setError("");
+        }
+        else setError(apiError.message);
+      } finally {
+        if (requestRef.current === request) {
+          requestRef.current = null;
+          setLoading(false);
+          setInitialLoading(false);
+        }
       }
-      else setError(apiError.message);
-    } finally {
-      if (!silent) setLoading(false);
-      setInitialLoading(false);
-    }
-  }, [token]);
+    })();
+    return request.promise;
+  }, [enabled, token]);
 
   // Effect เริ่มการ Polling เมื่อเงื่อนไขเปิดใช้งานครบถ้วน
   useEffect(() => {
     if (!enabled || !token) {
+      setQueue(null);
+      setError("");
+      setLoading(false);
       setInitialLoading(false);
       return;
+    }
+    if (sessionTokenRef.current !== token) {
+      sessionTokenRef.current = token;
+      setQueue(null);
+      setError("");
+      setInitialLoading(true);
     }
     void refresh();
     // ตั้งเวลา Polling ดึงข้อมูลเบื้องหลังตามระยะเวลาคอนฟิก
     const timer = window.setInterval(() => void refresh(true), getRuntimeConfig().statusRefreshMs);
-    return () => window.clearInterval(timer);
-  }, [enabled, token, refresh]);
+    return () => {
+      window.clearInterval(timer);
+      abortRequest();
+    };
+  }, [enabled, token, refresh, abortRequest]);
 
   // ล้างสถานะคิวปัจจุบันออกจากหน้าจอ
   const clearActiveQueue = useCallback(() => {
+    abortRequest();
     setQueue(null);
-  }, []);
+    setError("");
+    setLoading(false);
+    setInitialLoading(false);
+  }, [abortRequest]);
 
   return { queue, error, loading, initialLoading, refresh, clearActiveQueue };
 }

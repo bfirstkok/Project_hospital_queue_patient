@@ -69,9 +69,10 @@ export function getRuntimeConfig(): RuntimeConfig {
   const runtime = typeof window === "undefined" ? undefined : window.PATIENT_APP_ENV;
   const sameOriginApiBaseUrl = typeof window === "undefined" ? "" : window.location.origin;
   const envClientId = typeof process !== "undefined" ? process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "" : "";
+  const refreshMs = Number(runtime?.STATUS_REFRESH_MS);
   return {
     apiBaseUrl: String(runtime?.API_BASE_URL || sameOriginApiBaseUrl).trim().replace(/\/$/, ""),
-    statusRefreshMs: Number(runtime?.STATUS_REFRESH_MS) || 10000,
+    statusRefreshMs: Number.isInteger(refreshMs) && refreshMs > 0 && refreshMs <= 2147483647 ? refreshMs : 10000,
     googleClientId: String(runtime?.GOOGLE_CLIENT_ID || envClientId).trim(),
   };
 }

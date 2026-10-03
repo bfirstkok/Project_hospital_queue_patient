@@ -12,6 +12,15 @@ describe("QueueStatusView", () => {
     vi.spyOn(patientApi, "account").mockResolvedValue({ ok: true, visits: [] } as unknown as AccountData);
   });
 
+  it("does not show the near-queue banner for a distant queue waiting to be called", async () => {
+    vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({
+      ok: true, queue_number: "A012", status: "WAITING_QUEUE", status_label: "รอเรียกคิว", queue_position: 8,
+    }), { headers: { "content-type": "application/json" } }));
+    render(createElement(QueueStatusView, { token: "mock_token", onAccount: vi.fn(), onUnauthorized: vi.fn() }));
+    await screen.findByText("A012");
+    expect(screen.queryByText("ใกล้ถึงคิวของคุณแล้ว!")).not.toBeInTheDocument();
+  });
+
   it("shows station event times instead of the polling time after refreshing", async () => {
     let pharmacyDone = false;
     vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({

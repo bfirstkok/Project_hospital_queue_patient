@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { QueueData } from "@/shared/api/types";
+import { isQueueNearOrCalled } from "./queue-alert";
 
 // คีย์สำหรับบันทึกการตั้งค่าเปิด/ปิดเสียงแจ้งเตือนใน localStorage
 const STORAGE_KEY_NOTIF = "hospital_queue_sound_enabled";
@@ -110,18 +111,16 @@ export function useQueueNotification(queue: Partial<QueueData> | null | undefine
 
   // Effect ตรวจสอบเงื่อนไขว่าต้องส่งเสียงเตือนหรือไม่เมื่อข้อมูลคิวอัปเดต
   useEffect(() => {
-    if (!queue || !enabled) return;
+    if (!queue || !enabled || !isQueueNearOrCalled(queue)) {
+      setAlertActive(false);
+      if (!queue) lastNotifiedKey.current = "";
+      return;
+    }
 
-    const pos = queue.queue_position;
-    const status = queue.status_label || "";
-    // เงื่อนไข: ใกล้ถึงคิว (เหลือ 1-3 คิว) หรือ อยู่ในสถานะกำลังเรียกตรวจ
-    const isNearQueue = typeof pos === "number" && pos > 0 && pos <= 3;
-    const isCalling = status.includes("เรียก") || status.includes("ห้องตรวจ") || pos === 1;
-
-    const notificationKey = `${queue.queue_number || ""}-${pos}-${status}`;
+    const notificationKey = `${queue.queue_number || ""}-${queue.queue_position}-${queue.status || queue.status_label || ""}`;
 
     // หากเข้าเงื่อนไขและยังไม่เคยแจ้งเตือนสำหรับสถานะนี้มาก่อน ให้เล่นเสียงเตือนทันที
-    if ((isNearQueue || isCalling) && lastNotifiedKey.current !== notificationKey) {
+    if (lastNotifiedKey.current !== notificationKey) {
       lastNotifiedKey.current = notificationKey;
       setAlertActive(true);
       playChimeSound();
