@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, patientApi } from "@/shared/api/patient-api";
 import type { PatientJourney, QueueData, Visit } from "@/shared/api/types";
 import { getRuntimeConfig } from "@/shared/config/runtime-config";
 import { useQueuePolling } from "./useQueuePolling";
 import { useQueueNotification } from "./useQueueNotification";
 import { isQueueNearOrCalled } from "./queue-alert";
-import { generateQueueCardImage } from "./queue-card-canvas";
+import { downloadQueueStatusImage } from "./queue-status-image";
 import { getQueueProgressModel } from "./queue-progress";
 import { QueueHistory } from "./QueueHistory";
 import { QueuePendingNotice } from "./QueuePendingNotice";
@@ -128,6 +128,9 @@ export function QueueStatusView({
   const [cancelSuccess, setCancelSuccess] = useState(false);
   const [recentVisit, setRecentVisit] = useState<Visit | null>(null);
   const [queueRegisteredAt, setQueueRegisteredAt] = useState<string | null>(null);
+  const [savingImage, setSavingImage] = useState(false);
+  const [imageSaveError, setImageSaveError] = useState("");
+  const queueCardRef = useRef<HTMLDivElement | null>(null);
 
   // อัปเดตสถานะให้คอมโพเนนต์แม่รับรู้ว่ามีคิวตรวจอยู่หรือไม่ เพื่อปรับ UI แถบนำทาง (Navbar)
   useEffect(() => {
@@ -196,13 +199,21 @@ export function QueueStatusView({
     ? "คิวอยู่ในขั้นตอนที่ไม่สามารถยกเลิกด้วยตนเองได้ กรุณาติดต่อเจ้าหน้าที่"
     : "";
 
-  /**
-   * บันทึกรูปภาพบัตรคิวลงเครื่องโดยใช้อัลกอริทึมวาด Canvas 2D
-   */
-  function handleSaveImage() {
-    if (!queue) return;
-    const progress = getQueueProgressModel(rawQueueStatus, queue.patient_journey);
-    generateQueueCardImage(queue, estimatedWaitText, updatedAt || "ยังไม่มีข้อมูลเวลา", progress);
+  /** บันทึกภาพจากหน้าสถานะคิวที่แสดงอยู่จริง */
+  async function handleSaveImage() {
+    const queueCard = queueCardRef.current;
+    if (!queue?.queue_number || !queueCard || savingImage) return;
+
+    setSavingImage(true);
+    setImageSaveError("");
+    try {
+      await downloadQueueStatusImage(queueCard, queue.queue_number);
+    } catch (error) {
+      console.error("Failed to save queue status image:", error);
+      setImageSaveError("บันทึกรูปภาพไม่สำเร็จ กรุณาลองอีกครั้ง");
+    } finally {
+      setSavingImage(false);
+    }
   }
 
   /**
@@ -261,7 +272,7 @@ export function QueueStatusView({
           </div>
         )}
 
-        <div className="status-card">
+        <div className="status-card" ref={queueCardRef}>
           {/* ปุ่มสลับเปิด/ปิดเสียงและระบบสั่นเตือน */}
           <div className="card-top-actions">
             <p className="card-updated-at">
@@ -329,8 +340,8 @@ export function QueueStatusView({
             <button className="primary-button" type="button" onClick={() => void refresh()} disabled={loading}>
               <span>อัปเดตสถานะคิว</span><i aria-hidden="true">{loading ? "↻" : "⟳"}</i>
             </button>
-            <button className="action-button-image" type="button" onClick={handleSaveImage}>
-              บันทึกบัตรคิวเป็นรูปภาพ
+            <button className="action-button-image" type="button" onClick={() => void handleSaveImage()} disabled={savingImage}>
+              {savingImage ? "กำลังบันทึกรูปภาพ..." : "บันทึกบัตรคิวเป็นรูปภาพ"}
             </button>
             <button className="secondary-button" type="button" onClick={onAccount}>ดูข้อมูลและประวัติการรักษา</button>
             {canCancelQueue ? (
@@ -352,6 +363,7 @@ export function QueueStatusView({
               </div>
             )}
           </div>
+          {imageSaveError && <p className="last-updated" role="alert">{imageSaveError}</p>}
         </div>
 
         {/* Modal ยืนยันการยกเลิกคิว 2 ขั้นตอน (Safety 2-Step Confirmation Modal) */}
