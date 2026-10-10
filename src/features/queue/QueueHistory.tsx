@@ -28,14 +28,18 @@ export function QueueHistory({ journey, registeredAt, statusLabel }: QueueHistor
   const history = (journey?.steps || [])
     .filter((step) => ["done", "current", "cancelled"].includes(step.state))
     .flatMap((step) => {
-      const date = recordedTime(step.timestamp);
-      return date ? [{
+      const date = recordedTime(step.timestamp)
+        || (step.key === "registration" ? recordedTime(registeredAt) : null);
+      if (!date && step.timestamp != null) return [];
+      return [{
         key: step.key,
         label: step.key === "registration" || !step.detail ? step.label : `${step.label} · ${step.detail}`,
         date,
-      }] : [];
-    })
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+      }];
+    });
+  if (history.every((entry) => entry.date)) {
+    history.sort((a, b) => a.date!.getTime() - b.date!.getTime());
+  }
   const latest = history.at(-1);
 
   return (
